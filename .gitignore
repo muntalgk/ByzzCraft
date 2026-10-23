@@ -20,3 +20,4 @@ assets/texcolors.json
 crea-utenti.bat
 attiva-pannello.ps1
 assets/riferimento_*.py
+assets.download-tmp/
