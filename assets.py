@@ -12,6 +12,8 @@ import urllib.request
 import zipfile
 import zlib
 
+from mapgen import _png
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(HERE, "assets")
 MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
@@ -119,6 +121,42 @@ def tex_color(data):
     return [round(sum(p[i] * p[3] for p in px) / ws) for i in range(3)] + [int(a) if a == int(a) else a]
 
 
+# oggetti che il gioco disegna come modello 3D, senza texture d'oggetto: icona ritagliata dalla texture dell'entita'
+CHESTS = {"chest": "normal", "trapped_chest": "trapped", "ender_chest": "ender", "copper_chest": "copper",
+          "exposed_copper_chest": "copper_exposed", "weathered_copper_chest": "copper_weathered",
+          "oxidized_copper_chest": "copper_oxidized"}
+
+
+def _blit(out, src, w, sx, sy, dx, dy, cw, ch):
+    for y in range(ch):
+        for x in range(cw):
+            out[(dy + y) * 16 + dx + x] = src[(sy + y) * w + sx + x]
+
+
+def entity_icons(z):
+    """{nome: png 16x16} per forzieri e scudo; salta quelli che questa versione non ha (es. rame prima della 1.21.9)."""
+    out = {}
+    for name, src in CHESTS.items():
+        try:
+            w, _, e = png_rgba(z.read(TEX + "entity/chest/%s.png" % src))
+        except KeyError:
+            continue
+        px = [(0, 0, 0, 0)] * 256
+        _blit(px, e, w, 14, 14, 1, 1, 14, 5)    # coperchio
+        _blit(px, e, w, 14, 33, 1, 6, 14, 10)   # corpo
+        _blit(px, e, w, 1, 1, 7, 4, 2, 4)       # serratura
+        out[name] = _png(bytearray(c for p in px for c in p), 16, 16)
+    try:
+        w, _, e = png_rgba(z.read(TEX + "entity/shield/shield_base_nopattern.png"))
+    except KeyError:
+        return out
+    px = [(0, 0, 0, 0)] * 256
+    for i in range(16):   # faccia frontale 10x20 ridotta a 16 righe
+        _blit(px, e, w, 2, 2 + int((i + 0.5) * 20 / 16), 3, i, 10, 1)
+    out["shield"] = _png(bytearray(c for p in px for c in p), 16, 16)
+    return out
+
+
 def extract(jar, dest):
     """Estrae dal client jar in dest/ (cartella temporanea, poi rinominata dal chiamante)."""
     colors = {}
@@ -151,6 +189,10 @@ def extract(jar, dest):
                 c = tex_color(data)
                 if c:
                     colors[os.path.basename(out)[:-4]] = c
+        os.makedirs(os.path.join(dest, "item"), exist_ok=True)
+        for name, data in entity_icons(z).items():
+            with open(os.path.join(dest, "item", name + ".png"), "wb") as f:
+                f.write(data)
     with open(os.path.join(dest, "texcolors.json"), "w", encoding="utf-8") as f:
         json.dump(colors, f, separators=(",", ":"))
 

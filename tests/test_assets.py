@@ -35,4 +35,21 @@ check("primo frame", A.tex_color(d) == [9, 9, 9, 1], A.tex_color(d))
 # tutta trasparente: nessun colore
 d = png(1, 1, 8, 6, [bytes([1, 2, 3, 0])])
 check("trasparente", A.tex_color(d) is None)
+# forziere e scudo dalle texture delle entita': ogni pixel della texture finta vale (x, y)
+import io, zipfile
+tex = png(64, 64, 8, 6, [bytes(c for x in range(64) for c in (x, y, 0, 255)) for y in range(64)])
+buf = io.BytesIO()
+with zipfile.ZipFile(buf, "w") as z:
+    z.writestr(A.TEX + "entity/chest/normal.png", tex)
+    z.writestr(A.TEX + "entity/shield/shield_base_nopattern.png", tex)
+with zipfile.ZipFile(buf) as z:
+    ic = A.entity_icons(z)
+check("solo le texture presenti", sorted(ic) == ["chest", "shield"], sorted(ic))
+px = A.png_rgba(ic["chest"])[2]
+check("coperchio", px[1 * 16 + 1][:2] == (14, 14), px[17])
+check("corpo", px[15 * 16 + 14][:2] == (27, 42), px[254])
+check("serratura", px[4 * 16 + 7][:2] == (1, 1) and px[7 * 16 + 8][:2] == (2, 4))
+check("bordo trasparente", px[0][3] == 0 and px[15][3] == 0)
+px = A.png_rgba(ic["shield"])[2]
+check("scudo: righe saltate", [px[i * 16 + 3][1] for i in (0, 2, 15)] == [2, 5, 21] and px[3 * 16 + 12][0] == 11)
 print("PASS %d  FAIL %d" % (OK, FAIL))
