@@ -1,6 +1,7 @@
-"""Pannello web del server Minecraft (solo libreria standard di Python, Windows).
+"""ByzzCraft: pannello web self-hosted per un server Minecraft (solo libreria standard di Python, Windows e Linux).
 
-Avvio:            pythonw panel.py            (ascolta su 127.0.0.1, pubblicato in tailnet con `tailscale serve`)
+Primo avvio:      python panel.py init [CARTELLA_DEL_SERVER]   (config, RCON, primo admin)
+Avvio:            python panel.py                 (ascolta su 127.0.0.1: per l'accesso remoto usa un proxy HTTPS)
 Utenti:           python panel.py adduser NOME [--admin]
                   python panel.py passwd NOME
                   python panel.py deluser NOME
@@ -942,10 +943,7 @@ LOGIN_CSS = """
 :root{--bg:#0f1115;--card:#171a20;--line:#272b33;--text:#f0efec;--mute:#9a9ea6;--accent:#3fb950}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(1200px 600px at 50% -10%,#1d2a1f 0,var(--bg) 60%);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 main{width:100%;max-width:400px;padding:16px}.logo{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;margin-bottom:18px;background:radial-gradient(circle at 50% 30%,#2d4d2f,#15201a 62%,#101418);border:1px solid #2c3a2e;box-shadow:inset 0 1px 0 #ffffff14,0 8px 22px -6px #3fb95066}
-.cube{--s:22px;width:var(--s);height:var(--s);position:relative;transform-style:preserve-3d;transform:rotateX(-35.26deg) rotateY(45deg)}
-.cube i{position:absolute;inset:0;background-size:100% 100%;image-rendering:pixelated}
-.cube .t{background-color:#79c05a;background-blend-mode:multiply;transform:rotateX(90deg) translateZ(calc(var(--s)/2))}
-.cube .l{transform:rotateY(-90deg) translateZ(calc(var(--s)/2));filter:brightness(.8)}.cube .r{transform:translateZ(calc(var(--s)/2));filter:brightness(.6)}
+.logo svg{width:32px;height:32px}
 h1{font-size:22px;margin:0 0 4px}p{color:var(--mute);margin:0 0 20px;font-size:14px}
 form{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px}
 label{display:block;font-size:13px;color:var(--mute);margin:12px 0 6px}
@@ -956,19 +954,9 @@ button{width:100%;padding:13px;border:0;border-radius:10px;font-size:16px;font-w
 """
 
 
-def _logo_html():
-    def uri(name):
-        try:
-            with open(os.path.join(HERE, "assets", "block", name + ".png"), "rb") as f:
-                return "url(data:image/png;base64,%s)" % base64.b64encode(f.read()).decode()
-        except OSError:
-            return "none"
-    side = uri("grass_block_side")
-    return ("<div class=cube><i class=t style='background-image:%s'></i><i class=l style='background-image:%s'></i>"
-            "<i class=r style='background-image:%s'></i></div>" % (uri("grass_block_top"), side, side))
-
-
-LOGO_HTML = _logo_html()
+with open(os.path.join(HERE, "assets", "logo.svg"), encoding="utf-8") as _f:
+    LOGO_SVG = _f.read().strip()
+LOGO_ICON = "<link rel=icon href='data:image/svg+xml;base64,%s'>" % base64.b64encode(LOGO_SVG.encode()).decode()
 
 
 def login_page(error=""):
@@ -977,10 +965,10 @@ def login_page(error=""):
 <form method=post action=/login autocomplete=on>
 <label for=u>%s</label><input id=u name=user autocomplete=username required autofocus>
 <label for=p>%s</label><input id=p name=password type=password autocomplete=current-password required>
-<button type=submit>%s</button>%s</form></main>""" % (LOGO_HTML, html.escape(CFG["title"]), html.escape(t("Log in to manage the server.")),
+<button type=submit>%s</button>%s</form></main>""" % (LOGO_SVG, html.escape(CFG["title"]), html.escape(t("Log in to manage the server.")),
                                                     html.escape(t("User")), html.escape(t("Password")), html.escape(t("Log in")), err)
     return ("<!doctype html><html lang=" + i18n.LANG + "><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
-            "<title>%s</title><style>%s</style></head><body>%s</body></html>" % (html.escape(CFG["title"]), LOGIN_CSS, body)).encode()
+            "<title>%s</title>%s<style>%s</style></head><body>%s</body></html>" % (html.escape(CFG["title"]), LOGO_ICON, LOGIN_CSS, body)).encode()
 
 
 def app_page(sess):
@@ -990,6 +978,7 @@ def app_page(sess):
             "address": CFG.get("mc_address") or "", "autostop": CFG["auto_stop_minutes"], "cores": NCPU,
             "mc": (CFG.get("user_mc") or {}).get(sess["user"], ""), "lang": i18n.LANG, "i18n": i18n.TABLE}
     tpl = tpl.replace("{{TITLE}}", html.escape(CFG["title"])).replace("{{LANG}}", i18n.LANG)
+    tpl = tpl.replace("{{LOGO}}", LOGO_SVG).replace("{{ICON}}", LOGO_ICON)
     # {{testo}} nell'HTML statico: tradotto qui; nel JavaScript si usa t("testo")
     tpl = re.sub(r"\{\{([^{}]+)\}\}", lambda m: m.group(0) if m.group(1) == "BOOT" else html.escape(t(m.group(1))), tpl)
     return tpl.replace("{{BOOT}}", json.dumps(boot).replace("</", "<\\/")).encode()
@@ -1422,6 +1411,33 @@ def cli(args):
     cmd = args[0]
     if cmd == "assets":
         return AS.install(CFG["server_dir"], args[1] if len(args) > 1 else None)
+    if cmd == "init":
+        sd = os.path.abspath(args[1] if len(args) > 1 else input("Minecraft server folder: ").strip().strip('"'))
+        if not os.path.isfile(os.path.join(sd, "server.properties")):
+            sys.exit("server.properties not found in %s: start the server once to create it, then run init again" % sd)
+        cfg = {}
+        if os.path.exists(CONFIG_PATH):
+            with open(CONFIG_PATH, encoding="utf-8") as f:
+                cfg = json.load(f)
+        cfg["server_dir"] = sd
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2, ensure_ascii=False)
+        CFG["server_dir"] = sd
+        print("config saved: %s" % CONFIG_PATH)
+        p = server_props()
+        if p.get("enable-rcon") != "true" or not p.get("rcon.password"):
+            write_props({"enable-rcon": "true", "rcon.password": secrets.token_urlsafe(24)}, "init")
+            p = server_props()
+            if p.get("enable-rcon") != "true" or not p.get("rcon.password"):
+                sys.exit("could not enable RCON: set enable-rcon=true and an rcon.password in server.properties by hand")
+            print("RCON enabled in server.properties (restart the Minecraft server if it is running)")
+        if not os.path.exists(os.path.join(sd, CFG["start_script"])):
+            print("no %s in the server folder: copy one from examples/ and adjust it" % CFG["start_script"])
+        if not users:
+            name = input("Name of the first admin user: ").strip()
+            cli(["adduser", name, "--admin"])
+        print("next: python panel.py assets   then   python panel.py")
+        return
     if cmd == "users":
         for n, u in sorted(users.items()):
             print("%s%s" % (n, "  (admin)" if u.get("admin") else ""))

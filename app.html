@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{TITLE}}</title>
+{{ICON}}
 <style>
 :root{
   color-scheme:dark;
@@ -21,11 +22,7 @@ button{font:inherit;color:inherit}
 nav{background:linear-gradient(180deg,#16191f,#111318);border-right:1px solid var(--line);padding:18px 12px 14px;display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:100vh;overflow-y:auto}
 .brand{display:flex;align-items:center;gap:12px;margin:2px 4px 16px}
 .logo{width:44px;height:44px;border-radius:12px;flex:none;display:grid;place-items:center;background:radial-gradient(circle at 50% 30%,#2d4d2f,#15201a 62%,#101418);border:1px solid #2c3a2e;box-shadow:inset 0 1px 0 #ffffff14,0 6px 18px -6px #3fb95066}
-.cube{--s:19px;width:var(--s);height:var(--s);position:relative;transform-style:preserve-3d;transform:rotateX(-35.26deg) rotateY(45deg)}
-.cube i{position:absolute;inset:0;background-size:100% 100%;image-rendering:pixelated}
-.cube .t{background-image:url(/icon/grass_block_top.png);background-color:#79c05a;background-blend-mode:multiply;transform:rotateX(90deg) translateZ(calc(var(--s)/2))}
-.cube .l{background-image:url(/icon/grass_block_side.png);transform:rotateY(-90deg) translateZ(calc(var(--s)/2));filter:brightness(.8)}
-.cube .r{background-image:url(/icon/grass_block_side.png);transform:translateZ(calc(var(--s)/2));filter:brightness(.6)}
+.logo svg{width:28px;height:28px}
 .brand .bt{min-width:0}.brand b{display:block;font-size:14.5px;line-height:1.25;font-weight:650;letter-spacing:-.005em}
 .brand small{display:flex;align-items:center;gap:5px;color:var(--mute);font-size:12px;margin-top:2px}.brand small img{width:11px;height:11px;image-rendering:pixelated}
 .nav-sec{margin:16px 12px 6px;font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#686d77}
@@ -405,7 +402,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 <body>
 <div class="app">
   <nav>
-    <div class="brand"><div class="logo"><div class="cube"><i class="t"></i><i class="l"></i><i class="r"></i></div></div><div class="bt"><b id="b-title"></b><small><img src="/hud/heart_hardcore_full.png" alt="">Hardcore · {{Panel}}</small></div></div>
+    <div class="brand"><div class="logo">{{LOGO}}</div><div class="bt"><b id="b-title"></b><small>{{Minecraft server panel}}</small></div></div>
     <button class="srv-pill" id="srv-pill" title="{{Copy the server address}}"><i></i><span class="st">...</span><span class="addr" id="srv-addr"></span></button>
     <p class="nav-sec">{{World}}</p>
     <button class="tab on" data-v="dash" data-s="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Dashboard</button>
