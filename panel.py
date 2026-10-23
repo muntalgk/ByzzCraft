@@ -2012,6 +2012,9 @@ def cli(args):
         if not os.environ.get("PANEL_PASSWORD") and pw != getpass.getpass("Repeat the password: "):
             sys.exit("passwords do not match")
         setup_logging()
+        if not port_free(CFG["port"]):   # come il primo avvio web: porta occupata da un altro servizio
+            CFG["port"] = free_port(CFG["port"] + 1)
+            L.warning("port in use, the panel will use %d", CFG["port"])
         err = do_setup({"server_dir": a.server_dir, "user": a.admin, "password": pw, "lang": a.lang, "network": "1" if a.network else "",
                         "eula": "1" if a.accept_eula else "", "new_server": "1" if a.new_server else "", "java": "" if a.no_java else "1"})
         if err:
