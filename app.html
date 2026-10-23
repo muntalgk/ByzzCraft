@@ -361,7 +361,8 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .tg{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:0 6px;border-radius:5px;border:1px solid}
 .tg.on{color:#8be29a;border-color:#2f6b3a}.tg.opx{color:#f0c75e;border-color:#5a4a1c}.tg.wl{color:#a9c8f5;border-color:#2e4466}.tg.ban{color:#ff9b94;border-color:#5a2a28}
 .acr .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-.acc{display:grid;gap:16px;max-width:760px}.acc h3{font-size:15px;margin:0 0 6px}
+.acc{display:grid;gap:16px;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.acc-wide{grid-column:1/-1}
+@media (max-width:900px){.acc{grid-template-columns:minmax(0,1fr)}}.acc h3{font-size:15px;margin:0 0 6px}
 .acc label.f{display:block;font-size:12.5px;color:var(--text2);margin:12px 0 6px}.acc .search{width:100%;min-width:0}
 .acc .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}.acc .ac-list{margin-top:8px}
 .sb{background:var(--card2);border:1px solid var(--line2);color:var(--text2);border-radius:8px;padding:5px 10px;font-size:12.5px;cursor:pointer;white-space:nowrap;transition:all .15s}
@@ -561,12 +562,12 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
     <!-- ACCOUNT -->
     <section id="v-account" hidden>
       <div class="acc">
+        <div class="card adm-only acc-wide"><h3>{{Panel users}}</h3><div class="ac-list" id="us-list"></div></div>
         <div class="card"><h3>{{Change password}}</h3>
           <label class="f" for="pw-cur">{{Current password}}</label><input class="search" type="password" id="pw-cur" autocomplete="current-password">
           <label class="f" for="pw-new">{{New password (at least 10 characters)}}</label><input class="search" type="password" id="pw-new" autocomplete="new-password">
           <label class="f" for="pw-new2">{{Repeat the new password}}</label><input class="search" type="password" id="pw-new2" autocomplete="new-password">
           <div class="row"><button class="btn primary" id="pw-save">{{Change password}}</button></div></div>
-        <div class="card adm-only"><h3>{{Panel users}}</h3><div class="ac-list" id="us-list"></div></div>
         <div class="card adm-only"><h3 id="us-title">{{Add a user}}</h3>
           <label class="f" for="us-name">{{User name (lowercase)}}</label><input class="search" id="us-name" maxlength="32" autocomplete="off" spellcheck="false" placeholder="{{e.g. alex}}">
           <label class="f" for="us-pw">{{Password (at least 10 characters)}}</label><input class="search" type="password" id="us-pw" autocomplete="new-password">
