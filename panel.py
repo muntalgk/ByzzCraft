@@ -1227,7 +1227,7 @@ def do_setup(f):
     if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH, encoding="utf-8") as fh:
             cfg = json.load(fh)
-    cfg.update({"server_dir": sd, "lang": f.get("lang") if f.get("lang") in ("en", "it") else "en",
+    cfg.update({"server_dir": sd, "port": CFG["port"], "lang": f.get("lang") if f.get("lang") in ("en", "it") else "en",
                 "listen": "0.0.0.0" if f.get("network") == "1" else "127.0.0.1", "java_auto": f.get("java") == "1"})
     with open(CONFIG_PATH, "w", encoding="utf-8") as fh:
         json.dump(cfg, fh, indent=2, ensure_ascii=False)
@@ -1269,6 +1269,7 @@ def prepare_server(sd, accept_eula):
 def restart_soon():
     """Dopo il primo avvio si riparte con la nuova config (cartella del server, lingua, thread di lavoro)."""
     time.sleep(1)
+    os.environ["BYZZ_RESTART"] = "1"
     if os.name == "nt":
         subprocess.Popen([sys.executable] + sys.argv, cwd=os.getcwd())   # il nuovo processo riprova la porta finche' questo esce
         os._exit(0)
@@ -1906,6 +1907,13 @@ class Handler(BaseHTTPRequestHandler):
 
 class Server(ThreadingHTTPServer):
     daemon_threads = True
+    # su Windows SO_REUSEADDR lascia a due processi la stessa porta: un secondo pannello ruberebbe le richieste al primo
+    allow_reuse_address = os.name != "nt"
+
+    def server_bind(self):
+        if os.name == "nt":
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 
 # ---------------------------------------------------------------- cli
@@ -2001,20 +2009,31 @@ def main():
             download_java()
     else:
         listen = "0.0.0.0"   # finche' non c'e' un admin si configura anche da un altro PC, ma solo col codice
-    for attempt in range(10):   # dopo il primo avvio il processo vecchio puo' tenere la porta ancora un attimo
-        try:
-            srv = Server((listen, port), Handler)
+    # primo avvio: se la porta e' occupata (un altro servizio) se ne prende una vicina, salvata poi dal setup
+    ports = [port] if load_users() else list(range(port, port + 11))
+    srv, err = None, None
+    for attempt in range(10 if os.environ.pop("BYZZ_RESTART", None) else 1):   # al riavvio il processo vecchio puo' tenerla ancora un attimo
+        for pt in ports:
+            try:
+                srv, port = Server((listen, pt), Handler), pt
+                break
+            except OSError as e:
+                err = e
+        if srv:
             break
-        except OSError as e:
-            if attempt == 9:
-                L.error("cannot listen on %s:%d (%s): is the panel already running? Otherwise change \"port\" in %s", listen, port, e, CONFIG_PATH)
-                sys.exit(1)
-            time.sleep(1)
+        time.sleep(1)
+    if not srv:
+        L.error("cannot listen on %s:%d (%s): is the panel already running? Otherwise change \"port\" in %s", listen, port, err, CONFIG_PATH)
+        sys.exit(1)
+    if port != CFG["port"]:
+        L.warning("port %d is in use, using %d", CFG["port"], port)
+        CFG["port"] = port
     log("panel started on http://%s:%d" % (listen, port))
     if not load_users():   # solo dopo aver preso la porta: il link deve funzionare davvero
+        fw = ("Windows may ask to let Python through the firewall: allow it on private networks." if os.name == "nt" else
+              "The firewall may block the port: sudo ufw allow %d/tcp" % port)
         L.info("ByzzCraft is not set up yet.\n  From your computer open:  http://%s:%d/?setup=%s\n  On this machine:          http://127.0.0.1:%d\n"
-               "  Page does not open? The firewall may block the port: sudo ufw allow %d/tcp  (use this machine's Tailscale IP the same way)",
-               lan_ip(), port, setup_token(), port, port)
+               "  Page does not open? %s (a Tailscale IP of this machine works the same way)", lan_ip(), port, setup_token(), port, fw)
     srv.serve_forever()
 
 

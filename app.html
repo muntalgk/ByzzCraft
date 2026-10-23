@@ -727,7 +727,7 @@ function appendConsole(items){S.console.push(...items);if(S.console.length>1500)
 let es,fails=0;
 function connect(){es=new EventSource("/api/events");
   es.addEventListener("init",e=>{const d=JSON.parse(e.data);S.status=d.status;S.metrics=d.metrics;S.heap=d.heap;S.audit=d.audit;S.console=d.console;S.timeline=d.timeline||[];fails=0;live(true);
-    renderStatus();renderMetrics();renderHeap();renderConsole();renderDashFeed();WV.set(d.world)});
+    renderStatus();renderMetrics();renderHeap();renderConsole();renderDashFeed();WV.set(d.world);HL.load()});
   es.addEventListener("timeline",e=>onTimeline(JSON.parse(e.data)));
   es.addEventListener("positions",e=>{const d=JSON.parse(e.data);P.positions=d.players;MAPF.setPlayers(d.players);MAPM.setPlayers(d.players);renderOnline()});
   es.addEventListener("backups",e=>BK.onStatus(JSON.parse(e.data)));
