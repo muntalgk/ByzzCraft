@@ -35,7 +35,7 @@ def _get(url, sha1=None):
     with urllib.request.urlopen(url, timeout=60) as r:
         data = r.read()
     if sha1 and hashlib.sha1(data).hexdigest() != sha1:
-        raise OSError("Download corrotto: %s" % url)
+        raise OSError("Corrupted download: %s" % url)
     return data
 
 
@@ -43,7 +43,7 @@ def client_jar(version):
     versions = json.loads(_get(MANIFEST))["versions"]
     v = next((x for x in versions if x["id"] == version), None)
     if v is None:
-        raise ValueError("Versione %s sconosciuta a Mojang" % version)
+        raise ValueError("Mojang does not know version %s" % version)
     c = json.loads(_get(v["url"], v.get("sha1")))["downloads"]["client"]
     return _get(c["url"], c["sha1"])
 
@@ -64,7 +64,7 @@ def png_rgba(data):
         elif typ == b"IDAT":
             idat += body
     if bd > 8 or il:
-        raise ValueError("PNG non supportato")
+        raise ValueError("unsupported PNG")
     ch = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[ct]
     bpp = max(1, ch * bd // 8)
     stride = (w * ch * bd + 7) // 8
@@ -157,7 +157,7 @@ def extract(jar, dest):
 
 def install(server_dir, version=None, log=print):
     version = version or server_version(server_dir)
-    log("Scarico il client di Minecraft %s da Mojang..." % version)
+    log("Downloading the Minecraft %s client from Mojang..." % version)
     jar = client_jar(version)
     tmp = os.path.join(HERE, "assets.download-tmp")
     shutil.rmtree(tmp, ignore_errors=True)
@@ -167,4 +167,4 @@ def install(server_dir, version=None, log=print):
     # sovrascrive file per file, senza cancellare: icone aggiunte a mano e logo restano
     shutil.copytree(tmp, ASSETS, dirs_exist_ok=True)
     shutil.rmtree(tmp, ignore_errors=True)
-    log("Asset di Minecraft %s installati in %s" % (version, ASSETS))
+    log("Minecraft %s assets installed in %s" % (version, ASSETS))
