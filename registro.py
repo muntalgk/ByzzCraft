@@ -10,6 +10,14 @@ CATS = ("server", "login", "console", "impostazioni", "giocatori", "backup", "ma
 _TS = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)  (.*)$")
 _WHO = r"(?P<who>[a-z0-9_.-]+(?: \([^)]*\))?)"
 _VERB = {v: k for k, v in VERBS.items()}
+_EMPTY = re.compile(r"^empty for (\d+) minutes$")   # motivo dello spegnimento automatico (panel.py)
+
+
+def _reason(r):
+    m = _EMPTY.match(r or "")
+    return t("empty for %s minutes") % m.group(1) if m else (r or "")
+
+
 _PLAYER_TXT = {"wl_add": "added %s to the whitelist", "wl_remove": "removed %s from the whitelist", "op": "made %s an operator",
                "deop": "removed %s as operator", "ban": "banned %s", "pardon": "unbanned %s", "kick": "kicked %s"}
 
@@ -20,7 +28,7 @@ _RULES = [
      lambda g: ((t("Login failed for «%s»") % g["u"]) if g["u"] else t("Login failed"), t("from %s") % g["from"])),
     (_WHO + r" started the server$", "server", "info", lambda g: (t("started the server"), "")),
     (_WHO + r" (?P<v>stopped|restarted) the server(?: \((?P<r>.*)\))?$", "server", "info",
-     lambda g: (t("%s the server" % g["v"]), g["r"] or "")),
+     lambda g: (t("%s the server" % g["v"]), _reason(g["r"]))),
     (_WHO + r": stop failed \((?P<e>.*)\)$", "server", "err", lambda g: (t("could not stop the server"), g["e"])),
     (r"panel started on (?P<u>.+)$", "sistema", "info", lambda g: (t("Panel started"), g["u"])),
     (_WHO + r" changed (?P<k>\S+): (?P<a>.*) -> (?P<b>.*)$", "impostazioni", "info",

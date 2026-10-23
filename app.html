@@ -1181,7 +1181,7 @@ const RGV={items:[],total:0,counts:{},cat:"",user:"",q:"",loaded:false,mc:{},
       if(d&&typeof d=="object"&&d.key)det="<div class='diff'><code>"+esc(d.key)+"</code><span class='old'>"+esc(d.old)+"</span>→<code>"+esc(d.new)+"</code></div>";
       else if(d&&typeof d=="object"&&d.cmd!=null)det="<div class='diff'><code>/"+esc(d.cmd)+"</code></div>";else if(d)det="<small>"+esc(d)+"</small>";
       h+="<div class='re "+(e.level||"")+"'><div class='ic' style='background:"+c[1]+"22;color:"+c[1]+"' title='"+c[0]+"'>"+SV(c[2])+"</div>"
-        +(e.user&&e.user!="panel"&&e.user!="pannello"?this.who(e.user):"")+"<div class='tx'>"+(e.user?"<b>"+esc(e.user)+"</b> ":"")+esc(e.text)+det+"</div><time>"+hhmmss(e.t)+"</time></div>"}
+        +(e.user&&e.user!="panel"&&e.user!="pannello"?this.who(e.user):"")+"<div class='tx'>"+(e.user?"<b>"+esc(e.user=="panel"?_t("panel"):e.user)+"</b> ":"")+esc(e.text)+det+"</div><time>"+hhmmss(e.t)+"</time></div>"}
     $("#rg-feed").innerHTML=h||"<div class='card' style='color:var(--mute)'>"+_t("No entries.")+"</div>";$("#rg-more").hidden=this.items.length>=this.total}};
 $("#rg-cats").onclick=e=>{const b=e.target.closest("button");if(!b)return;RGV.cat=b.dataset.c;RGV.load()};
 $("#rg-user").onchange=e=>{RGV.user=e.target.value;RGV.load()};

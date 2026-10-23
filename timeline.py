@@ -344,7 +344,8 @@ class Timeline:
             e = RG.parse(ln)
             if not e or (e["cat"] == "login" and e["level"] == "warn") or "passw" in e["raw"].lower():
                 continue
-            txt = (e["user"] + " " if e["user"] else "") + e["text"]
+            who = tr("panel") if e["user"] == "panel" else e["user"]   # utente di sistema
+            txt = (who + " " if who else "") + e["text"]
             evs.append(_mk(e["t"], "panel", None, txt, {"cat": e["cat"]}))
         self._panel = {"size": size, "events": evs}
         return True
