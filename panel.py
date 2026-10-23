@@ -1,14 +1,16 @@
 """ByzzCraft: pannello web self-hosted per un server Minecraft (solo libreria standard di Python, Windows e Linux).
 
-Avvio:            python panel.py     poi apri http://127.0.0.1:8765 su questa macchina: al primo accesso
-                  si sceglie la cartella del server e si crea l'admin (per l'accesso remoto usa un proxy HTTPS)
+Avvio:            python3 panel.py    al primo avvio stampa il link (con un codice) per configurarlo da un altro PC
+Setup da shell:   python3 panel.py setup CARTELLA --admin NOME [--lang it] [--network] [--accept-eula] [--new-server] [--no-java]
+Servizio:         python3 panel.py service       (unit systemd su Linux, avvio automatico su Windows)
+Java:             python3 panel.py java          (scarica la versione chiesta da server.jar)
 Utenti:           python panel.py adduser NOME [--admin]
                   python panel.py passwd NOME
                   python panel.py deluser NOME
                   python panel.py users
 Asset:            python panel.py assets [VERSIONE]   (texture e traduzioni scaricate da Mojang)
 """
-import base64, getpass, hashlib, hmac, html, json, os, queue, re, secrets, shutil, socket, struct, subprocess, sys, threading, time
+import base64, getpass, hashlib, hmac, html, json, logging, logging.handlers, os, queue, re, secrets, shutil, socket, struct, subprocess, sys, threading, time
 from collections import deque
 from datetime import datetime
 from http.cookies import SimpleCookie
@@ -24,6 +26,7 @@ import backups as BK  # noqa: E402
 import accessi as AC  # noqa: E402
 import registro as RG  # noqa: E402
 import assets as AS  # noqa: E402
+import runtime as RT  # noqa: E402
 import i18n  # noqa: E402
 from i18n import t  # noqa: E402
 from sysinfo import NCPU, ProcSampler, listening_pid, pid_alive, system_memory, system_times  # noqa: E402
@@ -100,8 +103,67 @@ HUB = Hub()
 AUDIT = deque(maxlen=60)
 
 
+LOG_DIR = os.path.join(HERE, "logs")
+L = logging.getLogger("byzzcraft")   # log tecnico (logs/byzzcraft.log + stderr/journalctl); log() e' il registro "chi ha fatto cosa"
+
+
+def setup_logging():
+    os.makedirs(LOG_DIR, exist_ok=True)
+    fmt = logging.Formatter("%(asctime)s %(levelname)s [%(threadName)s] %(message)s", "%Y-%m-%d %H:%M:%S")
+    handlers = [logging.handlers.RotatingFileHandler(os.path.join(LOG_DIR, "byzzcraft.log"), maxBytes=1_000_000, backupCount=5, encoding="utf-8")]
+    if sys.stderr:   # pythonw non ha console
+        handlers.append(logging.StreamHandler())
+    for h in handlers:
+        h.setFormatter(fmt)
+        L.addHandler(h)
+    L.setLevel(logging.INFO)
+
+
+def worker(fn):
+    """Thread di lavoro: se muore lo si legge nel log, con il traceback."""
+    def run():
+        try:
+            fn()
+        except Exception:  # noqa: BLE001
+            L.exception("%s stopped", fn.__name__)
+    run.__name__ = fn.__name__
+    return run
+
+
+JOBS = {}   # download in corso o falliti: nome -> "running" | messaggio d'errore
+
+
+def job(name, fn):
+    """Lavoro lungo in background (download di Java, asset); lo stato finisce nei controlli di salute."""
+    if JOBS.get(name) == "running":
+        return
+
+    def run():
+        JOBS[name] = "running"
+        try:
+            fn()
+            JOBS.pop(name, None)
+        except Exception as e:  # noqa: BLE001
+            JOBS[name] = str(e)
+            L.exception("%s failed", name)
+            log("%s error: %s" % (name, e))
+        HUB.publish("health", {})
+    threading.Thread(target=run, name=name, daemon=True).start()
+
+
+def tail(path, n=300):
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 200_000))
+            return f.read().decode("utf-8", "replace").splitlines()[-n:]
+    except OSError:
+        return []
+
+
 def log(msg):
     msg = re.sub(r"[\r\n\x00-\x1f]+", " ", str(msg))   # niente righe false nel registro
+    L.info(msg)
     line = "%s  %s" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), msg)
     with LOCK:
         with open(CFG["log_file"], "a", encoding="utf-8") as f:
@@ -440,6 +502,7 @@ class ServerControl:
         self.proc_started = None
         self.last_pid = None        # PID di java: finche' e' vivo il mondo e' ancora in uso
         self.props_mtime_on = None  # data di server.properties quando il server e' risultato acceso
+        self.start_error = None     # perche' l'ultimo avvio non e' riuscito (mostrato in dashboard)
 
     def port(self):
         return int(server_props().get("server-port", 25565))
@@ -457,7 +520,7 @@ class ServerControl:
         return {"state": self.state, "online": info[0] if info else 0, "max": info[1] if info else 0,
                 "players": info[2] if info else [], "since": self.proc_started, "empty_minutes": empty,
                 "auto_stop_minutes": CFG["auto_stop_minutes"], "restart_pending": self.restart_pending,
-                "props_changed": pending}
+                "props_changed": pending, "start_error": self.start_error}
 
     def update(self, info):
         with LOCK:
@@ -476,11 +539,15 @@ class ServerControl:
                     gone = self.proc is not None and self.proc.poll() is not None
                     if gone or time.time() - self.started_at > CFG["start_timeout_seconds"]:
                         self.state = "off"
+                        self.start_error = start_failure(gone, self.proc.returncode if self.proc else None)
                 elif self.state in ("on", "stopping"):
                     # la porta si chiude prima che java finisca di salvare: resta "stopping" finche' il processo vive
                     self.state = "stopping" if pid_alive(self.last_pid) else "off"
+            if self.proc is not None:
+                self.proc.poll()   # raccoglie lo script finito: niente processi zombie
             changed = prev != self.state
             if changed and self.state == "on":
+                self.start_error = None
                 try:
                     self.props_mtime_on = os.path.getmtime(props_path())
                 except OSError:
@@ -504,16 +571,26 @@ class ServerControl:
             busy = backup_busy()
             if busy or OP_PENDING.is_set():
                 return False, t("Wait for it to finish: %s in progress.") % (busy or t("backup operation")).lower()
-            env = dict(os.environ, NOPAUSE="1")
+            env = dict(os.environ, NOPAUSE="1", PYTHON=sys.executable)
+            java = RT.java_for(RT.required(CFG["server_dir"]))[0]
+            if java:
+                env["JAVA"] = java   # gli script d'esempio lo usano; uno script proprio puo' ignorarlo
             script = os.path.join(CFG["server_dir"], CFG["start_script"])
-            io = dict(cwd=CFG["server_dir"], env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if not os.path.exists(script):
+                return False, t("Start script %s not found: see the Dashboard checks.") % script
+            os.makedirs(LOG_DIR, exist_ok=True)
+            out = open(START_LOG, "wb")   # solo l'ultimo avvio: e' quello che serve per capire perche' non parte
+            out.write(("--- %s: %s\n" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), script)).encode())
+            out.flush()
+            io = dict(cwd=CFG["server_dir"], env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT)
             if os.name == "nt":
                 flags = subprocess.CREATE_NO_WINDOW if CFG.get("hide_console") else subprocess.CREATE_NEW_CONSOLE
                 self.proc = subprocess.Popen(["cmd.exe", "/c", script], creationflags=flags, **io)
             else:
                 # sessione propria: il server non si ferma se il pannello viene riavviato
                 self.proc = subprocess.Popen(["sh", script], start_new_session=True, **io)
-            self.state, self.started_at = "starting", time.time()
+            out.close()   # il figlio ha la sua copia
+            self.state, self.started_at, self.start_error = "starting", time.time(), None
         log("%s started the server" % who)
         HUB.publish("status", self.snapshot())
         return True, t("Starting: world backup and loading.")
@@ -537,6 +614,34 @@ class ServerControl:
         log("%s %s the server%s" % (who, "restarted" if restart else "stopped", " (%s)" % reason if reason else ""))
         HUB.publish("status", self.snapshot())
         return True, t("Restarting.") if restart else t("Stopping.")
+
+
+START_LOG = os.path.join(LOG_DIR, "server-start.log")
+START_HINTS = (   # (testo nell'output dello script, spiegazione per l'utente)
+    (r"java: (command )?not found|'java' is not recognized|java.exe.*(not found|cannot find)|No such file or directory.*java",
+     "Java is not installed: download it from the Dashboard checks."),
+    (r"UnsupportedClassVersionError|has been compiled by a more recent version", "Java is too old for this Minecraft version: download the right one from the Dashboard checks."),
+    (r"agree to the EULA", "You have not accepted the Minecraft EULA: accept it from the Dashboard checks."),
+    (r"FAILED TO BIND|Address already in use|BindException", "The Minecraft port is already in use: is another server running?"),
+    (r"Unable to access jarfile|Invalid or corrupt jarfile", "server.jar is missing or damaged."),
+    (r"Could not reserve enough space|Invalid maximum heap size|insufficient memory", "Not enough memory for the RAM set in the start script."),
+)
+
+
+def start_failure(exited, code=None):
+    """Il server non e' partito: motivo leggibile dall'output dello script, nel log, in console e in un avviso."""
+    lines = [x for x in tail(START_LOG, 40) if x.strip()]
+    text = "\n".join(lines)
+    hint = next((h for rx, h in START_HINTS if re.search(rx, text, re.I)), None)
+    if not hint and code in (-9, 137):   # SIGKILL senza un messaggio: quasi sempre il kernel per memoria esaurita
+        hint = "The system killed the server, probably out of memory: lower RAM in the start script."
+    msg = t(hint) if hint else (t("The server stopped while starting: see logs/server-start.log.") if exited
+                                else t("The server did not answer in time: see logs/server-start.log."))
+    L.error("start failed (exit code %s): %s\n%s", code, hint or ("exited" if exited else "timeout"), "\n".join(lines[-15:]))
+    log("panel: start failed (%s)" % (hint or "see logs/server-start.log"))
+    console_push(lines[-15:] + [msg], "err")
+    HUB.publish("notice", {"ok": False, "message": msg})
+    return msg
 
 
 SRV = ServerControl()
@@ -1022,33 +1127,124 @@ def guess_server_dir():
     return ""
 
 
-def setup_page(error="", form=None):
+SETUP_TOKEN_FILE = os.path.join(HERE, "cache", "setup-token")
+
+
+def setup_token():
+    """Codice per configurare da un altro PC: uguale tra un riavvio e l'altro, cancellato a setup fatto."""
+    try:
+        with open(SETUP_TOKEN_FILE, encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        os.makedirs(os.path.dirname(SETUP_TOKEN_FILE), exist_ok=True)
+        tok = secrets.token_urlsafe(12)
+        with os.fdopen(os.open(SETUP_TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as f:
+            f.write(tok)
+        return tok
+
+
+def setup_allowed(handler, token):
+    """Setup dal browser di questa macchina, oppure da remoto con il codice stampato all'avvio."""
+    if is_local(handler):
+        return True
+    keys = ["c:" + client_id(handler)]
+    if not token or locked(keys):
+        return False
+    if hmac.compare_digest(token, setup_token()):
+        return True
+    note_fail(keys)
+    return False
+
+
+def lan_ip():
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as so:
+            so.connect(("8.8.8.8", 80))   # UDP senza inviare nulla: serve solo a sapere quale interfaccia esce
+            return so.getsockname()[0]
+    except OSError:
+        return "SERVER-IP"
+
+
+def setup_page(error="", form=None, token="", remote=False):
     f = form or {}
     e = html.escape
     err = '<p class="err">%s</p>' % e(error) if error else ""
     lang = f.get("lang", i18n.LANG)
     opts = "".join("<option value=%s%s>%s</option>" % (k, " selected" if k == lang else "", v) for k, v in (("en", "English"), ("it", "Italiano")))
+    sd = f.get("server_dir", guess_server_dir())
+    network = f.get("network", "1" if remote else "") == "1"
+    has_jar = bool(sd) and os.path.isfile(os.path.join(sd, "server.jar"))
+    chk = lambda on: " checked" if on else ""
     body = """<main><div class=logo>%s</div><h1>%s</h1><p>%s</p>
-<form method=post action=/setup>
+<form method=post action=/setup><input type=hidden name=token value="%s">
 <label for=d>%s</label><input id=d name=server_dir value="%s" required placeholder="/home/me/minecraft">
+<label class=chk><input type=checkbox name=new_server value=1%s> %s</label>
 <label for=l>%s</label><select id=l name=lang>%s</select>
 <label for=u>%s</label><input id=u name=user autocomplete=username required pattern="[a-z0-9_.\\-]{1,32}" value="%s">
 <label for=p>%s</label><input id=p name=password type=password autocomplete=new-password required minlength=10>
 <label for=p2>%s</label><input id=p2 name=password2 type=password autocomplete=new-password required minlength=10>
+<label>%s</label>
+<label class=chk><input type=radio name=network value=""%s> %s</label>
+<label class=chk><input type=radio name=network value=1%s> %s</label>
+<label class=chk><input type=checkbox name=java value=1%s> %s</label>
 <label class=chk><input type=checkbox name=eula value=1> %s <a href="https://aka.ms/MinecraftEULA" target=_blank rel=noopener>EULA</a></label>
-<button type=submit>%s</button>%s</form></main>""" % (
-        LOGO_SVG, e(t("Welcome to ByzzCraft")), e(t("First setup: this page only opens on the server machine.")),
-        e(t("Minecraft server folder")), e(f.get("server_dir", guess_server_dir())), e(t("Language")), opts,
-        e(t("Admin user")), e(f.get("user", "")), e(t("Password (at least 10 characters)")), e(t("Repeat the password")),
-        e(t("I accept the Minecraft")), e(t("Set up the panel")), err)
+<button type=submit>%s</button><p class=note>%s</p>%s</form></main>""" % (
+        LOGO_SVG, e(t("Welcome to ByzzCraft")), e(t("First setup of the panel.")), e(token),
+        e(t("Minecraft server folder")), e(sd), chk(f.get("new_server") == "1" or not has_jar),
+        e(t("No server yet: download the latest Minecraft server into this folder")),
+        e(t("Language")), opts, e(t("Admin user")), e(f.get("user", "")), e(t("Password (at least 10 characters)")), e(t("Repeat the password")),
+        e(t("Who can open the panel")), chk(not network), e(t("Only this machine (then Tailscale, nginx or an SSH tunnel)")),
+        chk(network), e(t("My home network: http://%s:%d (no HTTPS: fine at home, not on the internet)") % (lan_ip(), CFG["port"])),
+        chk(f.get("java", "1") == "1"), e(t("Download Java automatically if it is missing")),
+        e(t("I accept the Minecraft")), e(t("Set up the panel")), e(t("Downloads can take a minute.")), err)
     return _page(body)
 
 
 def setup_remote_page():
-    url = "http://127.0.0.1:%d" % CFG["port"]
-    return _page("<main><div class=logo>%s</div><h1>%s</h1><p>%s</p></main>" % (
+    return _page("<main><div class=logo>%s</div><h1>%s</h1><p>%s</p><p><code>%s</code></p></main>" % (
         LOGO_SVG, html.escape(t("Panel not set up yet")),
-        html.escape(t("Open %s in a browser on the server machine to create the admin user.") % url)))
+        html.escape(t("Open the link with the setup code that the panel printed when it started, or open http://127.0.0.1:%d on the server. To see it again:") % CFG["port"]),
+        html.escape("grep setup= %s" % os.path.join(LOG_DIR, "byzzcraft.log"))))
+
+
+def do_setup(f):
+    """Prima configurazione, dalla pagina web o da `panel.py setup`. Ritorna l'errore da mostrare, o None."""
+    sd = os.path.abspath(os.path.expanduser(f.get("server_dir", "").strip().strip('"')))
+    name, pw = f.get("user", "").strip().lower(), f.get("password", "")
+    if not USER_RE.match(name) or name in RESERVED:
+        return t("Invalid user name: lowercase letters, digits, . _ -")
+    if len(pw) < 10:
+        return t("Password too short: at least 10 characters.")
+    if not os.path.isfile(os.path.join(sd, "server.jar")):
+        if f.get("new_server") != "1":
+            return t("No server.jar in %s.") % sd
+        try:
+            AS.download_server(sd, log=L.info)
+        except Exception as e:  # noqa: BLE001
+            L.exception("server download failed")
+            return t("Could not download the Minecraft server: %s") % e
+    cfg = {}
+    if os.path.exists(CONFIG_PATH):
+        with open(CONFIG_PATH, encoding="utf-8") as fh:
+            cfg = json.load(fh)
+    cfg.update({"server_dir": sd, "lang": f.get("lang") if f.get("lang") in ("en", "it") else "en",
+                "listen": "0.0.0.0" if f.get("network") == "1" else "127.0.0.1", "java_auto": f.get("java") == "1"})
+    with open(CONFIG_PATH, "w", encoding="utf-8") as fh:
+        json.dump(cfg, fh, indent=2, ensure_ascii=False)
+    CFG.update(cfg)
+    i18n.load(cfg["lang"])   # la prima pagina la serve ancora questo processo, prima del riavvio
+    prepare_server(sd, f.get("eula") == "1")
+    users = {}
+    set_password(users, name, pw)
+    users[name]["admin"] = True
+    save_users(users)
+    try:
+        os.remove(SETUP_TOKEN_FILE)
+    except OSError:
+        pass
+    log("%s completed the first setup" % name)
+    L.info("setup done: server %s, listen %s, language %s", sd, cfg["listen"], cfg["lang"])
+    return None
 
 
 def prepare_server(sd, accept_eula):
@@ -1080,10 +1276,102 @@ def restart_soon():
 
 
 def download_assets():
-    try:
-        AS.install(CFG["server_dir"], log=log)
-    except Exception as e:  # noqa: BLE001
-        log("assets error: %s" % e)
+    def run():
+        AS.install(CFG["server_dir"], log=L.info)
+        log("panel downloaded the Minecraft assets")
+    job("assets", run)
+
+
+def download_java():
+    need = RT.required(CFG["server_dir"])
+
+    def run():
+        RT.install(need, log=L.info)
+        log("panel downloaded Java %d" % need)
+    if need:
+        job("java", run)
+
+
+STARTUP_CMD = os.path.join(os.environ.get("APPDATA", ""), "Microsoft", "Windows", "Start Menu", "Programs", "Startup", "ByzzCraft.cmd")
+SERVICE_HINT = ('"%s" panel.py service' % sys.executable if os.name == "nt" else
+                "cd %s && %s panel.py service | sudo tee /etc/systemd/system/byzzcraft.service"
+                " && sudo systemctl daemon-reload && sudo systemctl enable --now byzzcraft" % (HERE, sys.executable))
+
+
+def service():
+    """Linux: stampa l'unit systemd (da passare a sudo tee). Windows: avvio automatico all'accesso, senza admin."""
+    panel = os.path.join(HERE, "panel.py")
+    if os.name == "nt":
+        pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+        with open(STARTUP_CMD, "w", encoding="utf-8") as f:
+            f.write('@start "" "%s" "%s"\r\n' % (pyw if os.path.exists(pyw) else sys.executable, panel))
+        print("ByzzCraft will start at every login: %s" % STARTUP_CMD)
+        return
+    import pwd
+    sys.stdout.write("""[Unit]
+Description=ByzzCraft Minecraft panel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=%s
+WorkingDirectory=%s
+ExecStart=%s %s
+Restart=on-failure
+# Minecraft runs in its own session: it keeps running when the panel restarts
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
+""" % (pwd.getpwuid(os.getuid()).pw_name, HERE, sys.executable, panel))
+    print("# install it with:\n#   " + SERVICE_HINT, file=sys.stderr)
+
+
+def health():
+    """Cosa manca per far partire il server, con la soluzione (pulsante `fix` o comando)."""
+    sd = CFG["server_dir"]
+    p = server_props()
+    need = RT.required(sd)
+    java, found = RT.java_for(need)
+    eula_path = os.path.join(sd, "eula.txt")
+    eula = os.path.exists(eula_path) and "eula=true" in open(eula_path, encoding="utf-8", errors="replace").read()
+    script = os.path.join(sd, CFG["start_script"])
+    checks = [
+        ("server", os.path.isfile(os.path.join(sd, "server.jar")), t("No server.jar in %s.") % sd, None),
+        ("java", bool(java) or not need, t("Java %s is not installed (found: %s).") % (need, found or t("none")), "java"),
+        ("eula", eula, t("The Minecraft EULA is not accepted yet: the server will not start."), "eula"),
+        ("rcon", p.get("enable-rcon") == "true" and bool(p.get("rcon.password")), t("RCON is off: the panel cannot talk to the server."), "rcon"),
+        ("script", os.path.exists(script), t("Start script %s not found.") % script,
+         "script" if os.path.exists(os.path.join(HERE, "examples", CFG["start_script"])) else None),
+        ("assets", AS.present(), t("Map textures and item icons are not downloaded yet."), "assets"),
+        ("service", bool(os.environ.get("INVOCATION_ID")) or os.name == "nt" and os.path.exists(STARTUP_CMD),
+         t("The panel does not start by itself after a reboot."), None),
+    ]
+    out = []
+    for cid, ok, text, fix in checks:
+        if cid in JOBS:
+            ok, text = False, (t("Downloading...") if JOBS[cid] == "running" else t("Download failed: %s") % JOBS[cid])
+        if not ok:
+            out.append({"id": cid, "text": text, "fix": None if JOBS.get(cid) == "running" else fix,
+                        "cmd": SERVICE_HINT if cid == "service" else None})
+    return out
+
+
+def fix_health(cid, who):
+    sd = CFG["server_dir"]
+    if cid == "java":
+        download_java()
+    elif cid == "assets":
+        download_assets()
+    elif cid == "eula":
+        with open(os.path.join(sd, "eula.txt"), "w", encoding="utf-8") as f:
+            f.write("# accepted in ByzzCraft by %s (https://aka.ms/MinecraftEULA)\neula=true\n" % who)
+        log("%s accepted the Minecraft EULA" % who)
+    elif cid in ("rcon", "script"):
+        prepare_server(sd, False)
+    else:
+        return False
+    return True
 
 
 def app_page(sess):
@@ -1189,9 +1477,13 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 pass
             log("invalid request %s: %s" % (self.path[:80], type(e).__name__))
+            L.exception("request %s %s failed", self.command, self.path[:200])
 
     def cookie(self, value, max_age):
-        secure = "" if self.headers.get("Host", "").split(":")[0] in ("127.0.0.1", "localhost") else "; Secure"
+        # Secure solo se il browser parla HTTPS con un proxy locale: su http://IP-di-casa il cookie verrebbe scartato
+        h = self.headers
+        https = self.client_address[0] in LOOPBACK and (h.get("X-Forwarded-Proto", "").lower() == "https" or bool(h.get("Tailscale-User-Login")))
+        secure = "; Secure" if https else ""
         return "sess=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=%d%s" % (value, max_age, secure)
 
     # ------------------------------------------------ GET
@@ -1201,7 +1493,10 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(HERE, "assets", ICONS[path]), "rb") as f:
                 return self.send(200, f.read(), "image/png", {"Cache-Control": "public, max-age=86400"})
         if path == "/" and not load_users():
-            return self.send(200, setup_page() if is_local(self) else setup_remote_page())
+            token = (parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}).get("setup", [""])[0]
+            if not setup_allowed(self, token):
+                return self.send(200, setup_remote_page())
+            return self.send(200, setup_page(token=token, remote=not is_local(self)))
         if path == "/":
             _, s = self.session()
             return self.send(200, app_page(s) if s else login_page())
@@ -1284,13 +1579,18 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(200, {"events": evs[:qint(q, "limit", 200, 1, 500)]})
         if path == "/api/sessions":
             return self.json(200, {"sessions": TLINE.sessions(limit=qint(q, "limit", 30, 1, 200))})
-        if path in ("/api/backups", "/api/backups/download", "/api/access", "/api/audit", "/api/users") and not s["admin"]:
+        if path in ("/api/backups", "/api/backups/download", "/api/access", "/api/audit", "/api/users", "/api/health", "/api/syslog") and not s["admin"]:
             return self.json(403, {"error": "solo admin"})
         if path == "/api/access":
             p = server_props()
             return self.json(200, {**AC.snapshot(CFG["server_dir"]), "online": sorted(online_names()), "state": SRV.state,
                                    "white_list": p.get("white-list") == "true", "enforce": p.get("enforce-whitelist") == "true",
                                    "known": [{"uuid": r["uuid"], "name": r["name"]} for r in roster()]})
+        if path == "/api/health":
+            return self.json(200, {"checks": health()})
+        if path == "/api/syslog":
+            which = (parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}).get("file", ["panel"])[0]
+            return self.json(200, {"lines": tail(START_LOG if which == "start" else os.path.join(LOG_DIR, "byzzcraft.log"))})
         if path == "/api/users":
             return self.json(200, {"users": [{"name": n, "admin": bool(u.get("admin")), "mc": u.get("mc") or (CFG.get("user_mc") or {}).get(n, ""),
                                               "me": n == s["user"]} for n, u in sorted(load_users().items())]})
@@ -1442,6 +1742,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(200, {"ok": ok, "message": msg})
         if not s["admin"]:
             return self.json(403, {"ok": False, "message": t("Admins only.")})
+        if self.path == "/api/health/fix":
+            ok = fix_health(str(data.get("id", "")), s["user"])
+            HUB.publish("health", {})
+            return self.json(200, {"ok": ok, "message": t("Done.") if ok else t("Invalid request.")})
         if self.path == "/api/users/save":
             return self.save_user(tok, s, data)
         if self.path == "/api/users/delete":
@@ -1579,36 +1883,20 @@ class Handler(BaseHTTPRequestHandler):
         return self.json(200, {"ok": True, "message": (t("User %s created.") if new else t("User %s saved.")) % name})
 
     def first_setup(self):
-        """Primo avvio: solo senza utenti e solo da un browser su questa macchina."""
-        if load_users() or not is_local(self):
-            return self.send(403, setup_remote_page())
+        """Primo avvio: solo senza utenti, dal browser di questa macchina o con il codice di setup."""
         f = {k: v[0] for k, v in parse_qs(self.body()).items()}
-        sd = os.path.abspath(os.path.expanduser(f.get("server_dir", "").strip().strip('"')))
-        name, pw = f.get("user", "").strip().lower(), f.get("password", "")
-        if not any(os.path.isfile(os.path.join(sd, x)) for x in ("server.jar", "server.properties")):
-            return self.send(200, setup_page(t("No server.jar in %s.") % sd, f))
-        if not USER_RE.match(name) or name in RESERVED:
-            return self.send(200, setup_page(t("Invalid user name: lowercase letters, digits, . _ -"), f))
-        if len(pw) < 10 or pw != f.get("password2"):
-            return self.send(200, setup_page(t("The passwords are too short or do not match."), f))
-        cfg = {}
-        if os.path.exists(CONFIG_PATH):
-            with open(CONFIG_PATH, encoding="utf-8") as fh:
-                cfg = json.load(fh)
-        cfg.update({"server_dir": sd, "lang": f.get("lang") if f.get("lang") in ("en", "it") else "en"})
-        with open(CONFIG_PATH, "w", encoding="utf-8") as fh:
-            json.dump(cfg, fh, indent=2, ensure_ascii=False)
-        CFG["server_dir"] = sd
-        i18n.load(cfg["lang"])   # la prima pagina la serve ancora questo processo, prima del riavvio
-        prepare_server(sd, f.get("eula") == "1")
-        users = {}
-        set_password(users, name, pw)
-        users[name]["admin"] = True
-        save_users(users)
+        if load_users() or not setup_allowed(self, f.get("token", "")):
+            return self.send(403, setup_remote_page())
+        remote = not is_local(self)
+        if f.get("password") != f.get("password2"):
+            return self.send(200, setup_page(t("The passwords are too short or do not match."), f, f.get("token", ""), remote))
+        err = do_setup(f)
+        if err:
+            return self.send(200, setup_page(err, f, f.get("token", ""), remote))
+        name = f["user"].strip().lower()
         tok = secrets.token_urlsafe(32)
         SESSIONS[tok_key(tok)] = {"user": name, "admin": True, "csrf": secrets.token_urlsafe(24), "exp": time.time() + SESSION_HOURS * 3600}
         save_sessions()
-        log("%s completed the first setup" % name)
         self.redirect("/", self.cookie(tok, SESSION_HOURS * 3600))
         threading.Thread(target=restart_soon, daemon=True).start()
 
@@ -1623,6 +1911,41 @@ def cli(args):
     cmd = args[0]
     if cmd == "assets":
         return AS.install(CFG["server_dir"], args[1] if len(args) > 1 else None)
+    if cmd == "java":
+        need = int(args[1]) if len(args) > 1 else RT.required(CFG["server_dir"])
+        if not need:
+            sys.exit("no server.jar in %s: pass the Java version, e.g.  panel.py java 25" % CFG["server_dir"])
+        return RT.install(need)
+    if cmd == "service":
+        return service()
+    if cmd == "setup":
+        import argparse
+        ap = argparse.ArgumentParser(prog="panel.py setup", description="First setup without a browser.")
+        ap.add_argument("server_dir", help="Minecraft server folder (created with --new-server)")
+        ap.add_argument("--admin", required=True, help="name of the first admin user")
+        ap.add_argument("--lang", default="en", choices=("en", "it"))
+        ap.add_argument("--network", action="store_true", help="open the panel to the home network (http://IP:%d)" % CFG["port"])
+        ap.add_argument("--accept-eula", action="store_true", help="accept the Minecraft EULA (https://aka.ms/MinecraftEULA)")
+        ap.add_argument("--new-server", action="store_true", help="download the latest Minecraft server if the folder has none")
+        ap.add_argument("--no-java", action="store_true", help="do not download Java if it is missing")
+        a = ap.parse_args(args[1:])
+        if users:
+            sys.exit("already set up: use adduser / passwd to manage users")
+        pw = os.environ.get("PANEL_PASSWORD") or getpass.getpass("Password for %s: " % a.admin)
+        if not os.environ.get("PANEL_PASSWORD") and pw != getpass.getpass("Repeat the password: "):
+            sys.exit("passwords do not match")
+        setup_logging()
+        err = do_setup({"server_dir": a.server_dir, "user": a.admin, "password": pw, "lang": a.lang, "network": "1" if a.network else "",
+                        "eula": "1" if a.accept_eula else "", "new_server": "1" if a.new_server else "", "java": "" if a.no_java else "1"})
+        if err:
+            sys.exit(err)
+        need = RT.required(CFG["server_dir"])
+        if not a.no_java and need and not RT.java_for(need)[0]:
+            RT.install(need, log=L.info)
+        if not AS.present():
+            AS.install(CFG["server_dir"], log=L.info)
+        L.info("done. Start the panel with:  %s panel.py   or keep it running with:  %s", sys.executable, SERVICE_HINT)
+        return
     if cmd == "users":
         for n, u in sorted(users.items()):
             print("%s%s" % (n, "  (admin)" if u.get("admin") else ""))
@@ -1655,28 +1978,40 @@ def cli(args):
 def main():
     if len(sys.argv) > 1:
         return cli(sys.argv[1:])
-    url = "http://127.0.0.1:%d" % CFG["port"]
+    setup_logging()
+    L.info("ByzzCraft starting: Python %s on %s, config %s", sys.version.split()[0], sys.platform, CONFIG_PATH)
+    if os.name != "nt" and os.geteuid() == 0:
+        L.warning("running as root: the server files would belong to root. Run it as a normal user.")
     load_sessions()
+    listen, port = CFG["listen"], CFG["port"]
     if load_users():
         load_audit()
-        threads = [sampler, tailers, player_watcher, map_warmer, backup_scheduler, world_watcher]
+        need = RT.required(CFG["server_dir"])
+        java, found = RT.java_for(need)
+        L.info("server folder %s, listen %s:%d, language %s", CFG["server_dir"], listen, port, i18n.LANG)
+        L.info("Java: needed %s, using %s (in PATH: %s)", need, java, found)
+        for target in (sampler, tailers, player_watcher, map_warmer, backup_scheduler, world_watcher):
+            threading.Thread(target=worker(target), name=target.__name__, daemon=True).start()
         if not AS.present():
-            threads.append(download_assets)
-        for target in threads:
-            threading.Thread(target=target, daemon=True).start()
-    elif sys.stdout:   # pythonw non ha console
-        print("ByzzCraft: first run, open %s on this machine to set it up" % url)
+            download_assets()
+        if need and not java and CFG.get("java_auto"):
+            download_java()
+    else:
+        listen = "0.0.0.0"   # finche' non c'e' un admin si configura anche da un altro PC, ma solo col codice
     for attempt in range(10):   # dopo il primo avvio il processo vecchio puo' tenere la porta ancora un attimo
         try:
-            srv = Server((CFG["listen"], CFG["port"]), Handler)
+            srv = Server((listen, port), Handler)
             break
-        except OSError:
+        except OSError as e:
             if attempt == 9:
-                raise
+                L.error("cannot listen on %s:%d (%s): is the panel already running? Otherwise change \"port\" in %s", listen, port, e, CONFIG_PATH)
+                sys.exit(1)
             time.sleep(1)
-    log("panel started on http://%s:%d" % (CFG["listen"], CFG["port"]))
-    if sys.stdout and load_users():
-        print("ByzzCraft running on %s" % url)
+    log("panel started on http://%s:%d" % (listen, port))
+    if not load_users():   # solo dopo aver preso la porta: il link deve funzionare davvero
+        L.info("ByzzCraft is not set up yet.\n  From your computer open:  http://%s:%d/?setup=%s\n  On this machine:          http://127.0.0.1:%d\n"
+               "  Page does not open? The firewall may block the port: sudo ufw allow %d/tcp  (use this machine's Tailscale IP the same way)",
+               lan_ip(), port, setup_token(), port, port)
     srv.serve_forever()
 
 

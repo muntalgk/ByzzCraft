@@ -1,11 +1,21 @@
 #!/bin/sh
 # ByzzCraft example start script for Linux: copy it into the Minecraft server folder.
 # The panel needs two things from it: a world backup before each start (backups/world_*.zip)
-# and the GC log in logs/gc.log (heap chart). Needs `zip` (apt install zip).
+# and the GC log in logs/gc.log (heap chart). The panel passes JAVA (its own Java, if it downloaded one)
+# and PYTHON (used for the zip, so `zip` does not need to be installed).
 cd "$(dirname "$0")" || exit 1
 
-RAM=${RAM:-4G}
+# RAM for the server: half of the machine, at most 4 GB (too much and the system kills it while starting).
+# Set it by hand, e.g. RAM=6G, on a machine that only runs Minecraft.
+if [ -z "$RAM" ]; then
+  MB=$(awk '/MemTotal/ {print int($2 / 2048)}' /proc/meminfo 2>/dev/null)
+  [ -z "$MB" ] && MB=2048
+  [ "$MB" -gt 4096 ] && MB=4096
+  [ "$MB" -lt 1024 ] && MB=1024
+  RAM=${MB}M
+fi
 JAVA=${JAVA:-java}
+PYTHON=${PYTHON:-python3}
 
 # world backup before every start (the panel cleans up the old ones)
 if [ -d world ]; then
@@ -13,7 +23,7 @@ if [ -d world ]; then
   TS=$(date +%Y-%m-%d_%H-%M-%S)
   echo "Backing up the world..."
   # write to .part and rename only on success: a half-written zip must not look like a good backup
-  if zip -qr "backups/world_$TS.zip.part" world -x 'world/session.lock'; then
+  if "$PYTHON" -m zipfile -c "backups/world_$TS.zip.part" world; then
     mv "backups/world_$TS.zip.part" "backups/world_$TS.zip"
   else
     echo "WARNING: backup failed."

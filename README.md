@@ -20,9 +20,54 @@ it reads the server's own files and talks to it over RCON.
 - **Accounts**: friends get their own login; admins see everything, players can start the server and look around.
 - English and Italian interface, Windows and Linux.
 
+It can also set up a new server from nothing: it downloads `server.jar` from Mojang and Java from
+[Eclipse Temurin](https://adoptium.net) if they are missing.
+
 ## Install
 
-You need **Python 3.11 or newer** and a folder with a Minecraft Java server (`server.jar`).
+You need **Python 3.10 or newer**. Everything else (Minecraft server, Java, textures) the panel can download.
+
+### On a server without a screen (Linux, over SSH)
+
+```bash
+git clone https://github.com/muntalgk/byzzcraft.git
+cd byzzcraft
+python3 panel.py
+```
+
+No git? `curl -L https://github.com/muntalgk/byzzcraft/archive/refs/heads/main.tar.gz | tar xz && cd byzzcraft-main`
+
+The panel prints a link with a one-time setup code:
+
+```
+ByzzCraft is not set up yet.
+  From your computer open:  http://192.168.1.64:8765/?setup=Xy3...
+```
+
+Open it in the browser of **your computer**. The setup page asks for the server folder (or creates a new
+server there), the language, your admin user, who can open the panel (this machine only, or your home
+network), and whether you accept the [Minecraft EULA](https://aka.ms/MinecraftEULA). Without the code the
+page does not open, so nobody else on the network can take the admin account. If the link does not open at
+all, the firewall blocks the port: `sudo ufw allow 8765/tcp`. Lost the link?
+`grep setup= logs/byzzcraft.log`.
+
+Then keep the panel running after you close SSH and after a reboot (the command prints a systemd unit for
+your user and folder):
+
+```bash
+python3 panel.py service | sudo tee /etc/systemd/system/byzzcraft.service
+sudo systemctl daemon-reload && sudo systemctl enable --now byzzcraft
+```
+
+Prefer the shell for everything? Do the setup without a browser:
+
+```bash
+python3 panel.py setup ~/minecraft --admin alex --new-server --network --accept-eula
+```
+
+(`--lang it`, `--no-java` and `--help` are there too; the password is asked, or read from `PANEL_PASSWORD`.)
+
+### On your own PC (Windows or Linux with a desktop)
 
 ```bash
 git clone https://github.com/muntalgk/byzzcraft.git
@@ -30,50 +75,38 @@ cd byzzcraft
 python panel.py
 ```
 
-Then open **<http://127.0.0.1:8765>** in a browser **on the same machine**. The first page asks for:
+Open <http://127.0.0.1:8765> on the same PC: the setup page opens without a code. To start it at every
+login: `python panel.py service` (on Windows it adds ByzzCraft to the Startup folder, no admin needed).
 
-- the Minecraft server folder,
-- the language,
-- your admin user and password,
-- whether you accept the [Minecraft EULA](https://aka.ms/MinecraftEULA) (needed to run the server).
+### After the setup
 
-That is all. The panel then turns on RCON in `server.properties`, copies a start script into the server
-folder if there is none, and downloads from Mojang the textures and names it shows (they are copyrighted
-by Mojang, so they are not part of this repository). Press **Start** on the dashboard.
+The panel turns on RCON in `server.properties`, copies a start script into the server folder if there is
+none, and downloads the textures and names it shows (they belong to Mojang, so they are not in this
+repository). If something is still missing (Java, the EULA, the start script) the **Dashboard** shows it with
+a button to fix it. Press **Start**.
 
-> The setup page only opens from the machine itself, so nobody else can grab the admin account.
-> On a server without a desktop, open an SSH tunnel and use the browser on your PC:
-> `ssh -L 8765:127.0.0.1:8765 you@your-server`, then open <http://127.0.0.1:8765>.
-
-**Friends**: open **Account** in the panel and add a user for each of them. Admin users can also use the
-console, settings, backups and access lists.
+**Friends**: open **Account** and add a user for each of them. Admin users can also use the console,
+settings, backups and access lists. For them to join the game, open the Minecraft port: `sudo ufw allow 25565/tcp`
+(and forward it on your router if they play from outside).
 
 ### The start script
 
 The panel starts Minecraft with a script in the server folder: `start.sh` on Linux, `start.bat` on Windows.
-Setup copies the one from `examples/` if you have none. It backs up the world before each start
-(`backups/world_*.zip`) and writes `logs/gc.log` for the heap chart. Open it to change the RAM (`RAM=4G`) or
-the Java path. To use your own script, set `start_script` in `panel-config.json`.
-
-### Keep it running
-
-- **Windows**: press Win+R, type `shell:startup`, and create a shortcut there to
-  `pythonw C:\path\to\byzzcraft\panel.py` (`pythonw` runs it without a window).
-- **Linux**: use `examples/byzzcraft.service` with systemd. Run it as the user that owns the server files,
-  not as root.
-
-The Minecraft server keeps running if you restart the panel.
+Setup copies the one from `examples/`. It backs up the world before each start (`backups/world_*.zip`) and
+writes `logs/gc.log` for the heap chart. Open it to change the RAM (`RAM=4G`). To use your own script, set
+`start_script` in `panel-config.json`; the panel passes `JAVA` (its own Java, if it downloaded one).
 
 ## Reach it from other devices
 
-The panel listens on `127.0.0.1` only and is never exposed directly. Pick one way to reach it:
+"My home network" in the setup opens the panel at `http://<server-ip>:8765`, without HTTPS: fine at home, not
+on the internet. For anything else keep "this machine only" and pick one of these:
 
 ### Tailscale (easiest, private)
 
 Install [Tailscale](https://tailscale.com) on the server and on your devices, then on the server:
 
 ```bash
-tailscale serve --bg --https=443 http://127.0.0.1:8765
+sudo tailscale serve --bg --https=443 http://127.0.0.1:8765
 ```
 
 The panel is at `https://<machine>.<tailnet>.ts.net`, only for devices in your tailnet, with HTTPS.
@@ -89,8 +122,40 @@ certbot. The comments in the file list the commands. Keep `proxy_buffering off`:
 Point a domain to the server, open ports 80 and 443, and run Caddy with `examples/Caddyfile`. Caddy gets
 the certificate by itself.
 
+### SSH tunnel (no setup at all)
+
+`ssh -L 8765:127.0.0.1:8765 you@your-server`, then open <http://127.0.0.1:8765> on your computer.
+
 With nginx or Caddy the panel is on the internet: use long passwords. Logins are rate limited (5 attempts,
 then 15 minutes locked). The proxy must run on the same machine as the panel.
+
+## Logs
+
+| File | What is in it |
+|---|---|
+| `logs/byzzcraft.log` | technical log of the panel: start-up, downloads, errors with tracebacks (rotated, 5 × 1 MB) |
+| `logs/server-start.log` | output of the start script, last start only: why Minecraft did not start |
+| `panel.log` | who did what in the panel (the **Log** tab) |
+| `<server>/logs/latest.log` | Minecraft's own log (the **Console** tab) |
+
+Admins can read the first two in the **Log** tab too, without SSH. Useful commands:
+
+```bash
+journalctl -u byzzcraft -f                          # the panel, when it runs as a service
+tail -f logs/byzzcraft.log logs/server-start.log    # same, from the files
+sudo systemctl restart byzzcraft                    # restart the panel (Minecraft keeps running)
+python3 panel.py passwd NAME                        # forgot a password
+python3 panel.py java                               # download the Java that server.jar needs
+python3 panel.py assets                             # download textures and names again
+```
+
+## Update
+
+```bash
+cd byzzcraft && git pull && sudo systemctl restart byzzcraft
+```
+
+Settings, users, backups and the map cache stay: they are not in the repository.
 
 ## Configuration
 
@@ -100,18 +165,22 @@ then 15 minutes locked). The proxy must run on the same machine as the panel.
 |---|---|---|
 | `server_dir` | chosen at setup | Minecraft server folder |
 | `start_script` | `start.sh` / `start.bat` | script that starts the server |
-| `listen`, `port` | `127.0.0.1`, `8765` | where the panel listens |
+| `listen`, `port` | `127.0.0.1`, `8765` | where the panel listens (`0.0.0.0` = home network) |
 | `lang` | chosen at setup | interface language: `en`, `it` |
 | `title` | `ByzzCraft` | name shown in the page |
 | `auto_stop_minutes` | `30` | stop the server after N minutes empty (0 = never) |
 | `mc_address` | | server address shown to players, with a copy button |
+| `java_auto` | chosen at setup | download Java by itself when it is missing |
 
 ## Troubleshooting
 
-- **Forgot the password**: on the server, `python panel.py passwd NAME`.
-- **Map and items without pictures**: the download from Mojang failed; run `python panel.py assets`.
+The Dashboard lists what is missing, and when the server does not start it says why. If that is not enough,
+`logs/server-start.log` has the full output.
+
+- **Login does not stick on `http://192.168…`**: update the panel; older versions marked the cookie HTTPS-only.
 - **"RCON unavailable"**: restart the Minecraft server once after setup, so it reads the new RCON settings.
-- **Locked out of setup on a remote server**: use the SSH tunnel above.
+- **Port 8765 in use**: another panel is running, or change `port` in `panel-config.json`.
+- **Do not run it as root**: the server files would belong to root. The panel warns about it in the log.
 
 ## Translations
 
@@ -121,10 +190,7 @@ Texts in the code are English. `i18n/it.json` maps them to Italian; a new langua
 ## Tests
 
 ```bash
-python tests/test_backups.py
-python tests/test_accessi.py
-python tests/test_registro.py
-python tests/test_assets.py
+for t in tests/test_*.py; do python3 "$t"; done
 ```
 
 ## License

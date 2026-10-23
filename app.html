@@ -77,6 +77,10 @@ main{padding:22px 28px 60px;min-width:0}
 .btn.danger{background:transparent;border-color:#5a2a28;color:#ff9b94}
 .btn.danger:hover:not(:disabled){background:#2a1514}
 .btn:disabled{opacity:.4;cursor:not-allowed}
+.health{border-color:#5b4a12}.health b{font-size:14px}
+.hc{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:10px 0 0;margin-top:10px;border-top:1px solid var(--line);font-size:14px;color:var(--text2)}
+.hc code{display:block;width:100%;font:12px/1.5 var(--mono);background:#0a0c0f;border:1px solid var(--line);padding:6px 9px;border-radius:8px;user-select:all;overflow-wrap:anywhere}
+.hc .btn{padding:6px 12px}.st-err{color:#ffb3ad}
 .banner{display:none;align-items:center;justify-content:space-between;gap:12px;border:1px solid #5b4a12;background:#221d0c;color:#f3d77a;border-radius:12px;padding:10px 14px;font-size:14px}
 .banner.show{display:flex}
 .banner .btn{padding:7px 12px}
@@ -444,6 +448,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
       <div class="card wc" id="world" hidden><div class="orb" id="w-orb"></div>
         <div><div class="clock" id="w-clock"></div><div class="ph" id="w-ph"></div><div class="cyc"><i id="w-mark"></i></div></div>
         <div class="wchips" id="w-chips"></div></div>
+      <div class="card health adm-only" id="health" hidden><b>{{To do before playing}}</b><div id="health-list"></div></div>
       <div class="banner" id="banner"><span>{{You changed the settings: they apply at the next restart.}}</span><button class="btn" id="b-banner">{{Restart now}}</button></div>
       <div class="online-strip" id="online-strip"></div>
       <div class="dash-row">
@@ -573,7 +578,9 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 
     <!-- REGISTRO -->
     <section id="v-audit" hidden>
-      <div class="rg-tools"><input class="search" id="rg-q" placeholder="{{Search the log...}}"><select class="search" id="rg-user" style="min-width:150px;flex:0"><option value="">{{All}}</option></select></div>
+      <div class="chips-f" id="rg-mode" style="margin-bottom:12px"><button data-m="" class="on">{{Activity}}</button><button data-m="panel">{{Technical log}}</button><button data-m="start">{{Server start output}}</button></div>
+      <div class="con" id="rg-sys" hidden style="height:calc(100vh - 230px);min-height:320px"></div>
+      <div class="rg-tools" id="rg-tools"><input class="search" id="rg-q" placeholder="{{Search the log...}}"><select class="search" id="rg-user" style="min-width:150px;flex:0"><option value="">{{All}}</option></select></div>
       <div class="chips-f" id="rg-cats" style="margin-bottom:14px"></div>
       <div class="rg" id="rg-feed"></div>
       <button class="btn" id="rg-more" style="margin-top:10px" hidden>{{Load more}}</button>
@@ -670,7 +677,7 @@ function renderStatus(){const s=S.status;if(BOOT.admin&&BK.st)BK.renderStatus();
   let sub="";if(s.state=="on"){sub=_t("%s / %s players",s.online,s.max)+(s.since?" · "+_t("on for %s",dur(Date.now()/1000-s.since)):"");
     if(s.online==0&&s.auto_stop_minutes)sub+=" · "+_t("stops after %s min with nobody on",s.auto_stop_minutes)+(s.empty_minutes?" "+_t("(empty for %s min)",s.empty_minutes):"")}
   else if(s.state=="starting")sub=_t("World backup and loading: usually under a minute.");
-  else if(s.state=="stopping")sub=_t("Saving the world...");else sub=_t("Press Start when you want to play.");
+  else if(s.state=="stopping")sub=_t("Saving the world...");else sub=s.start_error||_t("Press Start when you want to play.");$("#st-sub").classList.toggle("st-err",s.state=="off"&&!!s.start_error);
   $("#st-sub").textContent=sub;
   const pl=$("#players");pl.innerHTML="";
   if(BOOT.address){const c=document.createElement("span");c.className="chip plain";c.innerHTML=_t("Address")+" <b style='font-family:var(--mono)'>"+esc(BOOT.address)+"</b> <button title='"+_t("Copy")+"'>"+_t("copy")+"</button>";
@@ -723,6 +730,8 @@ function connect(){es=new EventSource("/api/events");
   es.addEventListener("timeline",e=>onTimeline(JSON.parse(e.data)));
   es.addEventListener("positions",e=>{const d=JSON.parse(e.data);P.positions=d.players;MAPF.setPlayers(d.players);MAPM.setPlayers(d.players);renderOnline()});
   es.addEventListener("backups",e=>BK.onStatus(JSON.parse(e.data)));
+  es.addEventListener("notice",e=>{const d=JSON.parse(e.data);toast(d.message,d.ok?"good":"bad");HL.load()});
+  es.addEventListener("health",()=>HL.load());
   es.addEventListener("backup_done",e=>{const d=JSON.parse(e.data);toast(d.message,d.ok?"good":"bad");BK.load()});
   es.addEventListener("markers",e=>{const d=JSON.parse(e.data);MAPF.reloadIf(d.dim);MAPM.reloadIf(d.dim)});
   es.addEventListener("status",e=>{S.status=JSON.parse(e.data);renderStatus()});
@@ -1231,7 +1240,22 @@ const ACC={users:[],editing:null,
 $("#us-list").onclick=e=>{const b=e.target.closest("button[data-a]");if(!b||b.disabled)return;if(b.dataset.a=="edit")ACC.edit(b.dataset.n);else ACC.del(b.dataset.n,b)};
 $("#us-save").onclick=()=>ACC.save();$("#us-cancel").onclick=()=>ACC.reset();
 
-connect();loadRoster();
+/* ---------------- controlli di salute (dashboard) e log tecnico (registro) ---------------- */
+const HL={
+  async load(){if(!BOOT.admin)return;try{const r=await fetch("/api/health");if(!r.ok)return;const c=(await r.json()).checks;$("#health").hidden=!c.length;
+    $("#health-list").innerHTML=c.map(x=>"<div class='hc'><span>"+esc(x.text)+"</span>"+(x.fix?"<button class='btn' data-fix='"+esc(x.id)+"'>"+esc(HL.label(x.id))+"</button>":"")
+      +(x.cmd?"<code>"+esc(x.cmd)+"</code>":"")+"</div>").join("")}catch(e){}},
+  label(id){return {java:_t("Download Java"),eula:_t("I accept the EULA"),rcon:_t("Turn on RCON"),script:_t("Copy the start script"),assets:_t("Download")}[id]||_t("Fix")},
+  async fix(id,b){if(id=="eula"&&!confirm(_t("Accept the Minecraft EULA? Read it at https://aka.ms/MinecraftEULA")))return;
+    b.disabled=true;const j=await api("/api/health/fix",{id});toast(j.message,j.ok?"good":"bad");this.load()}};
+$("#health-list").onclick=e=>{const b=e.target.closest("[data-fix]");if(b&&!b.disabled)HL.fix(b.dataset.fix,b)};
+setInterval(()=>{if(CUR=="dash")HL.load()},30000);
+$("#rg-mode").onclick=async e=>{const b=e.target.closest("button");if(!b)return;$$("#rg-mode button").forEach(x=>x.classList.toggle("on",x==b));const m=b.dataset.m;
+  ["#rg-tools","#rg-cats","#rg-feed"].forEach(x=>$(x).hidden=!!m);$("#rg-more").hidden=!!m||RGV.items.length>=RGV.total;$("#rg-sys").hidden=!m;
+  if(!m)return;const r=await fetch("/api/syslog?file="+m);if(!r.ok)return;const box=$("#rg-sys"),ls=(await r.json()).lines;
+  box.innerHTML=ls.length?ls.map(l=>"<div class='l"+(/ ERROR | WARNING |Exception|Error:/.test(l)?" err":"")+"'><span class=m>"+esc(l)+"</span></div>").join(""):esc(_t("Empty."));box.scrollTop=box.scrollHeight};
+
+connect();loadRoster();HL.load();
 function fromHash(){const h=location.hash.slice(1);const v=h in TITLES&&(BOOT.admin||!["console","props","backups","access","audit"].includes(h))?h:"dash";if($("#v-"+v).hidden||!h||!fromHash.done){fromHash.done=true;go(v)}}
 window.addEventListener("hashchange",fromHash);fromHash();
 </script>

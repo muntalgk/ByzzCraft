@@ -41,13 +41,28 @@ def _get(url, sha1=None):
     return data
 
 
-def client_jar(version):
-    versions = json.loads(_get(MANIFEST))["versions"]
-    v = next((x for x in versions if x["id"] == version), None)
+def mojang_jar(version, kind="client"):
+    """client.jar o server.jar ufficiale di una versione (None = ultima stabile), con verifica SHA1."""
+    manifest = json.loads(_get(MANIFEST))
+    version = version or manifest["latest"]["release"]
+    v = next((x for x in manifest["versions"] if x["id"] == version), None)
     if v is None:
         raise ValueError("Mojang does not know version %s" % version)
-    c = json.loads(_get(v["url"], v.get("sha1")))["downloads"]["client"]
-    return _get(c["url"], c["sha1"])
+    c = json.loads(_get(v["url"], v.get("sha1")))["downloads"][kind]
+    return version, _get(c["url"], c["sha1"])
+
+
+def download_server(server_dir, version=None, log=print):
+    """Server nuovo: server.jar di Mojang nella cartella (creata se manca). Ritorna la versione."""
+    log("Downloading the Minecraft server%s from Mojang..." % (" " + version if version else ""))
+    version, jar = mojang_jar(version, "server")
+    os.makedirs(server_dir, exist_ok=True)
+    tmp = os.path.join(server_dir, "server.jar.part")
+    with open(tmp, "wb") as f:
+        f.write(jar)
+    os.replace(tmp, os.path.join(server_dir, "server.jar"))
+    log("Minecraft server %s saved in %s" % (version, server_dir))
+    return version
 
 
 def png_rgba(data):
@@ -200,7 +215,7 @@ def extract(jar, dest):
 def install(server_dir, version=None, log=print):
     version = version or server_version(server_dir)
     log("Downloading the Minecraft %s client from Mojang..." % version)
-    jar = client_jar(version)
+    _, jar = mojang_jar(version, "client")
     tmp = os.path.join(HERE, "assets.download-tmp")
     shutil.rmtree(tmp, ignore_errors=True)
     os.makedirs(tmp)

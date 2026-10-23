@@ -6,6 +6,8 @@ markers.json
 cache/
 backup-properties/
 trash/
+logs/
+runtime/
 __pycache__/
 
 # asset di Mojang: si scaricano con `python panel.py assets`, non si ridistribuiscono
