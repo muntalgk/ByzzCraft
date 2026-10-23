@@ -14,6 +14,11 @@ CASES = [
     ("admin logged in from admin@example.com", "login", "admin", "logged in"),
     ("login failed for 'admin' from 100.1.2.3", "login", None, "Login failed for «admin»"),
     ("alice started the server", "server", "alice", "started the server"),
+    ("alice changed their password", "login", "alice", "changed their password"),
+    ("admin created user bob", "login", "admin", "created user bob"),
+    ("admin updated user bob", "login", "admin", "updated user bob"),
+    ("admin deleted user bob", "login", "admin", "deleted user bob"),
+    ("admin completed the first setup", "sistema", "admin", "completed the first setup"),
     ("panel (restart) started the server", "server", "panel", "started the server"),
     ("panel stopped the server (empty for 30 minutes)", "server", "panel", "stopped the server"),
     ("admin restarted the server", "server", "admin", "restarted the server"),
@@ -53,13 +58,14 @@ assert R.parse("riga senza data") is None
 # query: filtri e conteggi
 es = [R.parse(TS + l) for l, *_ in CASES]
 items, total, counts = R.query(es, cat="giocatori", user="admin")
-assert total == len(VERBS) + 1 and counts["login"] == 1, (total, counts)
+assert total == len(VERBS) + 1 and counts["login"] == 4, (total, counts)
 assert R.query(es, q="NOTCH", limit=2)[0][0]["cat"] == "giocatori"
 # in italiano le stesse righe escono tradotte
 i18n.load("it")
 assert R.parse(TS + "admin logged in from x")["text"] == "è entrato nel pannello"
 assert R.parse(TS + "admin opped Notch")["text"] == "ha reso operatore Notch"
 assert R.parse(TS + "admin stopped the server")["text"] == "ha spento il server"
+assert R.parse(TS + "admin created user bob")["text"] == "ha creato l'utente bob"
 i18n.load("en")
 print("PASS %d  FAIL %d" % (ok, fail))
 sys.exit(1 if fail else 0)

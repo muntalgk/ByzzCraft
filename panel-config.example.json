@@ -1,10 +1,10 @@
 {
   "server_dir": "/path/to/minecraft-server",
+  "lang": "en",
   "start_script": "start.sh",
   "listen": "127.0.0.1",
   "port": 8765,
   "auto_stop_minutes": 30,
   "title": "ByzzCraft",
-  "mc_address": "",
-  "user_mc": {}
+  "mc_address": ""
 }

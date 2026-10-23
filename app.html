@@ -357,6 +357,9 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .tg{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:0 6px;border-radius:5px;border:1px solid}
 .tg.on{color:#8be29a;border-color:#2f6b3a}.tg.opx{color:#f0c75e;border-color:#5a4a1c}.tg.wl{color:#a9c8f5;border-color:#2e4466}.tg.ban{color:#ff9b94;border-color:#5a2a28}
 .acr .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.acc{display:grid;gap:16px;max-width:760px}.acc h3{font-size:15px;margin:0 0 6px}
+.acc label.f{display:block;font-size:12.5px;color:var(--text2);margin:12px 0 6px}.acc .search{width:100%;min-width:0}
+.acc .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}.acc .ac-list{margin-top:8px}
 .sb{background:var(--card2);border:1px solid var(--line2);color:var(--text2);border-radius:8px;padding:5px 10px;font-size:12.5px;cursor:pointer;white-space:nowrap;transition:all .15s}
 .sb:hover{color:var(--text);border-color:#4a505c}.sb.on{color:#8be29a;border-color:#2f6b3a;background:#132a17}.sb.gold.on{color:#f0c75e;border-color:#5a4a1c;background:#2a2412}
 .sb.red{color:#ff9b94;border-color:#5a2a28;background:transparent}.sb.red:hover{background:#2a1514}.sb.ask{color:#ffb4ae;background:#3a1715;border-color:#6b2a26}
@@ -416,6 +419,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
     <button class="tab adm" data-v="backups"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></svg>Backup<span class="cnt" id="cnt-bk"></span></button>
     <button class="tab adm" data-v="access"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>{{Access}}</button>
     <button class="tab adm" data-v="audit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>{{Log}}</button>
+    <button class="tab" data-v="account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.2 4.2-6.5 8-6.5s7 2.3 8 6.5"/></svg>{{Account}}</button>
     <div class="me"><div class="me-face" id="me-face"></div><div class="me-t"><b id="who"></b><span class="role" id="me-role"></span></div>
       <button id="logout" title="{{Log out}}" aria-label="{{Log out}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4"/></svg><span>{{Log out?}}</span></button></div>
   </nav>
@@ -549,6 +553,24 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
       <div id="ac-ip"></div>
     </section>
 
+    <!-- ACCOUNT -->
+    <section id="v-account" hidden>
+      <div class="acc">
+        <div class="card"><h3>{{Change password}}</h3>
+          <label class="f" for="pw-cur">{{Current password}}</label><input class="search" type="password" id="pw-cur" autocomplete="current-password">
+          <label class="f" for="pw-new">{{New password (at least 10 characters)}}</label><input class="search" type="password" id="pw-new" autocomplete="new-password">
+          <label class="f" for="pw-new2">{{Repeat the new password}}</label><input class="search" type="password" id="pw-new2" autocomplete="new-password">
+          <div class="row"><button class="btn primary" id="pw-save">{{Change password}}</button></div></div>
+        <div class="card adm-only"><h3>{{Panel users}}</h3><div class="ac-list" id="us-list"></div></div>
+        <div class="card adm-only"><h3 id="us-title">{{Add a user}}</h3>
+          <label class="f" for="us-name">{{User name (lowercase)}}</label><input class="search" id="us-name" maxlength="32" autocomplete="off" spellcheck="false" placeholder="{{e.g. alex}}">
+          <label class="f" for="us-pw">{{Password (at least 10 characters)}}</label><input class="search" type="password" id="us-pw" autocomplete="new-password">
+          <label class="f" for="us-mc">{{Minecraft name (optional, for the face)}}</label><input class="search" id="us-mc" maxlength="16" autocomplete="off" spellcheck="false">
+          <div class="row"><label class="toggle"><input type="checkbox" id="us-admin"> {{Admin: can use console, settings, backups and access}}</label></div>
+          <div class="row"><button class="btn primary" id="us-save">{{Save user}}</button><button class="btn" id="us-cancel" hidden>{{Cancel}}</button></div></div>
+      </div>
+    </section>
+
     <!-- REGISTRO -->
     <section id="v-audit" hidden>
       <div class="rg-tools"><input class="search" id="rg-q" placeholder="{{Search the log...}}"><select class="search" id="rg-user" style="min-width:150px;flex:0"><option value="">{{All}}</option></select></div>
@@ -579,15 +601,15 @@ if(!BOOT.admin){$$(".adm,.adm-only").forEach(e=>e.hidden=true)}
 function renderMe(){const f=$("#me-face");const me=BOOT.mc&&(P.roster||[]).find(p=>p.name.toLowerCase()==BOOT.mc.toLowerCase());
   if(me){if(f.dataset.u!=me.uuid){f.dataset.u=me.uuid;f.className="me-face fc";f.style.cssText=faceStyle(me.uuid,32);f.textContent=""}}
   else if(!f.dataset.u)f.textContent=(BOOT.mc||BOOT.user).charAt(0).toUpperCase()}
-const TITLES={dash:"Dashboard",map:_t("Map"),players:_t("Players"),timeline:"Timeline",metrics:_t("Metrics"),console:"Console",props:_t("Server settings"),backups:"Backup",access:_t("Access"),audit:_t("Panel log")};
+const TITLES={dash:"Dashboard",map:_t("Map"),players:_t("Players"),timeline:"Timeline",metrics:_t("Metrics"),console:"Console",props:_t("Server settings"),backups:"Backup",access:_t("Access"),audit:_t("Panel log"),account:_t("Account")};
 const SUBS={dash:()=>_t("Live server and world status"),map:()=>_t("Top-down view · drag, zoom, right-click for a marker"),
   players:()=>{const r=P.roster||[],n=r.filter(p=>p.online).length;return _t("%s players recorded",r.length)+" · "+(n?_t("%s online",n):_t("nobody online"))},
-  timeline:()=>_t("Play sessions and events from the server logs"),metrics:()=>_t("PC and server · last 10 minutes, one point every 2 seconds"),console:()=>_t("Live log and RCON commands"),props:()=>_t("server.properties · every save backs up the file"),access:()=>_t("Whitelist, operators and bans"),audit:()=>_t("Who did what in the panel"),
+  timeline:()=>_t("Play sessions and events from the server logs"),metrics:()=>_t("PC and server · last 10 minutes, one point every 2 seconds"),console:()=>_t("Live log and RCON commands"),props:()=>_t("server.properties · every save backs up the file"),access:()=>_t("Whitelist, operators and bans"),audit:()=>_t("Who did what in the panel"),account:()=>BOOT.admin?_t("Your password and the panel users"):_t("Your password"),
   backups:()=>BK.items?_t("%s backups",BK.items.length)+" · "+gb(BK.items.reduce((a,e)=>a+e.size,0))+" · "+_t("%s free on disk",gb(BK.disk.free)):_t("World copies, schedule and restore")};
 let CUR="dash";function setSub(){$("#v-sub").textContent=SUBS[CUR]?SUBS[CUR]():""}
 function go(v){if(!TITLES[v])v="dash";CUR=v;$$(".tab").forEach(t=>{t.classList.toggle("on",t.dataset.v==v);if(t.dataset.v==v&&innerWidth<=760)t.scrollIntoView({inline:"nearest",block:"nearest"})});Object.keys(TITLES).forEach(x=>$("#v-"+x).hidden=x!=v);
   $("#v-title").textContent=TITLES[v];setSub();if(v=="props")loadProps();if(v=="console"){renderConsole();setTimeout(()=>$("#cmd").focus(),50)}if(v=="metrics")charts.forEach(c=>c.draw());
-  if(v=="players")loadPlayers();if(v=="map")MAPF.show();if(v=="timeline")TLV.open();if(v=="dash")MAPM.show();if(v=="backups")BK.load();if(v=="access")ACV.load();if(v=="audit")RGV.load();location.hash=v}
+  if(v=="players")loadPlayers();if(v=="map")MAPF.show();if(v=="timeline")TLV.open();if(v=="dash")MAPM.show();if(v=="backups")BK.load();if(v=="access")ACV.load();if(v=="audit")RGV.load();if(v=="account")ACC.load();location.hash=v}
 $$(".tab").forEach(t=>t.onclick=()=>go(t.dataset.v));$$("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
 $("#logout").onclick=async e=>{const b=e.currentTarget;
   if(!b.classList.contains("ask")){b.classList.add("ask");clearTimeout(b._t);b._t=setTimeout(()=>b.classList.remove("ask"),3000);return}
@@ -1187,6 +1209,27 @@ $("#rg-cats").onclick=e=>{const b=e.target.closest("button");if(!b)return;RGV.ca
 $("#rg-user").onchange=e=>{RGV.user=e.target.value;RGV.load()};
 $("#rg-q").oninput=e=>{clearTimeout(RGV._t);RGV._t=setTimeout(()=>{RGV.q=e.target.value.trim();RGV.load()},250)};
 $("#rg-more").onclick=()=>RGV.load(true);
+
+/* ---------------- account: password e utenti del pannello ---------------- */
+$("#pw-save").onclick=async()=>{const a=$("#pw-new").value;if(a!=$("#pw-new2").value)return toast(_t("The new passwords do not match."),"bad");
+  const j=await api("/api/account/password",{current:$("#pw-cur").value,new:a});toast(j.message,j.ok?"good":"bad");if(j.ok)["#pw-cur","#pw-new","#pw-new2"].forEach(x=>$(x).value="")};
+const ACC={users:[],editing:null,
+  async load(){if(!BOOT.admin)return;try{const r=await fetch("/api/users");if(!r.ok)return;this.users=(await r.json()).users;this.render()}catch(e){}},
+  render(){$("#us-list").innerHTML=this.users.map(u=>{const p=u.mc&&(P.roster||[]).find(x=>x.name.toLowerCase()==u.mc.toLowerCase());
+    return "<div class='acr'>"+(p?"<div class='fc' style='"+faceStyle(p.uuid,36)+"'></div>":"<div class='ini'>"+esc(u.name[0].toUpperCase())+"</div>")
+      +"<div class='tx'><b>"+esc(u.name)+"</b><span class='tags'>"+(u.admin?"<span class='tg opx'>Admin</span>":"<span class='tg wl'>"+_t("Player")+"</span>")+(u.me?"<span class='tg on'>"+_t("you")+"</span>":"")+"</span>"
+      +"<small>"+(u.mc?"Minecraft: "+esc(u.mc):_t("no Minecraft name"))+"</small></div><div class='acts'><button class='sb' data-a='edit' data-n='"+esc(u.name)+"'>"+_t("Edit")+"</button>"
+      +(u.me?"":"<button class='sb red' data-a='del' data-n='"+esc(u.name)+"'>"+_t("Delete")+"</button>")+"</div></div>"}).join("")},
+  edit(n){const u=this.users.find(x=>x.name==n);if(!u)return;this.editing=n;$("#us-title").textContent=_t("Edit %s",n);$("#us-name").value=n;$("#us-name").disabled=true;
+    $("#us-pw").value="";$("#us-pw").placeholder=_t("empty = unchanged");$("#us-mc").value=u.mc||"";$("#us-admin").checked=u.admin;$("#us-cancel").hidden=false;$("#us-pw").focus()},
+  reset(){this.editing=null;$("#us-title").textContent=_t("Add a user");["#us-name","#us-pw","#us-mc"].forEach(x=>$(x).value="");$("#us-name").disabled=false;
+    $("#us-pw").placeholder="";$("#us-admin").checked=false;$("#us-cancel").hidden=true},
+  async save(){const j=await api("/api/users/save",{name:this.editing||$("#us-name").value.trim().toLowerCase(),password:$("#us-pw").value,mc:$("#us-mc").value.trim(),
+    admin:$("#us-admin").checked,new:!this.editing});toast(j.message,j.ok?"good":"bad");if(j.ok){this.reset();this.load()}},
+  async del(n,btn){if(!btn.classList.contains("ask")){btn.classList.add("ask");btn.textContent=_t("Delete?");clearTimeout(btn._t);btn._t=setTimeout(()=>this.render(),3000);return}
+    btn.disabled=true;const j=await api("/api/users/delete",{name:n});toast(j.message,j.ok?"good":"bad");if(this.editing==n)this.reset();this.load()}};
+$("#us-list").onclick=e=>{const b=e.target.closest("button[data-a]");if(!b||b.disabled)return;if(b.dataset.a=="edit")ACC.edit(b.dataset.n);else ACC.del(b.dataset.n,b)};
+$("#us-save").onclick=()=>ACC.save();$("#us-cancel").onclick=()=>ACC.reset();
 
 connect();loadRoster();
 function fromHash(){const h=location.hash.slice(1);const v=h in TITLES&&(BOOT.admin||!["console","props","backups","access","audit"].includes(h))?h:"dash";if($("#v-"+v).hidden||!h||!fromHash.done){fromHash.done=true;go(v)}}

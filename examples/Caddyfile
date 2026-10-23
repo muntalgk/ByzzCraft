@@ -1,0 +1,9 @@
+# ByzzCraft behind Caddy: HTTPS certificates are automatic. Point panel.example.com to this machine,
+# open ports 80 and 443, then run `sudo caddy run --config Caddyfile` (or copy it to /etc/caddy/Caddyfile).
+# Caddy must run on the same machine as the panel: the panel trusts proxy headers only from 127.0.0.1.
+panel.example.com {
+	reverse_proxy 127.0.0.1:8765 {
+		# live updates use server-sent events: send every chunk right away
+		flush_interval -1
+	}
+}

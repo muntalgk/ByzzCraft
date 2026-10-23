@@ -1,7 +1,7 @@
 """ByzzCraft: pannello web self-hosted per un server Minecraft (solo libreria standard di Python, Windows e Linux).
 
-Primo avvio:      python panel.py init [CARTELLA_DEL_SERVER]   (config, RCON, primo admin)
-Avvio:            python panel.py                 (ascolta su 127.0.0.1: per l'accesso remoto usa un proxy HTTPS)
+Avvio:            python panel.py     poi apri http://127.0.0.1:8765 su questa macchina: al primo accesso
+                  si sceglie la cartella del server e si crea l'admin (per l'accesso remoto usa un proxy HTTPS)
 Utenti:           python panel.py adduser NOME [--admin]
                   python panel.py passwd NOME
                   python panel.py deluser NOME
@@ -144,6 +144,20 @@ def hash_pw(pw, salt=None, rounds=PBKDF2_ROUNDS):
     return salt.hex(), hashlib.pbkdf2_hmac("sha256", pw.encode(), salt, rounds).hex(), rounds
 
 
+USER_RE = re.compile(r"^[a-z0-9_.-]{1,32}$")   # stessi caratteri che registro.py riconosce nei log
+RESERVED = {"panel", "init"}
+
+
+def mc_names():
+    """utente del pannello -> nick Minecraft (faccia nella barra laterale): dal file utenti, poi da user_mc in config."""
+    return {**(CFG.get("user_mc") or {}), **{n: u["mc"] for n, u in load_users().items() if u.get("mc")}}
+
+
+def set_password(users, name, pw):
+    salt, h, rounds = hash_pw(pw)
+    users[name] = {**users.get(name, {}), "salt": salt, "hash": h, "rounds": rounds}
+
+
 def check_pw(user, pw):
     u = load_users().get(user)
     if not u:
@@ -181,15 +195,20 @@ def write_props(changes, who):
         f.write("\n".join(lines) + "\n")
     for old in sorted(os.listdir(bdir))[:-15]:
         os.remove(os.path.join(bdir, old))
-    out, done = [], []
+    out, done, seen = [], [], set()
     for line in lines:
         if "=" in line and not line.lstrip().startswith("#"):
             k, v = line.split("=", 1)
             k = k.strip()
+            seen.add(k)
             if k in changes and changes[k] != v:
                 done.append((k, v, changes[k]))
                 line = "%s=%s" % (k, changes[k])
         out.append(line)
+    for k in changes:   # chiave assente (server.properties nuovo o incompleto): Minecraft la tiene
+        if k not in seen:
+            done.append((k, "", changes[k]))
+            out.append("%s=%s" % (k, changes[k]))
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(out) + "\n")
@@ -908,6 +927,13 @@ def save_sessions():
         pass
 
 
+def drop_sessions(user, keep=None):
+    """Chiude le sessioni di un utente (password cambiata, utente eliminato), tranne keep."""
+    for k in [k for k, v in list(SESSIONS.items()) if v["user"] == user and k != keep]:
+        SESSIONS.pop(k, None)
+    save_sessions()
+
+
 def load_sessions():
     try:
         SESSIONS.update({k: v for k, v in json.load(open(SESS_FILE, encoding="utf-8")).items() if v["exp"] > time.time()})
@@ -919,9 +945,18 @@ LOCKED = {}
 
 def client_id(handler):
     ip = handler.client_address[0]
-    if ip not in ("127.0.0.1", "::1", "::ffff:127.0.0.1"):
+    if ip not in LOOPBACK:
         return ip   # header di proxy validi solo da un proxy locale (tailscale serve, nginx): altrimenti falsificabili
     return handler.headers.get("Tailscale-User-Login") or handler.headers.get("X-Forwarded-For") or ip
+
+
+LOOPBACK = ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+PROXY_HEADERS = ("X-Forwarded-For", "X-Real-IP", "Forwarded", "X-Forwarded-Host", "Tailscale-User-Login")
+
+
+def is_local(handler):
+    """Browser aperto su questa macchina. Tailscale Serve e nginx arrivano anche loro da 127.0.0.1, ma con i loro header."""
+    return handler.client_address[0] in LOOPBACK and not any(handler.headers.get(h) for h in PROXY_HEADERS)
 
 
 def locked(keys):
@@ -947,6 +982,8 @@ main{width:100%;max-width:400px;padding:16px}.logo{width:52px;height:52px;border
 h1{font-size:22px;margin:0 0 4px}p{color:var(--mute);margin:0 0 20px;font-size:14px}
 form{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px}
 label{display:block;font-size:13px;color:var(--mute);margin:12px 0 6px}
+select{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:#0c0e12;color:var(--text);font-size:16px}
+label.chk{display:flex;gap:8px;align-items:center;margin-top:16px}label.chk input{width:auto}a{color:var(--accent)}
 input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:#0c0e12;color:var(--text);font-size:16px}
 input:focus{outline:2px solid #3fb95055;border-color:var(--accent)}
 button{width:100%;padding:13px;border:0;border-radius:10px;font-size:16px;font-weight:650;cursor:pointer;margin-top:18px;background:var(--accent);color:#06210c}
@@ -956,7 +993,9 @@ button{width:100%;padding:13px;border:0;border-radius:10px;font-size:16px;font-w
 
 with open(os.path.join(HERE, "assets", "logo.svg"), encoding="utf-8") as _f:
     LOGO_SVG = _f.read().strip()
-LOGO_ICON = "<link rel=icon href='data:image/svg+xml;base64,%s'>" % base64.b64encode(LOGO_SVG.encode()).decode()
+# PNG e non SVG: Safari (anche sulla schermata Home dell'iPhone) non usa le icone SVG
+LOGO_ICON = "<link rel=icon type=image/png href=/favicon.ico><link rel=apple-touch-icon href=/apple-touch-icon.png>"
+ICONS = {"/favicon.ico": "icon-32.png", "/apple-touch-icon.png": "icon-180.png"}
 
 
 def login_page(error=""):
@@ -971,12 +1010,88 @@ def login_page(error=""):
             "<title>%s</title>%s<style>%s</style></head><body>%s</body></html>" % (html.escape(CFG["title"]), LOGO_ICON, LOGIN_CSS, body)).encode()
 
 
+def _page(body):
+    return ("<!doctype html><html lang=" + i18n.LANG + "><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+            "<title>%s</title>%s<style>%s</style></head><body>%s</body></html>" % (html.escape(CFG["title"]), LOGO_ICON, LOGIN_CSS, body)).encode()
+
+
+def guess_server_dir():
+    for d in (CFG["server_dir"], os.path.dirname(HERE), os.getcwd()):
+        if any(os.path.isfile(os.path.join(d, f)) for f in ("server.jar", "server.properties")):
+            return d
+    return ""
+
+
+def setup_page(error="", form=None):
+    f = form or {}
+    e = html.escape
+    err = '<p class="err">%s</p>' % e(error) if error else ""
+    lang = f.get("lang", i18n.LANG)
+    opts = "".join("<option value=%s%s>%s</option>" % (k, " selected" if k == lang else "", v) for k, v in (("en", "English"), ("it", "Italiano")))
+    body = """<main><div class=logo>%s</div><h1>%s</h1><p>%s</p>
+<form method=post action=/setup>
+<label for=d>%s</label><input id=d name=server_dir value="%s" required placeholder="/home/me/minecraft">
+<label for=l>%s</label><select id=l name=lang>%s</select>
+<label for=u>%s</label><input id=u name=user autocomplete=username required pattern="[a-z0-9_.\\-]{1,32}" value="%s">
+<label for=p>%s</label><input id=p name=password type=password autocomplete=new-password required minlength=10>
+<label for=p2>%s</label><input id=p2 name=password2 type=password autocomplete=new-password required minlength=10>
+<label class=chk><input type=checkbox name=eula value=1> %s <a href="https://aka.ms/MinecraftEULA" target=_blank rel=noopener>EULA</a></label>
+<button type=submit>%s</button>%s</form></main>""" % (
+        LOGO_SVG, e(t("Welcome to ByzzCraft")), e(t("First setup: this page only opens on the server machine.")),
+        e(t("Minecraft server folder")), e(f.get("server_dir", guess_server_dir())), e(t("Language")), opts,
+        e(t("Admin user")), e(f.get("user", "")), e(t("Password (at least 10 characters)")), e(t("Repeat the password")),
+        e(t("I accept the Minecraft")), e(t("Set up the panel")), err)
+    return _page(body)
+
+
+def setup_remote_page():
+    url = "http://127.0.0.1:%d" % CFG["port"]
+    return _page("<main><div class=logo>%s</div><h1>%s</h1><p>%s</p></main>" % (
+        LOGO_SVG, html.escape(t("Panel not set up yet")),
+        html.escape(t("Open %s in a browser on the server machine to create the admin user.") % url)))
+
+
+def prepare_server(sd, accept_eula):
+    """Cartella del server pronta per il pannello: RCON attivo, EULA se accettata, script di avvio d'esempio."""
+    props = os.path.join(sd, "server.properties")
+    if not os.path.exists(props):
+        open(props, "w").close()   # server mai avviato: Minecraft completa il file al primo avvio
+    p = server_props()
+    if p.get("enable-rcon") != "true" or not p.get("rcon.password"):
+        write_props({"enable-rcon": "true", "rcon.port": p.get("rcon.port") or "25575",
+                     "rcon.password": p.get("rcon.password") or secrets.token_urlsafe(24)}, "setup")
+    eula = os.path.join(sd, "eula.txt")
+    if accept_eula and "eula=true" not in (open(eula, encoding="utf-8").read() if os.path.exists(eula) else ""):
+        with open(eula, "w", encoding="utf-8") as f:
+            f.write("# accepted in the ByzzCraft setup (https://aka.ms/MinecraftEULA)\neula=true\n")
+    script = os.path.join(sd, CFG["start_script"])
+    example = os.path.join(HERE, "examples", CFG["start_script"])
+    if not os.path.exists(script) and os.path.exists(example):
+        shutil.copy(example, script)
+
+
+def restart_soon():
+    """Dopo il primo avvio si riparte con la nuova config (cartella del server, lingua, thread di lavoro)."""
+    time.sleep(1)
+    if os.name == "nt":
+        subprocess.Popen([sys.executable] + sys.argv, cwd=os.getcwd())   # il nuovo processo riprova la porta finche' questo esce
+        os._exit(0)
+    os.execv(sys.executable, [sys.executable] + sys.argv)   # stesso PID: systemd non se ne accorge
+
+
+def download_assets():
+    try:
+        AS.install(CFG["server_dir"], log=log)
+    except Exception as e:  # noqa: BLE001
+        log("assets error: %s" % e)
+
+
 def app_page(sess):
     with open(os.path.join(HERE, "app.html"), encoding="utf-8") as f:
         tpl = f.read()
     boot = {"user": sess["user"], "admin": sess["admin"], "csrf": sess["csrf"], "title": CFG["title"],
             "address": CFG.get("mc_address") or "", "autostop": CFG["auto_stop_minutes"], "cores": NCPU,
-            "mc": (CFG.get("user_mc") or {}).get(sess["user"], ""), "lang": i18n.LANG, "i18n": i18n.TABLE}
+            "mc": mc_names().get(sess["user"], ""), "lang": i18n.LANG, "i18n": i18n.TABLE}
     tpl = tpl.replace("{{TITLE}}", html.escape(CFG["title"])).replace("{{LANG}}", i18n.LANG)
     tpl = tpl.replace("{{LOGO}}", LOGO_SVG).replace("{{ICON}}", LOGO_ICON)
     # {{testo}} nell'HTML statico: tradotto qui; nel JavaScript si usa t("testo")
@@ -1082,6 +1197,11 @@ class Handler(BaseHTTPRequestHandler):
     # ------------------------------------------------ GET
     def _do_GET(self):
         path = self.path.split("?")[0]
+        if path in ICONS:
+            with open(os.path.join(HERE, "assets", ICONS[path]), "rb") as f:
+                return self.send(200, f.read(), "image/png", {"Cache-Control": "public, max-age=86400"})
+        if path == "/" and not load_users():
+            return self.send(200, setup_page() if is_local(self) else setup_remote_page())
         if path == "/":
             _, s = self.session()
             return self.send(200, app_page(s) if s else login_page())
@@ -1164,20 +1284,23 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(200, {"events": evs[:qint(q, "limit", 200, 1, 500)]})
         if path == "/api/sessions":
             return self.json(200, {"sessions": TLINE.sessions(limit=qint(q, "limit", 30, 1, 200))})
-        if path in ("/api/backups", "/api/backups/download", "/api/access", "/api/audit") and not s["admin"]:
+        if path in ("/api/backups", "/api/backups/download", "/api/access", "/api/audit", "/api/users") and not s["admin"]:
             return self.json(403, {"error": "solo admin"})
         if path == "/api/access":
             p = server_props()
             return self.json(200, {**AC.snapshot(CFG["server_dir"]), "online": sorted(online_names()), "state": SRV.state,
                                    "white_list": p.get("white-list") == "true", "enforce": p.get("enforce-whitelist") == "true",
                                    "known": [{"uuid": r["uuid"], "name": r["name"]} for r in roster()]})
+        if path == "/api/users":
+            return self.json(200, {"users": [{"name": n, "admin": bool(u.get("admin")), "mc": u.get("mc") or (CFG.get("user_mc") or {}).get(n, ""),
+                                              "me": n == s["user"]} for n, u in sorted(load_users().items())]})
         if path == "/api/audit":
             entries = RG.read(CFG["log_file"])
             items, total, counts = RG.query(entries, cat=q.get("cat", [""])[0] or None,
                                             user=q.get("user", [""])[0] or None, q=q.get("q", [""])[0][:80],
                                             offset=qint(q, "offset", 0, 0, 10 ** 7), limit=qint(q, "limit", 100, 1, 500))
             return self.json(200, {"entries": items, "total": total, "counts": counts,   # utenti dal log: anche i cancellati
-                                   "users": sorted({e["user"] for e in entries if e["user"]}), "mc": CFG.get("user_mc") or {}})
+                                   "users": sorted({e["user"] for e in entries if e["user"]}), "mc": mc_names()})
         if path == "/api/backups":
             return self.json(200, {"items": BACKUPS.list(), "disk": BACKUPS.disk(), "status": BACKUPS.status()})
         if path == "/api/backups/download":
@@ -1227,6 +1350,8 @@ class Handler(BaseHTTPRequestHandler):
 
     # ------------------------------------------------ POST
     def _do_POST(self):
+        if self.path == "/setup":
+            return self.first_setup()
         if self.path == "/login":
             f = {k: v[0] for k, v in parse_qs(self.body()).items()}
             user = f.get("user", "").strip().lower(); keys = ["u:" + user, "c:" + client_id(self)]
@@ -1259,6 +1384,21 @@ class Handler(BaseHTTPRequestHandler):
             data = {}
         if not isinstance(data, dict):
             data = {}
+        if self.path == "/api/account/password":
+            keys = ["u:" + s["user"]]
+            if locked(keys):
+                return self.json(200, {"ok": False, "message": t("Too many attempts: try again in 15 minutes.")})
+            if not check_pw(s["user"], str(data.get("current", ""))):
+                note_fail(keys)
+                return self.json(200, {"ok": False, "message": t("The current password is wrong.")})
+            pw = str(data.get("new", ""))
+            if len(pw) < 10:
+                return self.json(200, {"ok": False, "message": t("Password too short: at least 10 characters.")})
+            with LOCK:
+                users = load_users(); set_password(users, s["user"], pw); save_users(users)
+            drop_sessions(s["user"], keep=tok)
+            log("%s changed their password" % s["user"])
+            return self.json(200, {"ok": True, "message": t("Password changed.")})
         if self.path == "/api/markers":
             try:
                 name = str(data.get("name", "")).strip()[:40]
@@ -1302,6 +1442,18 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(200, {"ok": ok, "message": msg})
         if not s["admin"]:
             return self.json(403, {"ok": False, "message": t("Admins only.")})
+        if self.path == "/api/users/save":
+            return self.save_user(tok, s, data)
+        if self.path == "/api/users/delete":
+            name = str(data.get("name", ""))
+            with LOCK:
+                users = load_users()
+                if name == s["user"] or name not in users:
+                    return self.json(200, {"ok": False, "message": t("You cannot delete this user.")})
+                del users[name]; save_users(users)
+            drop_sessions(name)
+            log("%s deleted user %s" % (s["user"], name))
+            return self.json(200, {"ok": True, "message": t("User %s deleted.") % name})
         if self.path == "/api/command":
             cmd = str(data.get("command", "")).strip().lstrip("/")
             if not cmd or len(cmd) > 400 or "\n" in cmd:
@@ -1312,7 +1464,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 out = RCON.command(cmd)
             except Exception as e:  # noqa: BLE001
-                console_push(["Errore RCON: %s" % e], "err")
+                console_push([t("RCON error: %s") % e], "err")
                 return self.json(200, {"ok": False, "message": t("RCON unavailable: %s") % e})
             if out:
                 console_push(re.sub(r"§.", "", out).splitlines() or [out], "resp")
@@ -1401,6 +1553,66 @@ class Handler(BaseHTTPRequestHandler):
         return self.json(404, {"ok": False, "message": t("not found")})
 
 
+    def save_user(self, tok, s, data):
+        """Crea o modifica un utente (solo admin). Password vuota in modifica = invariata."""
+        name = str(data.get("name", "")).strip().lower()
+        pw, mc, new = str(data.get("password", "")), str(data.get("mc", "")).strip(), bool(data.get("new"))
+        if not USER_RE.match(name) or name in RESERVED:
+            return self.json(200, {"ok": False, "message": t("Invalid user name: lowercase letters, digits, . _ -")})
+        if mc and not AC.NAME_RE.match(mc):
+            return self.json(200, {"ok": False, "message": t("Invalid name: 3-16 characters, letters, digits and _.")})
+        if (new or pw) and len(pw) < 10:
+            return self.json(200, {"ok": False, "message": t("Password too short: at least 10 characters.")})
+        with LOCK:
+            users = load_users()
+            if new == (name in users):
+                return self.json(200, {"ok": False, "message": t("User %s already exists.") % name if new else t("User %s not found.") % name})
+            if name == s["user"] and not data.get("admin"):
+                return self.json(200, {"ok": False, "message": t("You cannot remove your own admin role.")})
+            if pw:
+                set_password(users, name, pw)
+            users[name].update({"admin": bool(data.get("admin")), "mc": mc})
+            save_users(users)
+        if pw and not new:
+            drop_sessions(name, keep=tok)
+        log("%s %s user %s" % (s["user"], "created" if new else "updated", name))
+        return self.json(200, {"ok": True, "message": (t("User %s created.") if new else t("User %s saved.")) % name})
+
+    def first_setup(self):
+        """Primo avvio: solo senza utenti e solo da un browser su questa macchina."""
+        if load_users() or not is_local(self):
+            return self.send(403, setup_remote_page())
+        f = {k: v[0] for k, v in parse_qs(self.body()).items()}
+        sd = os.path.abspath(os.path.expanduser(f.get("server_dir", "").strip().strip('"')))
+        name, pw = f.get("user", "").strip().lower(), f.get("password", "")
+        if not any(os.path.isfile(os.path.join(sd, x)) for x in ("server.jar", "server.properties")):
+            return self.send(200, setup_page(t("No server.jar in %s.") % sd, f))
+        if not USER_RE.match(name) or name in RESERVED:
+            return self.send(200, setup_page(t("Invalid user name: lowercase letters, digits, . _ -"), f))
+        if len(pw) < 10 or pw != f.get("password2"):
+            return self.send(200, setup_page(t("The passwords are too short or do not match."), f))
+        cfg = {}
+        if os.path.exists(CONFIG_PATH):
+            with open(CONFIG_PATH, encoding="utf-8") as fh:
+                cfg = json.load(fh)
+        cfg.update({"server_dir": sd, "lang": f.get("lang") if f.get("lang") in ("en", "it") else "en"})
+        with open(CONFIG_PATH, "w", encoding="utf-8") as fh:
+            json.dump(cfg, fh, indent=2, ensure_ascii=False)
+        CFG["server_dir"] = sd
+        i18n.load(cfg["lang"])   # la prima pagina la serve ancora questo processo, prima del riavvio
+        prepare_server(sd, f.get("eula") == "1")
+        users = {}
+        set_password(users, name, pw)
+        users[name]["admin"] = True
+        save_users(users)
+        tok = secrets.token_urlsafe(32)
+        SESSIONS[tok_key(tok)] = {"user": name, "admin": True, "csrf": secrets.token_urlsafe(24), "exp": time.time() + SESSION_HOURS * 3600}
+        save_sessions()
+        log("%s completed the first setup" % name)
+        self.redirect("/", self.cookie(tok, SESSION_HOURS * 3600))
+        threading.Thread(target=restart_soon, daemon=True).start()
+
+
 class Server(ThreadingHTTPServer):
     daemon_threads = True
 
@@ -1411,39 +1623,14 @@ def cli(args):
     cmd = args[0]
     if cmd == "assets":
         return AS.install(CFG["server_dir"], args[1] if len(args) > 1 else None)
-    if cmd == "init":
-        sd = os.path.abspath(args[1] if len(args) > 1 else input("Minecraft server folder: ").strip().strip('"'))
-        if not os.path.isfile(os.path.join(sd, "server.properties")):
-            sys.exit("server.properties not found in %s: start the server once to create it, then run init again" % sd)
-        cfg = {}
-        if os.path.exists(CONFIG_PATH):
-            with open(CONFIG_PATH, encoding="utf-8") as f:
-                cfg = json.load(f)
-        cfg["server_dir"] = sd
-        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, indent=2, ensure_ascii=False)
-        CFG["server_dir"] = sd
-        print("config saved: %s" % CONFIG_PATH)
-        p = server_props()
-        if p.get("enable-rcon") != "true" or not p.get("rcon.password"):
-            write_props({"enable-rcon": "true", "rcon.password": secrets.token_urlsafe(24)}, "init")
-            p = server_props()
-            if p.get("enable-rcon") != "true" or not p.get("rcon.password"):
-                sys.exit("could not enable RCON: set enable-rcon=true and an rcon.password in server.properties by hand")
-            print("RCON enabled in server.properties (restart the Minecraft server if it is running)")
-        if not os.path.exists(os.path.join(sd, CFG["start_script"])):
-            print("no %s in the server folder: copy one from examples/ and adjust it" % CFG["start_script"])
-        if not users:
-            name = input("Name of the first admin user: ").strip()
-            cli(["adduser", name, "--admin"])
-        print("next: python panel.py assets   then   python panel.py")
-        return
     if cmd == "users":
         for n, u in sorted(users.items()):
             print("%s%s" % (n, "  (admin)" if u.get("admin") else ""))
         return
     if cmd in ("adduser", "passwd"):
         name = args[1].strip().lower()
+        if not USER_RE.match(name) or name in RESERVED:
+            sys.exit("invalid user name: lowercase letters, digits, . _ -")
         if cmd == "passwd" and name not in users:
             sys.exit("no such user '%s'" % name)
         pw = os.environ.get("PANEL_PASSWORD")
@@ -1453,9 +1640,9 @@ def cli(args):
                 sys.exit("passwords do not match")
         if len(pw) < 10:
             sys.exit("password too short: at least 10 characters")
-        salt, h, rounds = hash_pw(pw)
         admin = ("--admin" in args) if cmd == "adduser" else users[name].get("admin", False)
-        users[name] = {"salt": salt, "hash": h, "rounds": rounds, "admin": admin}
+        set_password(users, name, pw)
+        users[name]["admin"] = admin
         save_users(users)
         print("user %s saved%s" % (name, " as admin" if admin else ""))
         return
@@ -1468,16 +1655,28 @@ def cli(args):
 def main():
     if len(sys.argv) > 1:
         return cli(sys.argv[1:])
-    if not load_users():
-        sys.exit("No users: create one first with  python panel.py adduser NAME --admin")
-    if not AS.present():
-        log("Minecraft assets missing: run  python panel.py assets  (map and icons stay empty)")
-    load_audit()
+    url = "http://127.0.0.1:%d" % CFG["port"]
     load_sessions()
-    for target in (sampler, tailers, player_watcher, map_warmer, backup_scheduler, world_watcher):
-        threading.Thread(target=target, daemon=True).start()
-    srv = Server((CFG["listen"], CFG["port"]), Handler)
+    if load_users():
+        load_audit()
+        threads = [sampler, tailers, player_watcher, map_warmer, backup_scheduler, world_watcher]
+        if not AS.present():
+            threads.append(download_assets)
+        for target in threads:
+            threading.Thread(target=target, daemon=True).start()
+    elif sys.stdout:   # pythonw non ha console
+        print("ByzzCraft: first run, open %s on this machine to set it up" % url)
+    for attempt in range(10):   # dopo il primo avvio il processo vecchio puo' tenere la porta ancora un attimo
+        try:
+            srv = Server((CFG["listen"], CFG["port"]), Handler)
+            break
+        except OSError:
+            if attempt == 9:
+                raise
+            time.sleep(1)
     log("panel started on http://%s:%d" % (CFG["listen"], CFG["port"]))
+    if sys.stdout and load_users():
+        print("ByzzCraft running on %s" % url)
     srv.serve_forever()
 
 
