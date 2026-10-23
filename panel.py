@@ -1372,7 +1372,8 @@ def health():
     out = []
     for cid, ok, text, fix in checks:
         if cid in JOBS:
-            ok, text = False, (t("Downloading...") if JOBS[cid] == "running" else t("Download failed: %s") % JOBS[cid])
+            what = {"java": "Java", "assets": t("textures and names from Mojang")}.get(cid, cid)
+            ok, text = False, (t("Downloading %s...") % what if JOBS[cid] == "running" else t("Download of %s failed: %s") % (what, JOBS[cid]))
         if not ok:
             out.append({"id": cid, "text": text, "fix": None if JOBS.get(cid) == "running" else fix,
                         "cmd": SERVICE_HINT if cid == "service" else None})

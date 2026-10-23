@@ -9,6 +9,8 @@ rem RAM for the server (Xms = Xmx, as in Aikar's flags)
 set RAM=4G
 rem Java: set JAVA to a full path if java is not in PATH
 if not defined JAVA set "JAVA=java"
+rem the panel passes PYTHON too: the backup uses its zipfile module (Git's tar in PATH cannot write zips)
+if not defined PYTHON set "PYTHON=python"
 
 rem --- world backup before every start (the panel cleans up the old ones)
 if not exist "world" goto start
@@ -16,7 +18,7 @@ if not exist "backups" mkdir "backups"
 for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd_HH-mm-ss"') do set TS=%%i
 echo Backing up the world...
 rem write to .part and rename only on success: a half-written zip must not look like a good backup
-tar -c --format zip -f "backups\world_%TS%.zip.part" world
+"%PYTHON%" -m zipfile -c "backups\world_%TS%.zip.part" world
 if errorlevel 1 (
   echo WARNING: backup failed.
   del "backups\world_%TS%.zip.part" 2>nul
@@ -34,6 +36,7 @@ if not exist "logs" mkdir "logs"
  -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 ^
  -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem ^
  -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true ^
+ --enable-native-access=ALL-UNNAMED ^
  -Xlog:gc:file=logs/gc.log:time,uptime:filecount=3,filesize=10M ^
  -jar server.jar nogui
 

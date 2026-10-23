@@ -40,5 +40,6 @@ exec "$JAVA" -Xms$RAM -Xmx$RAM \
   -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 \
   -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem \
   -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true \
+  --enable-native-access=ALL-UNNAMED \
   -Xlog:gc:file=logs/gc.log:time,uptime:filecount=3,filesize=10M \
   -jar server.jar nogui
