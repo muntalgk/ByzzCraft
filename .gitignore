@@ -1,7 +1,7 @@
 # dati locali dell'istanza
 panel-config.json
 panel-users.json
-panel.log
+panel.log*
 markers.json
 cache/
 backup-properties/
