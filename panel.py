@@ -23,6 +23,8 @@ import backups as BK  # noqa: E402
 import accessi as AC  # noqa: E402
 import registro as RG  # noqa: E402
 import assets as AS  # noqa: E402
+import i18n  # noqa: E402
+from i18n import t  # noqa: E402
 from sysinfo import NCPU, ProcSampler, listening_pid, pid_alive, system_memory, system_times  # noqa: E402
 CONFIG_PATH = os.environ.get("PANEL_CONFIG", os.path.join(HERE, "panel-config.json"))
 DEFAULTS = {
@@ -33,7 +35,8 @@ DEFAULTS = {
     "auto_stop_minutes": 30,      # spegne il server se resta vuoto per N minuti (0 = mai)
     "hide_console": True,         # avvio dal pannello senza finestre: log e comandi stanno nella dashboard
     "start_timeout_seconds": 240,
-    "title": "Server Minecraft Hardcore",
+    "title": "ByzzCraft",
+    "lang": "en",                 # lingua dell'interfaccia: en, it
     "users_file": "panel-users.json",
     "log_file": "panel.log",
     "mc_address": "",
@@ -60,6 +63,7 @@ def load_config():
 
 
 CFG = load_config()
+i18n.load(CFG["lang"])
 LOCK = threading.RLock()
 
 
@@ -192,7 +196,7 @@ def write_props(changes, who):
     for k, old, new in done:
         shown_old = "***" if k in SECRET_KEYS else old
         shown_new = "***" if k in SECRET_KEYS else new
-        log("%s ha cambiato %s: %s -> %s" % (who, k, shown_old, shown_new))
+        log("%s changed %s: %s -> %s" % (who, k, shown_old, shown_new))
     return done
 
 
@@ -313,7 +317,7 @@ class Rcon:
     def _connect(self):
         p = server_props()
         if p.get("enable-rcon") != "true" or not p.get("rcon.password"):
-            raise RuntimeError("RCON non attivo in server.properties")
+            raise RuntimeError(t("RCON is not enabled in server.properties"))
         self.sock = socket.create_connection(("127.0.0.1", int(p.get("rcon.port", 25575))), timeout=5)
         self._send(1, 3, p["rcon.password"])
         rid, _ = self._recv()
@@ -465,7 +469,7 @@ class ServerControl:
             RCON.reset()
         if self.state == "off" and self.restart_pending:
             self.restart_pending = False
-            ok, _ = self.start("pannello (riavvio)")
+            ok, _ = self.start("panel (restart)")
             if not ok and backup_busy():
                 self.restart_pending = True   # riprova a fine backup
 
@@ -474,12 +478,12 @@ class ServerControl:
     def start(self, who):
         with LOCK:
             if self.state in ("starting", "on", "stopping"):
-                return False, "Il server e' gia' acceso o si sta avviando."
+                return False, t("The server is already on or starting.")
             if pid_alive(self.last_pid):
-                return False, "Il server si sta ancora chiudendo: riprova tra qualche secondo."
+                return False, t("The server is still shutting down: try again in a few seconds.")
             busy = backup_busy()
             if busy or OP_PENDING.is_set():
-                return False, "Aspetta che finisca: %s in corso." % (busy or "operazione sui backup").lower()
+                return False, t("Wait for it to finish: %s in progress.") % (busy or t("backup operation")).lower()
             env = dict(os.environ, NOPAUSE="1")
             script = os.path.join(CFG["server_dir"], CFG["start_script"])
             io = dict(cwd=CFG["server_dir"], env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -490,17 +494,17 @@ class ServerControl:
                 # sessione propria: il server non si ferma se il pannello viene riavviato
                 self.proc = subprocess.Popen(["sh", script], start_new_session=True, **io)
             self.state, self.started_at = "starting", time.time()
-        log("%s ha acceso il server" % who)
+        log("%s started the server" % who)
         HUB.publish("status", self.snapshot())
-        return True, "Avvio in corso: backup del mondo e caricamento."
+        return True, t("Starting: world backup and loading.")
 
     def stop(self, who, reason=None, restart=False):
         with LOCK:
             if self.state != "on":
-                return False, "Il server non e' acceso."
+                return False, t("The server is not on.")
             busy = BACKUPS.status()["busy"]
             if busy and busy["op"] == "backup":   # lo spegnimento a meta' copia darebbe un backup incoerente
-                return False, "Aspetta qualche secondo: backup in corso."
+                return False, t("Wait a few seconds: backup in progress.")
             self.state = "stopping"
             self.restart_pending = restart
         try:
@@ -508,11 +512,11 @@ class ServerControl:
         except Exception as e:  # noqa: BLE001
             with LOCK:
                 self.state = "on"; self.restart_pending = False
-            log("%s: spegnimento fallito (%s)" % (who, e))
-            return False, "Spegnimento non riuscito: %s" % e
-        log("%s ha %s il server%s" % (who, "riavviato" if restart else "spento", " (%s)" % reason if reason else ""))
+            log("%s: stop failed (%s)" % (who, e))
+            return False, t("Could not stop the server: %s") % e
+        log("%s %s the server%s" % (who, "restarted" if restart else "stopped", " (%s)" % reason if reason else ""))
         HUB.publish("status", self.snapshot())
-        return True, "Riavvio in corso." if restart else "Spegnimento in corso."
+        return True, t("Restarting.") if restart else t("Stopping.")
 
 
 SRV = ServerControl()
@@ -573,9 +577,9 @@ def sampler():
             HUB.publish("status", SRV.snapshot())
             mins = CFG["auto_stop_minutes"]
             if mins and info is not None and SRV.state == "on" and SRV.empty_since and time.time() - SRV.empty_since >= mins * 60:
-                SRV.stop("pannello", "vuoto da %d minuti" % mins)
+                SRV.stop("panel", "empty for %d minutes" % mins)
         except Exception as e:  # noqa: BLE001
-            log("errore campionamento: %s" % e)
+            log("sampling error: %s" % e)
         time.sleep(max(0.2, SAMPLE_SECONDS - (time.time() - t0)))
 
 
@@ -620,33 +624,33 @@ def access_action(who, action, name, reason):
     """Whitelist / op / ban / kick. Ritorna (ok, messaggio)."""
     st = SRV.state
     if st in ("starting", "stopping") or (st == "off" and pid_alive(SRV.last_pid)):
-        return False, "Il server si sta accendendo o spegnendo: riprova tra poco."
+        return False, t("The server is starting or stopping: try again shortly.")
     if st == "on":
         try:
             out = re.sub(r"§.", "", RCON.command(AC.command(action, name, reason))).strip()
         except Exception as e:  # noqa: BLE001
-            return False, "RCON non disponibile: %s" % e
+            return False, t("RCON unavailable: %s") % e
         # risposte del server in inglese: "Added X to the whitelist", "Made X a server operator", ...
         if not re.match(r"^(Added|Removed|Made|Banned|Unbanned|Kicked)\b", out):
-            for rx, it in ((r"isn't banned|not banned", "%s non è bannato."), (r"not an operator", "%s non è operatore."),
-                           (r"already an operator", "%s è già operatore."), (r"already whitelisted", "%s è già in whitelist."),
-                           (r"not whitelisted", "%s non è in whitelist."), (r"already banned", "%s è già bannato."),
-                           (r"No player was found", "%s non è online."), (r"does not exist|Unknown player", "Il giocatore %s non esiste.")):
+            for rx, it in ((r"isn't banned|not banned", "%s is not banned"), (r"not an operator", "%s is not an operator"),
+                           (r"already an operator", "%s is already an operator"), (r"already whitelisted", "%s is already whitelisted"),
+                           (r"not whitelisted", "%s is not whitelisted"), (r"already banned", "%s is already banned"),
+                           (r"No player was found", "%s is not online"), (r"does not exist|Unknown player", "Player %s does not exist")):
                 if re.search(rx, out, re.I):
-                    return False, it % name
-            return False, out or "Il server non ha risposto."
-        msg = "Fatto: %s %s." % (name, AC.VERBS[action])
+                    return False, t(it) % name + "."
+            return False, out or t("The server did not answer.")
+        msg = t(AC.DONE[action]) % name + "."
     else:
         try:
             prof = AC.resolve(CFG["server_dir"], action, name, known={p["uuid"]: p["name"] for p in roster()})
             with LOCK:   # start() prende lo stesso LOCK: il server non puo' partire mentre scriviamo i file
                 if SRV.state != "off" or pid_alive(SRV.last_pid):
-                    return False, "Il server si è appena acceso: riprova, ora la modifica passa dal server."
+                    return False, t("The server has just started: try again, the change now goes through the server.")
                 msg = AC.apply_offline(CFG["server_dir"], action, name, reason, who, profile=prof) + "."
         except (ValueError, OSError) as e:
             return False, str(e)
     reason = re.sub(r"[\r\n\x00-\x1f()]+", " ", reason).strip()[:100]
-    log("%s ha %s %s%s" % (who, AC.VERBS[action], name, " (%s)" % reason if reason and action in ("ban", "kick") else ""))
+    log("%s %s %s%s" % (who, AC.VERBS[action], name, " (%s)" % reason if reason and action in ("ban", "kick") else ""))
     HUB.publish("access", {}, admin_only=True)
     return True, msg
 
@@ -673,17 +677,17 @@ def backup_scheduler():
         time.sleep(60)
 
 
-def backup_job(who, what, fn, done_msg):
+def backup_job(who, what, fn, done_msg, fail_msg):
     """Le operazioni lunghe girano in un thread: l'esito arriva alla pagina come evento.
     Chi chiama ha gia' impostato OP_PENDING (sotto LOCK, insieme ai controlli sullo stato del server)."""
     def run():
         try:
             r = fn()
         except Exception as e:  # noqa: BLE001
-            log("%s: %s non riuscito (%s)" % (who, what, e))
-            HUB.publish("backup_done", {"ok": False, "message": "%s non riuscito: %s" % (what.capitalize(), e)}, admin_only=True)
+            log("%s: %s failed (%s)" % (who, what, e))
+            HUB.publish("backup_done", {"ok": False, "message": fail_msg % e}, admin_only=True)
         else:
-            log("%s: %s completato" % (who, what))
+            log("%s: %s completed" % (who, what))
             HUB.publish("backup_done", {"ok": True, "message": done_msg(r)}, admin_only=True)
         finally:
             OP_PENDING.clear()
@@ -736,7 +740,7 @@ def map_warmer():
                     errors += 1
                 time.sleep(0.3)
         if errors:
-            log("mappa: %d tile non aggiornate in questo giro, riprovo tra 5 minuti" % errors)
+            log("map: %d tiles not updated this round, retrying in 5 minutes" % errors)
         time.sleep(300)
 
 
@@ -766,7 +770,7 @@ def tailers():
                     HEAP.append(ev)
                     HUB.publish("heap", ev)
         except Exception as e:  # noqa: BLE001
-            log("errore lettura log: %s" % e)
+            log("log read error: %s" % e)
         time.sleep(0.5)
 
 
@@ -874,7 +878,7 @@ def player_watcher():
                 ROSTER_SENT = key
                 HUB.publish("roster", r)
         except Exception as e:  # noqa: BLE001
-            log("errore giocatori: %s" % e)
+            log("players error: %s" % e)
         time.sleep(3)
 
 
@@ -969,12 +973,13 @@ LOGO_HTML = _logo_html()
 
 def login_page(error=""):
     err = '<p class="err">%s</p>' % html.escape(error) if error else ""
-    body = """<main><div class=logo>%s</div><h1>%s</h1><p>Accedi per gestire il server.</p>
+    body = """<main><div class=logo>%s</div><h1>%s</h1><p>%s</p>
 <form method=post action=/login autocomplete=on>
-<label for=u>Utente</label><input id=u name=user autocomplete=username required autofocus>
-<label for=p>Password</label><input id=p name=password type=password autocomplete=current-password required>
-<button type=submit>Entra</button>%s</form></main>""" % (LOGO_HTML, html.escape(CFG["title"]), err)
-    return ("<!doctype html><html lang=it><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+<label for=u>%s</label><input id=u name=user autocomplete=username required autofocus>
+<label for=p>%s</label><input id=p name=password type=password autocomplete=current-password required>
+<button type=submit>%s</button>%s</form></main>""" % (LOGO_HTML, html.escape(CFG["title"]), html.escape(t("Log in to manage the server.")),
+                                                    html.escape(t("User")), html.escape(t("Password")), html.escape(t("Log in")), err)
+    return ("<!doctype html><html lang=" + i18n.LANG + "><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
             "<title>%s</title><style>%s</style></head><body>%s</body></html>" % (html.escape(CFG["title"]), LOGIN_CSS, body)).encode()
 
 
@@ -983,12 +988,15 @@ def app_page(sess):
         tpl = f.read()
     boot = {"user": sess["user"], "admin": sess["admin"], "csrf": sess["csrf"], "title": CFG["title"],
             "address": CFG.get("mc_address") or "", "autostop": CFG["auto_stop_minutes"], "cores": NCPU,
-            "mc": (CFG.get("user_mc") or {}).get(sess["user"], "")}
-    return tpl.replace("{{TITLE}}", html.escape(CFG["title"])).replace("{{BOOT}}", json.dumps(boot).replace("</", "<\\/")).encode()
+            "mc": (CFG.get("user_mc") or {}).get(sess["user"], ""), "lang": i18n.LANG, "i18n": i18n.TABLE}
+    tpl = tpl.replace("{{TITLE}}", html.escape(CFG["title"])).replace("{{LANG}}", i18n.LANG)
+    # {{testo}} nell'HTML statico: tradotto qui; nel JavaScript si usa t("testo")
+    tpl = re.sub(r"\{\{([^{}]+)\}\}", lambda m: m.group(0) if m.group(1) == "BOOT" else html.escape(t(m.group(1))), tpl)
+    return tpl.replace("{{BOOT}}", json.dumps(boot).replace("</", "<\\/")).encode()
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "pannello"
+    server_version = "byzzcraft"
     sys_version = ""
 
     def log_message(self, fmt, *args):
@@ -1073,10 +1081,10 @@ class Handler(BaseHTTPRequestHandler):
             pass
         except Exception as e:  # noqa: BLE001
             try:
-                self.json(400, {"ok": False, "message": "Richiesta non valida."})
+                self.json(400, {"ok": False, "message": t("Invalid request.")})
             except OSError:
                 pass
-            log("richiesta non valida %s: %s" % (self.path[:80], type(e).__name__))
+            log("invalid request %s: %s" % (self.path[:80], type(e).__name__))
 
     def cookie(self, value, max_age):
         secure = "" if self.headers.get("Host", "").split(":")[0] in ("127.0.0.1", "localhost") else "; Secure"
@@ -1195,7 +1203,7 @@ class Handler(BaseHTTPRequestHandler):
             items = [{"key": k, "value": "" if k in SECRET_KEYS else v, "secret": k in SECRET_KEYS, "locked": k in LOCKED_KEYS}
                      for k, v in server_props().items()]
             return self.json(200, {"items": items})
-        self.json(404, {"error": "non trovato"})
+        self.json(404, {"error": "not found"})
 
     def events(self, tok, s):
         self.send_response(200)
@@ -1234,16 +1242,16 @@ class Handler(BaseHTTPRequestHandler):
             f = {k: v[0] for k, v in parse_qs(self.body()).items()}
             user = f.get("user", "").strip().lower(); keys = ["u:" + user, "c:" + client_id(self)]
             if locked(keys):
-                return self.send(429, login_page("Troppi tentativi: riprova tra 15 minuti."))
+                return self.send(429, login_page(t("Too many attempts: try again in 15 minutes.")))
             u = check_pw(user, f.get("password", ""))
             if not u:
                 note_fail(keys)
-                log("accesso fallito per '%s' da %s" % (user[:32], client_id(self)))
-                return self.send(401, login_page("Utente o password sbagliati."))
+                log("login failed for '%s' from %s" % (user[:32], client_id(self)))
+                return self.send(401, login_page(t("Wrong user or password.")))
             tok = secrets.token_urlsafe(32)
             SESSIONS[tok_key(tok)] = {"user": user, "admin": bool(u.get("admin")), "csrf": secrets.token_urlsafe(24), "exp": time.time() + SESSION_HOURS * 3600}
             save_sessions()
-            log("%s ha fatto l'accesso da %s" % (user, client_id(self)))
+            log("%s logged in from %s" % (user, client_id(self)))
             return self.redirect("/", self.cookie(tok, SESSION_HOURS * 3600))
         tok, s = self.session()
         if self.path == "/logout":
@@ -1253,9 +1261,9 @@ class Handler(BaseHTTPRequestHandler):
                 save_sessions()
             return self.redirect("/", self.cookie("", 0))
         if not s:
-            return self.json(401, {"ok": False, "message": "Sessione scaduta, rientra."})
+            return self.json(401, {"ok": False, "message": t("Session expired, log in again.")})
         if not hmac.compare_digest(self.headers.get("X-CSRF", ""), s["csrf"]):
-            return self.json(403, {"ok": False, "message": "Richiesta non valida."})
+            return self.json(403, {"ok": False, "message": t("Invalid request.")})
         try:
             data = json.loads(self.body() or "{}")
         except ValueError:
@@ -1271,60 +1279,60 @@ class Handler(BaseHTTPRequestHandler):
                 if icon not in ("pin", "home", "portal", "star", "danger"):
                     icon = "pin"
             except (KeyError, ValueError, TypeError, OverflowError):
-                return self.json(200, {"ok": False, "message": "Segnaposto non valido."})
+                return self.json(200, {"ok": False, "message": t("Invalid marker.")})
             if not name or dim not in mapgen.DIMS or abs(x) > 30_000_000 or abs(z) > 30_000_000:
-                return self.json(200, {"ok": False, "message": "Segnaposto non valido."})
+                return self.json(200, {"ok": False, "message": t("Invalid marker.")})
             with LOCK:
                 ms = load_markers()
                 if len(ms) >= 300:
-                    return self.json(200, {"ok": False, "message": "Troppi segnaposti."})
+                    return self.json(200, {"ok": False, "message": t("Too many markers.")})
                 mk = {"id": secrets.token_hex(6), "name": name, "dim": dim, "x": x, "z": z, "icon": icon, "by": s["user"], "t": int(time.time())}
                 ms.append(mk); save_markers(ms)
-            log("%s ha aggiunto il segnaposto '%s' (%d, %d)" % (s["user"], name, x, z))
+            log("%s added the marker '%s' (%d, %d)" % (s["user"], name, x, z))
             HUB.publish("markers", {"dim": dim})
-            return self.json(200, {"ok": True, "message": "Segnaposto salvato.", "marker": mk})
+            return self.json(200, {"ok": True, "message": t("Marker saved."), "marker": mk})
         if self.path == "/api/markers/delete":
             mid = str(data.get("id", ""))
             with LOCK:
                 ms = load_markers(); keep = [m for m in ms if m.get("id") != mid]
                 if len(keep) == len(ms):
-                    return self.json(200, {"ok": False, "message": "Segnaposto non trovato."})
+                    return self.json(200, {"ok": False, "message": t("Marker not found.")})
                 save_markers(keep)
             gone = next(m for m in ms if m.get("id") == mid)
-            log("%s ha tolto il segnaposto '%s'" % (s["user"], gone.get("name")))
+            log("%s removed the marker '%s'" % (s["user"], gone.get("name")))
             HUB.publish("markers", {"dim": gone.get("dim")})
-            return self.json(200, {"ok": True, "message": "Segnaposto tolto."})
+            return self.json(200, {"ok": True, "message": t("Marker removed.")})
         if self.path == "/api/start":
             ok, msg = SRV.start(s["user"])
             return self.json(200, {"ok": ok, "message": msg})
         if self.path in ("/api/stop", "/api/restart"):
             info = SRV.info
             if not s["admin"] and info and info[0] > 0:
-                return self.json(200, {"ok": False, "message": "Ci sono giocatori online: solo un admin puo' farlo adesso."})
+                return self.json(200, {"ok": False, "message": t("Players are online: only an admin can do that now.")})
             ok, msg = SRV.stop(s["user"], restart=self.path == "/api/restart")
             return self.json(200, {"ok": ok, "message": msg})
         if not s["admin"]:
-            return self.json(403, {"ok": False, "message": "Solo per admin."})
+            return self.json(403, {"ok": False, "message": t("Admins only.")})
         if self.path == "/api/command":
             cmd = str(data.get("command", "")).strip().lstrip("/")
             if not cmd or len(cmd) > 400 or "\n" in cmd:
-                return self.json(200, {"ok": False, "message": "Comando non valido."})
+                return self.json(200, {"ok": False, "message": t("Invalid command.")})
             if SRV.state != "on":
-                return self.json(200, {"ok": False, "message": "Il server e' spento."})
+                return self.json(200, {"ok": False, "message": t("The server is off.")})
             console_push(["> " + cmd], "cmd")
             try:
                 out = RCON.command(cmd)
             except Exception as e:  # noqa: BLE001
                 console_push(["Errore RCON: %s" % e], "err")
-                return self.json(200, {"ok": False, "message": "RCON non disponibile: %s" % e})
+                return self.json(200, {"ok": False, "message": t("RCON unavailable: %s") % e})
             if out:
                 console_push(re.sub(r"§.", "", out).splitlines() or [out], "resp")
-            log("%s ha eseguito: %s" % (s["user"], cmd[:120]))
+            log("%s ran: %s" % (s["user"], cmd[:120]))
             return self.json(200, {"ok": True, "message": ""})
         if self.path == "/api/access":
             action, name = str(data.get("action", "")), str(data.get("name", "")).strip()
             if action not in AC.ACTIONS or not AC.NAME_RE.match(name):
-                return self.json(200, {"ok": False, "message": "Nome non valido: 3-16 caratteri, lettere, numeri e _."})
+                return self.json(200, {"ok": False, "message": t("Invalid name: 3-16 characters, letters, digits and _.")})
             ok, msg = access_action(s["user"], action, name, str(data.get("reason", "")))
             return self.json(200, {"ok": ok, "message": msg})
         if self.path.startswith("/api/backups/"):
@@ -1334,20 +1342,20 @@ class Handler(BaseHTTPRequestHandler):
             current = server_props()
             bad = [k for k in changes if k not in current or k in LOCKED_KEYS]
             if bad:
-                return self.json(200, {"ok": False, "message": "Non modificabili: " + ", ".join(bad)})
+                return self.json(200, {"ok": False, "message": t("Not editable: %s") % ", ".join(bad)})
             clean = {}
             for k, v in changes.items():
                 v = str(v)
                 if "\n" in v or "\r" in v or len(v) > 512:
-                    return self.json(200, {"ok": False, "message": "Valore non valido per %s" % k})
+                    return self.json(200, {"ok": False, "message": t("Invalid value for %s") % k})
                 clean[k] = v
             done = write_props(clean, s["user"])
             if data.get("restart") and SRV.state == "on" and done:
                 SRV.stop(s["user"], "nuove impostazioni", restart=True)
             HUB.publish("status", SRV.snapshot())
             n = len(done)
-            return self.json(200, {"ok": True, "message": ("%d impostazioni salvate" % n) if n else "Nessuna modifica"})
-        self.json(404, {"ok": False, "message": "non trovato"})
+            return self.json(200, {"ok": True, "message": (t("%d settings saved") % n) if n else t("No changes")})
+        self.json(404, {"ok": False, "message": t("not found")})
 
 
     def backup_post(self, op, data, who):
@@ -1358,49 +1366,50 @@ class Handler(BaseHTTPRequestHandler):
                 note = str(data.get("note", "")).strip()[:80]
                 with LOCK:   # stato del server e prenotazione insieme: start() non puo' infilarsi in mezzo
                     if busy or OP_PENDING.is_set():
-                        return self.json(200, {"ok": False, "message": "Aspetta: %s in corso." % (busy or "operazione").lower()})
+                        return self.json(200, {"ok": False, "message": t("Wait: %s in progress.") % (busy or t("operation")).lower()})
                     st = SRV.state
                     if st in ("starting", "stopping") or (st == "off" and pid_alive(SRV.last_pid)):
-                        return self.json(200, {"ok": False, "message": "Il server si sta accendendo o spegnendo: riprova tra poco."})
+                        return self.json(200, {"ok": False, "message": t("The server is starting or stopping: try again shortly.")})
                     OP_PENDING.set()
                 BACKUPS.world_dir = world_dir()
-                backup_job(who, "backup manuale", lambda: BACKUPS.create("manuale", st == "on", backup_rcon, note),
-                           lambda e: "Backup pronto: %s (%s MB)." % (e["name"], round(e["size"] / 1048576)))
-                return self.json(200, {"ok": True, "message": "Backup avviato" + (": il server resta acceso." if st == "on" else ".")})
+                backup_job(who, "manual backup", lambda: BACKUPS.create("manuale", st == "on", backup_rcon, note),
+                           lambda e: t("Backup ready: %s (%s MB).") % (e["name"], round(e["size"] / 1048576)), t("Manual backup failed: %s"))
+                return self.json(200, {"ok": True, "message": t("Backup started: the server stays on.") if st == "on" else t("Backup started.")})
             if op == "restore":
-                if data.get("confirm") != "RIPRISTINA":
-                    return self.json(200, {"ok": False, "message": "Conferma mancante."})
+                if data.get("confirm") != "RESTORE":
+                    return self.json(200, {"ok": False, "message": t("Confirmation missing.")})
                 name = next((e["name"] for e in BACKUPS.list() if e["id"] == bid), None)
                 if not name:
-                    return self.json(200, {"ok": False, "message": "Backup non trovato."})
+                    return self.json(200, {"ok": False, "message": t("Backup not found.")})
                 with LOCK:
                     if busy or OP_PENDING.is_set():
-                        return self.json(200, {"ok": False, "message": "Aspetta: %s in corso." % (busy or "operazione").lower()})
+                        return self.json(200, {"ok": False, "message": t("Wait: %s in progress.") % (busy or t("operation")).lower()})
                     if SRV.state != "off" or pid_alive(SRV.last_pid):
-                        return self.json(200, {"ok": False, "message": "Spegni prima il server."})
+                        return self.json(200, {"ok": False, "message": t("Stop the server first.")})
                     OP_PENDING.set()
                 BACKUPS.world_dir = world_dir()
-                log("%s ha avviato il ripristino di %s" % (who, name))
-                backup_job(who, "ripristino di " + name, lambda: do_restore(bid),
-                           lambda r: "Mondo ripristinato da %s. Quello di prima è in mondi-vecchi\\%s." % (name, r["moved_to"]))
-                return self.json(200, {"ok": True, "message": "Ripristino avviato."})
+                log("%s started a restore of %s" % (who, name))
+                backup_job(who, "restore of " + name, lambda: do_restore(bid),
+                           lambda r: t("World restored from %s. The previous one is in %s.") % (name, os.path.join("mondi-vecchi", r["moved_to"])),
+                           t("Restore failed: %s"))
+                return self.json(200, {"ok": True, "message": t("Restore started.")})
             if op == "delete":
                 name = next((e["name"] for e in BACKUPS.list() if e["id"] == bid), None)
                 BACKUPS.delete(bid)
-                log("%s ha spostato nel Cestino il backup %s" % (who, name))
-                return self.json(200, {"ok": True, "message": "Spostato nel Cestino."})
+                log("%s moved backup %s to the trash" % (who, name))
+                return self.json(200, {"ok": True, "message": t("Moved to the trash.")})
             if op == "pin":
                 BACKUPS.pin(bid, bool(data.get("pinned")))
-                return self.json(200, {"ok": True, "message": "Fissato: non verrà cancellato in automatico." if data.get("pinned") else "Fissaggio tolto."})
+                return self.json(200, {"ok": True, "message": t("Pinned: it will never be deleted automatically.") if data.get("pinned") else t("Unpinned.")})
             if op == "schedule":
                 cfg = BACKUPS.set_schedule(data.get("schedule") if isinstance(data.get("schedule"), dict) else {})
-                log("%s ha cambiato la programmazione dei backup" % who)
-                return self.json(200, {"ok": True, "message": "Programmazione salvata.", "schedule": cfg})
+                log("%s changed the backup schedule" % who)
+                return self.json(200, {"ok": True, "message": t("Schedule saved."), "schedule": cfg})
         except ValueError as e:
             return self.json(200, {"ok": False, "message": str(e)})
         except OSError as e:
-            return self.json(200, {"ok": False, "message": "Errore sul disco: %s" % e})
-        return self.json(404, {"ok": False, "message": "non trovato"})
+            return self.json(200, {"ok": False, "message": t("Disk error: %s") % e})
+        return self.json(404, {"ok": False, "message": t("not found")})
 
 
 class Server(ThreadingHTTPServer):
@@ -1420,22 +1429,22 @@ def cli(args):
     if cmd in ("adduser", "passwd"):
         name = args[1].strip().lower()
         if cmd == "passwd" and name not in users:
-            sys.exit("utente '%s' inesistente" % name)
+            sys.exit("no such user '%s'" % name)
         pw = os.environ.get("PANEL_PASSWORD")
         if not pw:
-            pw = getpass.getpass("Password per %s: " % name)
-            if pw != getpass.getpass("Ripeti la password: "):
-                sys.exit("le password non coincidono")
+            pw = getpass.getpass("Password for %s: " % name)
+            if pw != getpass.getpass("Repeat the password: "):
+                sys.exit("passwords do not match")
         if len(pw) < 10:
-            sys.exit("password troppo corta: almeno 10 caratteri")
+            sys.exit("password too short: at least 10 characters")
         salt, h, rounds = hash_pw(pw)
         admin = ("--admin" in args) if cmd == "adduser" else users[name].get("admin", False)
         users[name] = {"salt": salt, "hash": h, "rounds": rounds, "admin": admin}
         save_users(users)
-        print("utente %s salvato%s" % (name, " come admin" if admin else ""))
+        print("user %s saved%s" % (name, " as admin" if admin else ""))
         return
     if cmd == "deluser":
-        users.pop(args[1].strip().lower(), None); save_users(users); print("rimosso")
+        users.pop(args[1].strip().lower(), None); save_users(users); print("removed")
         return
     sys.exit(__doc__)
 
@@ -1444,15 +1453,15 @@ def main():
     if len(sys.argv) > 1:
         return cli(sys.argv[1:])
     if not load_users():
-        sys.exit("Nessun utente: crea prima un utente con  python panel.py adduser NOME --admin")
+        sys.exit("No users: create one first with  python panel.py adduser NAME --admin")
     if not AS.present():
-        log("asset di Minecraft mancanti: esegui  python panel.py assets  (mappa e icone restano vuote)")
+        log("Minecraft assets missing: run  python panel.py assets  (map and icons stay empty)")
     load_audit()
     load_sessions()
     for target in (sampler, tailers, player_watcher, map_warmer, backup_scheduler, world_watcher):
         threading.Thread(target=target, daemon=True).start()
     srv = Server((CFG["listen"], CFG["port"]), Handler)
-    log("pannello avviato su http://%s:%d" % (CFG["listen"], CFG["port"]))
+    log("panel started on http://%s:%d" % (CFG["listen"], CFG["port"]))
     srv.serve_forever()
 
 

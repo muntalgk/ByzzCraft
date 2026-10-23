@@ -12,14 +12,17 @@ import sys
 import threading
 import time
 
-CACHE_NAME = "timeline-cache.json"
+import registro as RG
+import i18n
+from i18n import t as tr
+
+CACHE_NAME = "timeline-cache-%s.json"   # %s = lingua: i testi degli eventi sono gia' tradotti
 CACHE_VERSION = 1
 TYPES = ("server_start", "server_ready", "server_stop", "join", "leave",
          "death", "advancement", "chat", "panel")
 
 _LINE = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\] \[[^\]]*\]: (.*)$")
 _GZ_NAME = re.compile(r"^(\d{4})-(\d\d)-(\d\d)-(\d+)\.log\.gz$")
-_PANEL = re.compile(r"^(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d)\s+(.*)$")
 _SYS = "System chat: "
 _CHAT = re.compile(r"^(?:\[Not Secure\] )?<([^>]+)> ?(.*)$")
 _RCON_CHAT = re.compile(r"^\[Not Secure\] \[Rcon\] (.*)$")
@@ -100,7 +103,7 @@ class Timeline:
         self.cache_dir = cache_dir
         self.logs_dir = os.path.join(server_dir, "logs")
         self.panel_log = panel_log or os.path.join(os.path.dirname(os.path.abspath(__file__)), "panel.log")
-        self.cache_path = os.path.join(cache_dir, CACHE_NAME)
+        self.cache_path = os.path.join(cache_dir, CACHE_NAME % i18n.LANG)
         self._lock = threading.RLock()
         self._deaths = _DeathMatcher(os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "lang.json"))
         self._gz = {}       # nome -> {"size": int, "events": [...]}
@@ -171,33 +174,33 @@ class Timeline:
         if c == "S":
             m = _START.match(text)
             if m:
-                out.append(_mk(t, "server_start", None, "Server avviato (versione %s)" % m.group(1),
+                out.append(_mk(t, "server_start", None, tr("Server started (version %s)") % m.group(1),
                                {"version": m.group(1)}))
                 return
             if text == "Stopping server":
-                out.append(_mk(t, "server_stop", None, "Server spento"))
+                out.append(_mk(t, "server_stop", None, tr("Server stopped")))
                 return
         elif c == "D":
             m = _DONE.match(text)
             if m:
-                out.append(_mk(t, "server_ready", None, "Server pronto (%s s)" % m.group(1),
+                out.append(_mk(t, "server_ready", None, tr("Server ready (%s s)") % m.group(1),
                                {"seconds": float(m.group(1).replace(",", "."))}))
                 return
         m = _JOIN.match(text)
         if m:
             self._players.add(m.group(1))
-            out.append(_mk(t, "join", m.group(1), "%s è entrato" % m.group(1)))
+            out.append(_mk(t, "join", m.group(1), tr("%s joined") % m.group(1)))
             return
         m = _LEAVE.match(text)
         if m:
-            out.append(_mk(t, "leave", m.group(1), "%s è uscito" % m.group(1)))
+            out.append(_mk(t, "leave", m.group(1), tr("%s left") % m.group(1)))
             return
         m = _ADV.match(text)
         if m:
             kind = {"made the advancement": "advancement", "completed the challenge": "challenge",
                     "reached the goal": "goal"}[m.group(2)]
             out.append(_mk(t, "advancement", m.group(1),
-                           "%s ha ottenuto il progresso [%s]" % (m.group(1), m.group(3)),
+                           tr("%s made the advancement [%s]") % (m.group(1), m.group(3)),
                            {"name": m.group(3), "kind": kind}))
             return
         # morti: la frase inizia col nome di un giocatore noto
@@ -209,7 +212,7 @@ class Timeline:
                 victim = gd["p1"]
                 killer = gd.get("p2")
                 rest = text[len(victim) + 1:] if text.startswith(victim + " ") else text
-                out.append(_mk(t, "death", victim, "%s è morto: %s" % (victim, rest),
+                out.append(_mk(t, "death", victim, tr("%s died: %s") % (victim, rest),
                                {"cause": key, "killer": killer, "raw": text,
                                 "item": gd.get("p3")}))
 
@@ -338,18 +341,11 @@ class Timeline:
             return False
         evs = []
         for ln in self._decode_lines(data[:cut + 1]):
-            m = _PANEL.match(ln)
-            if not m:
+            e = RG.parse(ln)
+            if not e or (e["cat"] == "login" and e["level"] == "warn") or "passw" in e["raw"].lower():
                 continue
-            txt = m.group(7).strip()
-            low = txt.lower()
-            if "accesso fallito" in low or "password" in low or "passw" in low:
-                continue
-            try:
-                dt = datetime.datetime(*(int(m.group(i)) for i in range(1, 7)))
-            except ValueError:
-                continue
-            evs.append(_mk(_epoch_ms(dt), "panel", None, txt))
+            txt = (e["user"] + " " if e["user"] else "") + e["text"]
+            evs.append(_mk(e["t"], "panel", None, txt, {"cat": e["cat"]}))
         self._panel = {"size": size, "events": evs}
         return True
 
@@ -492,7 +488,7 @@ def main(argv):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
-    had_cache = os.path.exists(os.path.join(argv[2], CACHE_NAME))
+    had_cache = os.path.exists(os.path.join(argv[2], CACHE_NAME % i18n.LANG))
     t0 = time.perf_counter()
     tl = Timeline(argv[1], argv[2])
     new = tl.refresh()

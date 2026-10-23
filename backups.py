@@ -11,6 +11,8 @@ import time
 import zipfile
 from datetime import datetime, timedelta
 
+from i18n import t as tr   # t e' usato come variabile locale (orari)
+
 if os.name == "nt":
     from ctypes import wintypes
 else:
@@ -91,11 +93,11 @@ def _to_recycle_bin(path, size=None):
     path = os.path.abspath(path)
     lim = _recycle_limit(path)
     if lim is None:
-        raise OSError("Non riesco a leggere le impostazioni del Cestino: per sicurezza non elimino nulla")
+        raise OSError(tr("Cannot read the Recycle Bin settings: not deleting anything, to be safe"))
     if lim[1]:
-        raise OSError("Il Cestino di questo disco è disattivato: elimina il file a mano se sei sicuro")
+        raise OSError(tr("The Recycle Bin is disabled on this drive: delete the file by hand if you are sure"))
     if size is not None and size >= lim[0]:
-        raise OSError("Troppo grande per il Cestino (limite %d MB): eliminalo a mano se sei sicuro" % (lim[0] // 1048576))
+        raise OSError(tr("Too big for the Recycle Bin (limit %d MB): delete it by hand if you are sure") % (lim[0] // 1048576))
     FO_DELETE = 3
     FOF_SILENT = 0x4
     FOF_NOCONFIRMATION = 0x10
@@ -109,9 +111,9 @@ def _to_recycle_bin(path, size=None):
     op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI
     rc = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
     if rc != 0 or op.fAnyOperationsAborted:
-        raise OSError("Spostamento nel Cestino non riuscito (codice %s)" % rc)
+        raise OSError(tr("Could not move to the Recycle Bin (code %s)") % rc)
     if os.path.exists(path):
-        raise OSError("Il file è ancora presente dopo lo spostamento nel Cestino")
+        raise OSError(tr("The file is still there after moving it to the Recycle Bin"))
 
 
 TRASH_DAYS = 7
@@ -212,7 +214,7 @@ class Backups:
 
     def _begin(self, op, label):
         if not self._op_lock.acquire(blocking=False):
-            raise ValueError("Un'altra operazione è in corso")
+            raise ValueError(tr("Another operation is in progress"))
         with self._mu:
             self._busy = {"op": op, "label": label, "progress": 0.0, "started": time.time()}
             self._last_error = None
@@ -309,15 +311,15 @@ class Backups:
 
     def _find(self, id):
         if not isinstance(id, str) or not id:
-            raise ValueError("Backup non valido")
+            raise ValueError(tr("Invalid backup"))
         parts = id.split("/")
         if (len(parts) != 2 or parts[0] not in ("backups", "mondi-vecchi")
                 or parts[1] in ("", ".", "..") or "\\" in id or ":" in id):
-            raise ValueError("Backup non valido")
+            raise ValueError(tr("Invalid backup"))
         for e in self.list():
             if e["id"] == id:
                 return e
-        raise ValueError("Backup non trovato")
+        raise ValueError(tr("Backup not found"))
 
     def _abs(self, e):
         return os.path.join(self.server_dir, e["folder"], e["name"])
@@ -325,7 +327,7 @@ class Backups:
     def path(self, id):
         e = self._find(id)
         if e["folder"] != "backups":
-            raise ValueError("Non è un file zip: si può scaricare solo uno zip")
+            raise ValueError(tr("Not a zip file: only zips can be downloaded"))
         return self._abs(e)
 
     # ------------------------------------------------------------ stato pubblico
@@ -368,22 +370,22 @@ class Backups:
     @staticmethod
     def _int_in(v, lo, hi, what):
         if isinstance(v, bool) or not isinstance(v, (int, float, str)):
-            raise ValueError("%s non valido" % what)
+            raise ValueError(tr("Invalid %s") % what)
         try:
             n = int(float(v))
         except ValueError:
-            raise ValueError("%s non valido" % what)
+            raise ValueError(tr("Invalid %s") % what)
         if not lo <= n <= hi:
-            raise ValueError("%s deve essere tra %d e %d" % (what, lo, hi))
+            raise ValueError(tr("%s must be between %d and %d") % (what, lo, hi))
         return n
 
     def _normalize_schedule(self, cfg, base):
         if not isinstance(cfg, dict):
-            raise ValueError("Configurazione non valida")
+            raise ValueError(tr("Invalid configuration"))
         out = {"every_hours": base["every_hours"], "only_when_online": base["only_when_online"],
                "daily_at": base["daily_at"], "keep": dict(base["keep"])}
         if "every_hours" in cfg:
-            out["every_hours"] = self._int_in(cfg["every_hours"], 0, 48, "Ogni quante ore")
+            out["every_hours"] = self._int_in(cfg["every_hours"], 0, 48, tr("Hours between backups"))
         if "only_when_online" in cfg:
             out["only_when_online"] = bool(cfg["only_when_online"])
         if "daily_at" in cfg:
@@ -391,22 +393,22 @@ class Backups:
             if d is None:
                 d = ""
             if not isinstance(d, str):
-                raise ValueError("Orario giornaliero non valido")
+                raise ValueError(tr("Invalid daily time"))
             d = d.strip()
             if d:
                 try:
                     t = datetime.strptime(d, "%H:%M")
                 except ValueError:
-                    raise ValueError("Orario giornaliero non valido (usa HH:MM)")
+                    raise ValueError(tr("Invalid daily time (use HH:MM)"))
                 d = t.strftime("%H:%M")
             out["daily_at"] = d
         if "keep" in cfg:
             k = cfg["keep"]
             if not isinstance(k, dict):
-                raise ValueError("Conservazione non valida")
+                raise ValueError(tr("Invalid retention"))
             for kind in KINDS_KEEP:
                 if kind in k:
-                    out["keep"][kind] = self._int_in(k[kind], 0, 200, "Quanti " + kind)
+                    out["keep"][kind] = self._int_in(k[kind], 0, 200, tr("How many to keep (%s)") % kind)
         return out
 
     def set_schedule(self, cfg):
@@ -422,10 +424,10 @@ class Backups:
     def create(self, kind="manuale", server_on=False, rcon=None, note=""):
         prefix = {"manuale": "manuale", "programmato": "auto", "auto": "auto"}.get(kind)
         if prefix is None:
-            raise ValueError("Tipo di backup non valido")
+            raise ValueError(tr("Invalid backup type"))
         if server_on and rcon is None:
-            raise ValueError("Serve RCON per salvare a server acceso")
-        self._begin("backup", "Backup " + ("programmato" if prefix == "auto" else "manuale"))
+            raise ValueError(tr("RCON is needed to back up while the server is on"))
+        self._begin("backup", tr("Scheduled backup") if prefix == "auto" else tr("Manual backup"))
         with self._mu:
             self._last_error = None   # l'avviso vecchio non vale piu' per questo tentativo
         tmpdir = part = None
@@ -433,7 +435,7 @@ class Backups:
             os.makedirs(self.backups_dir, exist_ok=True)
             self._clean_stale()
             if not os.path.isdir(self.world_dir):
-                raise ValueError("Cartella del mondo non trovata")
+                raise ValueError(tr("World folder not found"))
             ts = datetime.now().strftime(TS_FMT)
             final = self._unique(os.path.join(self.backups_dir, "%s_%s.zip" % (prefix, ts)))
             part = final + ".part"
@@ -461,7 +463,7 @@ class Backups:
                             err = ex
                             time.sleep(2)
                     if err is not None and save_off:
-                        self._set_error("ATTENZIONE: save-on fallito (%s): scrivi save-on nella Console" % err)
+                        self._set_error(tr("WARNING: save-on failed (%s): type save-on in the Console") % err)
                 src = os.path.join(tmpdir, "world")
                 base, span = 0.3, 0.7
             else:
@@ -484,8 +486,8 @@ class Backups:
             if tmpdir:
                 _rmtree(tmpdir)
             with self._mu:
-                if not (self._last_error or "").startswith("ATTENZIONE"):
-                    self._last_error = "Backup non riuscito: %s" % ex
+                if not (self._last_error or "").startswith(tr("WARNING")):
+                    self._last_error = tr("Backup failed: %s") % ex
             raise
         finally:
             self._end()
@@ -530,7 +532,7 @@ class Backups:
                     done += os.path.getsize(d)
                 except OSError as ex:
                     _rmfile(d)   # un backup a cui manca un pezzo non va spacciato per buono
-                    raise OSError("file non leggibile: %s (%s)" % (os.path.relpath(s, src), ex))
+                    raise OSError(tr("unreadable file: %s (%s)") % (os.path.relpath(s, src), ex))
                 self._progress(0.3 * done / total)
 
     def _zip_world(self, src, part, base, span):
@@ -550,19 +552,19 @@ class Backups:
                         zf.write(s, arc_dir + "/" + fn)
                         done += os.path.getsize(s)
                     except OSError as ex:
-                        raise OSError("file non leggibile: %s (%s)" % (os.path.relpath(s, src), ex))
+                        raise OSError(tr("unreadable file: %s (%s)") % (os.path.relpath(s, src), ex))
                     self._progress(base + span * done / total)
 
     # ------------------------------------------------------------ eliminazione
     def delete(self, id):
         e = self._find(id)
         if e["pinned"]:
-            raise ValueError("Togli prima il fissaggio")
-        self._begin("delete", "Eliminazione " + e["name"])
+            raise ValueError(tr("Unpin it first"))
+        self._begin("delete", tr("Deleting %s") % e["name"])
         try:
             self._recycle(e)
         except Exception as ex:
-            self._set_error("Eliminazione non riuscita: %s" % ex)
+            self._set_error(tr("Delete failed: %s") % ex)
             raise
         finally:
             self._end()
@@ -584,7 +586,7 @@ class Backups:
         removed = []
         try:
             with self._mu:
-                self._busy = {"op": "delete", "label": "Pulizia vecchi backup",
+                self._busy = {"op": "delete", "label": tr("Cleaning up old backups"),
                               "progress": 0.0, "started": time.time()}
             keep = self.status()["schedule"]["keep"]
             entries = self.list()
@@ -599,7 +601,7 @@ class Backups:
                         self._recycle(e)
                         removed.append(e["id"])
                     except Exception as ex:
-                        self._set_error("Pulizia non riuscita per %s: %s" % (e["name"], ex))
+                        self._set_error(tr("Cleanup failed for %s: %s") % (e["name"], ex))
         finally:
             with self._mu:
                 self._busy = None
@@ -639,7 +641,7 @@ class Backups:
             if not self._op_lock.locked():
                 self.prune()
         except Exception as ex:
-            self._set_error("Errore pianificazione: %s" % ex)
+            self._set_error(tr("Scheduling error: %s") % ex)
 
     def _run_scheduled(self, why, now, server_on, rcon):
         try:
@@ -665,14 +667,14 @@ class Backups:
         try:
             self.prune()
         except Exception as ex:
-            self._set_error("Errore pulizia: %s" % ex)
+            self._set_error(tr("Cleanup error: %s") % ex)
 
     # ------------------------------------------------------------ ripristino
     def restore(self, id, server_on):
         if server_on:
-            raise ValueError("Spegni prima il server")
+            raise ValueError(tr("Stop the server first"))
         e = self._find(id)
-        self._begin("restore", "Ripristino " + e["name"])
+        self._begin("restore", tr("Restoring %s") % e["name"])
         tmp = os.path.join(self.server_dir, "world.ripristino-tmp")
         try:
             _rmtree(tmp)
@@ -682,7 +684,7 @@ class Backups:
             else:
                 self._copy_folder(src, tmp)
             if not os.path.isfile(os.path.join(tmp, "level.dat")):
-                raise ValueError("Il backup non contiene level.dat")
+                raise ValueError(tr("The backup does not contain level.dat"))
             os.makedirs(self.old_dir, exist_ok=True)
             old = None
             if os.path.isdir(self.world_dir):
@@ -699,7 +701,7 @@ class Backups:
             return {"moved_to": os.path.basename(old) if old else ""}
         except Exception as ex:
             _rmtree(tmp)
-            self._set_error("Ripristino non riuscito: %s" % ex)
+            self._set_error(tr("Restore failed: %s") % ex)
             raise
         finally:
             self._end()
@@ -708,11 +710,11 @@ class Backups:
     def _split_name(name):
         n = name.replace("\\", "/")
         if n.startswith("/") or (len(n) > 1 and n[1] == ":"):
-            raise ValueError("Zip non sicuro: percorso assoluto (%s)" % name)
+            raise ValueError(tr("Unsafe zip: absolute path (%s)") % name)
         parts = [p for p in n.split("/") if p not in ("", ".")]
         for p in parts:
             if p == ".." or ":" in p:
-                raise ValueError("Zip non sicuro: percorso non valido (%s)" % name)
+                raise ValueError(tr("Unsafe zip: invalid path (%s)") % name)
         return parts
 
     def _extract_zip(self, zpath, dest):
@@ -726,7 +728,7 @@ class Backups:
                 tops = {n.split("/")[0] for n in names if "/" in n}
                 cands = [t for t in tops if (t + "/level.dat") in names]
                 if len(cands) != 1:
-                    raise ValueError("Struttura dello zip non riconosciuta (manca world/level.dat)")
+                    raise ValueError(tr("Unrecognised zip layout (world/level.dat missing)"))
                 prefix = [cands[0]]
             members = []
             for info in zf.infolist():
@@ -740,7 +742,7 @@ class Backups:
             for info, rel in members:
                 target = os.path.realpath(os.path.join(dest_real, *rel))
                 if os.path.commonpath([dest_real, target]) != dest_real:
-                    raise ValueError("Zip non sicuro: membro fuori destinazione (%s)" % info.filename)
+                    raise ValueError(tr("Unsafe zip: entry outside the destination (%s)") % info.filename)
                 if info.is_dir() or info.filename.endswith(("/", "\\")):
                     os.makedirs(target, exist_ok=True)
                     continue

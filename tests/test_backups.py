@@ -188,7 +188,7 @@ def run():
     check("pin", [e for e in b.list() if e["id"] == ide][0]["pinned"])
     check("pin persistito", B.Backups(s, st).list() and ide in B.Backups(s, st)._state["pinned"])
     msg = raises("delete fissato", ValueError, b.delete, ide)
-    check("msg fissato", msg == "Togli prima il fissaggio", msg)
+    check("msg fissato", msg == "Unpin it first", msg)
     b.pin(ide, False)
     b.delete(ide)
     check("delete: sparito dal disco", not os.path.exists(os.path.join(s, "backups", "prima-di-survival_x.zip")))
@@ -342,7 +342,7 @@ def run():
         os.replace = real_replace
     check("rollback: mondo originale rimesso", open(os.path.join(s, "world", "level.dat"), "rb").read() == cur)
     check("rollback: tmp rimosso", not os.path.exists(os.path.join(s, "world.ripristino-tmp")))
-    check("rollback: busy libero", b.status()["busy"] is None and "Ripristino non riuscito" in b.status()["last_error"])
+    check("rollback: busy libero", b.status()["busy"] is None and "Restore failed" in b.status()["last_error"])
     # mondo assente: restore funziona, moved_to vuoto
     shutil.rmtree(os.path.join(s, "world"))
     r3 = b.restore("backups/ok.zip", False)

@@ -34,7 +34,7 @@ print(A.apply_offline(d, "op", "Notch"))
 check("op livello 4", any(e["name"] == "Notch" and e["level"] == 4 for e in A.snapshot(d)["ops"]))
 print(A.apply_offline(d, "ban", "Notch", reason="test\nriga", who="admin"))
 b = A.snapshot(d)["bans"][0]
-check("ban con motivo pulito e fonte", b["reason"] == "test riga" and b["source"] == "Pannello (admin)" and b["expires"] == "forever", b)
+check("ban con motivo pulito e fonte", b["reason"] == "test riga" and b["source"] == "ByzzCraft (admin)" and b["expires"] == "forever", b)
 print(A.apply_offline(d, "pardon", "notch"))
 print(A.apply_offline(d, "deop", "notch"))
 print(A.apply_offline(d, "wl_remove", "notch"))

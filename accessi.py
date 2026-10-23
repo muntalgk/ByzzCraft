@@ -11,12 +11,17 @@ import urllib.request
 import uuid as _uuid
 from datetime import datetime
 
+from i18n import t
+
 NAME_RE = re.compile(r"^[A-Za-z0-9_]{3,16}$")
 FILES = {"whitelist": "whitelist.json", "ops": "ops.json", "bans": "banned-players.json", "ipbans": "banned-ips.json"}
 ACTIONS = ("wl_add", "wl_remove", "op", "deop", "ban", "pardon", "kick")
-# frasi del registro ("admin ha <verbo> Nick"): registro.py le riconosce da qui, quindi si cambiano solo qui
-VERBS = {"wl_add": "aggiunto alla whitelist", "wl_remove": "tolto dalla whitelist", "op": "reso operatore",
-         "deop": "tolto da operatore", "ban": "bannato", "pardon": "sbannato", "kick": "espulso"}
+# frasi del registro ("admin <verbo> Nick"): registro.py le riconosce da qui, quindi si cambiano solo qui
+VERBS = {"wl_add": "whitelisted", "wl_remove": "unwhitelisted", "op": "opped",
+         "deop": "deopped", "ban": "banned", "pardon": "pardoned", "kick": "kicked"}
+# esito mostrato all'utente (online via RCON e offline sui file)
+DONE = {"wl_add": "%s added to the whitelist", "wl_remove": "%s removed from the whitelist", "op": "%s is now an operator",
+        "deop": "%s is no longer an operator", "ban": "%s banned", "pardon": "%s is no longer banned", "kick": "%s kicked"}
 
 
 def _read(server_dir, key, strict=False):
@@ -29,11 +34,11 @@ def _read(server_dir, key, strict=False):
         return []
     except (OSError, ValueError) as e:
         if strict:
-            raise ValueError("Non riesco a leggere %s (%s): non lo modifico" % (FILES[key], e))
+            raise ValueError(t("Cannot read %s (%s): leaving it untouched") % (FILES[key], e))
         return []
     if not isinstance(data, list):
         if strict:
-            raise ValueError("%s non ha il formato atteso: non lo modifico" % FILES[key])
+            raise ValueError(t("%s is not in the expected format: leaving it untouched") % FILES[key])
         return []
     return [e for e in data if isinstance(e, dict)]
 
@@ -58,7 +63,7 @@ def _find(lst, name):
 def lookup(name):
     """(uuid con trattini, nome esatto) da Mojang, None se il nome non esiste."""
     req = urllib.request.Request("https://api.mojang.com/users/profiles/minecraft/" + name,
-                                 headers={"User-Agent": "pannello-minecraft"})
+                                 headers={"User-Agent": "byzzcraft"})
     try:
         with urllib.request.urlopen(req, timeout=8) as r:
             body = r.read()
@@ -84,9 +89,9 @@ def _profile(server_dir, name, known):
     try:
         p = lookup(name)
     except (OSError, ValueError, KeyError) as ex:
-        raise ValueError("Non riesco a contattare Mojang per l'UUID di %s (%s)" % (name, ex))
+        raise ValueError(t("Cannot reach Mojang for the UUID of %s (%s)") % (name, ex))
     if not p:
-        raise ValueError("Il giocatore %s non esiste" % name)
+        raise ValueError(t("Player %s does not exist") % name)
     return p
 
 
@@ -104,39 +109,35 @@ def resolve(server_dir, action, name, known=None):
     return _profile(server_dir, name, known) if action in ("wl_add", "op", "ban") else None
 
 
-def apply_offline(server_dir, action, name, reason="", who="pannello", profile=None):
+def apply_offline(server_dir, action, name, reason="", who="panel", profile=None):
     """Modifica i file a server spento. Ritorna il messaggio per l'utente.
     Chi chiama tiene il LOCK del pannello (niente modifiche in parallelo, niente avvio del server a meta').
     profile: (uuid, nome) gia' risolto con resolve(), per non chiamare Mojang qui dentro."""
     reason = re.sub(r"[\r\n\x00-\x1f]+", " ", reason).strip()[:100]
     if action == "kick":
-        raise ValueError("Il server è spento: nessuno da espellere")
+        raise ValueError(t("The server is off: nobody to kick"))
     key = {"wl_add": "whitelist", "wl_remove": "whitelist", "op": "ops", "deop": "ops",
            "ban": "bans", "pardon": "bans"}[action]
     lst = _read(server_dir, key, strict=True)
     cur = _find(lst, name)
     if action in ("wl_remove", "deop", "pardon"):
         if not cur:
-            raise ValueError({"wl_remove": "%s non è in whitelist", "deop": "%s non è operatore",
-                              "pardon": "%s non è bannato"}[action] % name)
+            raise ValueError(t({"wl_remove": "%s is not whitelisted", "deop": "%s is not an operator",
+                                "pardon": "%s is not banned"}[action]) % name)
         lst.remove(cur)
         _write(server_dir, key, lst)
-        return {"wl_remove": "%s tolto dalla whitelist", "deop": "%s non è più operatore",
-                "pardon": "%s non è più bannato"}[action] % cur.get("name", name)
+        return t(DONE[action]) % cur.get("name", name)
     if cur:
-        raise ValueError({"wl_add": "%s è già in whitelist", "op": "%s è già operatore",
-                          "ban": "%s è già bannato"}[action] % cur.get("name", name))
+        raise ValueError(t({"wl_add": "%s is already whitelisted", "op": "%s is already an operator",
+                            "ban": "%s is already banned"}[action]) % cur.get("name", name))
     uid, exact = profile or _profile(server_dir, name, None)
     if action == "wl_add":
         lst.append({"uuid": uid, "name": exact})
-        msg = "%s aggiunto alla whitelist"
     elif action == "op":
         lst.append({"uuid": uid, "name": exact, "level": 4, "bypassesPlayerLimit": False})
-        msg = "%s ora è operatore"
     else:
         lst.append({"uuid": uid, "name": exact, "created": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z"),
-                    "source": "Pannello (%s)" % who, "expires": "forever",
+                    "source": "ByzzCraft (%s)" % who, "expires": "forever",
                     "reason": reason or "Banned by an operator."})
-        msg = "%s bannato"
     _write(server_dir, key, lst)
-    return msg % exact
+    return t(DONE[action]) % exact

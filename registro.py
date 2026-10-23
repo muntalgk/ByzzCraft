@@ -4,35 +4,40 @@ import re
 from datetime import datetime
 
 from accessi import VERBS
+from i18n import t
 
 CATS = ("server", "login", "console", "impostazioni", "giocatori", "backup", "mappa", "sistema")
 _TS = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)  (.*)$")
 _WHO = r"(?P<who>[a-z0-9_.-]+(?: \([^)]*\))?)"
+_VERB = {v: k for k, v in VERBS.items()}
+_PLAYER_TXT = {"wl_add": "added %s to the whitelist", "wl_remove": "removed %s from the whitelist", "op": "made %s an operator",
+               "deop": "removed %s as operator", "ban": "banned %s", "pardon": "unbanned %s", "kick": "kicked %s"}
 
-# (regex, categoria, livello, testo) - il testo e' una funzione dei gruppi
+# (regex, categoria, livello, testo) - il testo e' una funzione dei gruppi; le frasi sono quelle scritte da log() in panel.py
 _RULES = [
-    (_WHO + r" ha fatto l'accesso da (?P<from>.+)$", "login", "info", lambda g: ("è entrato nel pannello", "da " + g["from"])),
-    (r"accesso fallito per '(?P<u>.*)' da (?P<from>.+)$", "login", "warn",
-     lambda g: ("Accesso fallito" + (" per «%s»" % g["u"] if g["u"] else ""), "da " + g["from"])),
-    (_WHO + r" ha acceso il server$", "server", "info", lambda g: ("ha acceso il server", "")),
-    (_WHO + r" ha (?P<v>spento|riavviato) il server(?: \((?P<r>.*)\))?$", "server", "info",
-     lambda g: ("ha %s il server" % g["v"], g["r"] or "")),
-    (_WHO + r": spegnimento fallito \((?P<e>.*)\)$", "server", "err", lambda g: ("spegnimento non riuscito", g["e"])),
-    (r"pannello avviato su (?P<u>.+)$", "sistema", "info", lambda g: ("Pannello avviato", g["u"])),
-    (_WHO + r" ha cambiato (?P<k>\S+): (?P<a>.*) -> (?P<b>.*)$", "impostazioni", "info",
-     lambda g: ("ha cambiato un'impostazione", {"key": g["k"], "old": g["a"], "new": g["b"]})),
-    (_WHO + r" ha eseguito: (?P<c>.*)$", "console", "info", lambda g: ("ha eseguito un comando", {"cmd": g["c"]})),
-    (_WHO + r" ha (?P<v>aggiunto|tolto) il segnaposto '(?P<n>.*)'(?: \((?P<xz>[-\d, ]+)\))?$", "mappa", "info",
-     lambda g: ("ha %s il segnaposto «%s»" % (g["v"], g["n"]), g["xz"] or "")),
-    (_WHO + r" ha spostato nel Cestino il backup (?P<n>.+)$", "backup", "info",
-     lambda g: ("ha spostato nel Cestino un backup", g["n"])),
-    (_WHO + r" ha avviato il ripristino di (?P<n>.+)$", "backup", "warn", lambda g: ("ha avviato un ripristino del mondo", g["n"])),
-    (_WHO + r" ha cambiato la programmazione dei backup$", "backup", "info", lambda g: ("ha cambiato la programmazione dei backup", "")),
-    (_WHO + r": (?P<w>.+?) completato$", "backup", "info", lambda g: (g["w"] + " completato", "")),
-    (_WHO + r": (?P<w>.+?) non riuscito \((?P<e>.*)\)$", "backup", "err", lambda g: (g["w"] + " non riuscito", g["e"])),
-    (_WHO + r" ha (?P<v>" + "|".join(map(re.escape, VERBS.values())) + r") (?P<n>\S+)(?: \((?P<r>.*)\))?$",
-     "giocatori", "info", lambda g: ("ha %s %s" % (g["v"], g["n"]), g["r"] or "")),
-    (r"(?P<x>(?:errore|richiesta non valida|mappa:).*)$", "sistema", "err", lambda g: (g["x"][:1].upper() + g["x"][1:], "")),
+    (_WHO + r" logged in from (?P<from>.+)$", "login", "info", lambda g: (t("logged in to the panel"), t("from %s") % g["from"])),
+    (r"login failed for '(?P<u>.*)' from (?P<from>.+)$", "login", "warn",
+     lambda g: ((t("Login failed for «%s»") % g["u"]) if g["u"] else t("Login failed"), t("from %s") % g["from"])),
+    (_WHO + r" started the server$", "server", "info", lambda g: (t("started the server"), "")),
+    (_WHO + r" (?P<v>stopped|restarted) the server(?: \((?P<r>.*)\))?$", "server", "info",
+     lambda g: (t("%s the server" % g["v"]), g["r"] or "")),
+    (_WHO + r": stop failed \((?P<e>.*)\)$", "server", "err", lambda g: (t("could not stop the server"), g["e"])),
+    (r"panel started on (?P<u>.+)$", "sistema", "info", lambda g: (t("Panel started"), g["u"])),
+    (_WHO + r" changed (?P<k>\S+): (?P<a>.*) -> (?P<b>.*)$", "impostazioni", "info",
+     lambda g: (t("changed a setting"), {"key": g["k"], "old": g["a"], "new": g["b"]})),
+    (_WHO + r" ran: (?P<c>.*)$", "console", "info", lambda g: (t("ran a command"), {"cmd": g["c"]})),
+    (_WHO + r" (?P<v>added|removed) the marker '(?P<n>.*)'(?: \((?P<xz>[-\d, ]+)\))?$", "mappa", "info",
+     lambda g: (t("%s the marker «%%s»" % g["v"]) % g["n"], g["xz"] or "")),
+    (_WHO + r" moved backup (?P<n>.+) to the trash$", "backup", "info", lambda g: (t("moved a backup to the trash"), g["n"])),
+    (_WHO + r" started a restore of (?P<n>.+)$", "backup", "warn", lambda g: (t("started a world restore"), g["n"])),
+    (_WHO + r" changed the backup schedule$", "backup", "info", lambda g: (t("changed the backup schedule"), "")),
+    (_WHO + r": (?P<w>manual backup) completed$", "backup", "info", lambda g: (t("manual backup completed"), "")),
+    (_WHO + r": restore of (?P<n>.+) completed$", "backup", "info", lambda g: (t("restore completed"), g["n"])),
+    (_WHO + r": (?P<w>manual backup) failed \((?P<e>.*)\)$", "backup", "err", lambda g: (t("manual backup failed"), g["e"])),
+    (_WHO + r": restore of (?P<n>.+) failed \((?P<e>.*)\)$", "backup", "err", lambda g: (t("restore failed"), g["e"])),
+    (_WHO + r" (?P<v>" + "|".join(map(re.escape, VERBS.values())) + r") (?P<n>\S+)(?: \((?P<r>.*)\))?$",
+     "giocatori", "info", lambda g: (t(_PLAYER_TXT[_VERB[g["v"]]]) % g["n"], g["r"] or "")),
+    (r"(?P<x>(?:.* error: |invalid request |map: ).*)$", "sistema", "err", lambda g: (g["x"][:1].upper() + g["x"][1:], "")),
 ]
 _RULES = [(re.compile("^" + rx), c, lv, f) for rx, c, lv, f in _RULES]
 
