@@ -1,6 +1,6 @@
 """Java per il server Minecraft: trova quello installato o ne scarica uno (Eclipse Temurin) nella cartella del pannello.
 
-Uso:  python panel.py java      (scarica la versione che chiede server.jar)
+Uso:  python panel.py java      (scarica la versione che chiede il jar del server)
 """
 import hashlib
 import json
@@ -24,13 +24,10 @@ def _open(url):
     return urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "byzzcraft (+https://github.com/muntalgk/byzzcraft)"}), timeout=60)
 
 
-def required(server_dir):
-    """Versione di Java chiesta da server.jar (version.json), None se non si sa."""
-    try:
-        with zipfile.ZipFile(os.path.join(server_dir, "server.jar")) as z:
-            return int(json.loads(z.read("version.json"))["java_version"])
-    except (OSError, KeyError, ValueError, TypeError, zipfile.BadZipFile):
-        return None
+def required(server_dir, jar=None):
+    """Versione di Java chiesta dal jar del server (vanilla, Paper, launcher di Fabric), None se non si sa."""
+    import assets   # qui e non in cima: assets carica mapgen, che a runtime.py da solo non serve
+    return assets.jar_info(server_dir, jar or assets.find_jar(server_dir))[1]
 
 
 def parse_version(text):

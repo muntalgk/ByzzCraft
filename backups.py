@@ -27,6 +27,11 @@ DEFAULT_SCHEDULE = {
     "keep": {"avvio": 10, "programmato": 12, "manuale": 0},
 }
 CHUNK = 1024 * 1024
+SPACE_MARGIN = 512 * 1024 * 1024   # resta sempre libero: il server deve poter salvare il mondo anche dopo un backup
+
+
+def _mb(n):
+    return "%d MB" % (n // 1048576) if n < 10 * 1073741824 else "%.1f GB" % (n / 1073741824)
 
 
 def _kind_of_zip(name):
@@ -305,6 +310,12 @@ class Backups:
         out.sort(key=lambda e: e["mtime"], reverse=True)
         return out
 
+    def check_space(self, need, path=None):
+        """Errore leggibile prima di iniziare, invece di riempire il disco a meta' copia."""
+        free = shutil.disk_usage(path or self.server_dir).free
+        if free < need + SPACE_MARGIN:
+            raise ValueError(tr("Not enough disk space: about %s needed, %s free.") % (_mb(need + SPACE_MARGIN), _mb(free)))
+
     def disk(self):
         u = shutil.disk_usage(self.server_dir)
         return {"free": u.free, "total": u.total}
@@ -441,6 +452,8 @@ class Backups:
             part = final + ".part"
             src = self.world_dir
             total = self._tree_bytes(self.world_dir)
+            # zip al massimo grande quanto il mondo; a server acceso prima c'e' anche la copia temporanea
+            self.check_space(total * (2 if server_on else 1), self.backups_dir)
             if server_on:
                 tmpdir = os.path.join(self.backups_dir, ".tmp-" + ts)
                 _rmtree(tmpdir)
@@ -680,8 +693,11 @@ class Backups:
             _rmtree(tmp)
             src = self._abs(e)
             if e["folder"] == "backups":
+                with zipfile.ZipFile(src) as zf:
+                    self.check_space(sum(i.file_size for i in zf.infolist()))
                 self._extract_zip(src, tmp)
             else:
+                self.check_space(self._tree_bytes(src))
                 self._copy_folder(src, tmp)
             if not os.path.isfile(os.path.join(tmp, "level.dat")):
                 raise ValueError(tr("The backup does not contain level.dat"))

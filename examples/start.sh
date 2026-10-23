@@ -42,4 +42,4 @@ exec "$JAVA" -Xms$RAM -Xmx$RAM \
   -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true \
   --enable-native-access=ALL-UNNAMED \
   -Xlog:gc:file=logs/gc.log:time,uptime:filecount=3,filesize=10M \
-  -jar server.jar nogui
+  -jar "${SERVER_JAR:-server.jar}" nogui

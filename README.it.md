@@ -21,7 +21,8 @@ dipendenza, nessun database: legge i file del server e gli parla via RCON.
 - Interfaccia in inglese e italiano, Windows e Linux.
 
 Può anche creare un server da zero: scarica `server.jar` da Mojang e Java da [Eclipse Temurin](https://adoptium.net)
-se mancano.
+se mancano. Server vanilla, Paper (e derivati) e Fabric li riconosce dal jar; se il tuo ha un nome strano imposta
+`server_jar` in `panel-config.json`.
 
 ## Installazione
 
@@ -155,7 +156,11 @@ python3 panel.py assets                             # riscarica texture e nomi
 cd byzzcraft && git pull && sudo systemctl restart byzzcraft
 ```
 
-Impostazioni, utenti, backup e cache della mappa restano: non stanno nel repository.
+Impostazioni, utenti, backup e cache della mappa restano: non stanno nel repository. Quando esce una nuova
+release la Dashboard lo dice agli admin, con questo comando; la versione che usi è in fondo alla pagina **Account**.
+
+Backup e ripristini controllano prima lo spazio libero e si fermano con un messaggio invece di riempire il disco;
+la Dashboard avvisa quando non ci stanno più tre backup.
 
 ## Configurazione
 

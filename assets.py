@@ -1,6 +1,6 @@
 """Scarica dal sito di Mojang le texture e le traduzioni mostrate dal pannello (non si possono ridistribuire).
 
-Uso:  python panel.py assets [VERSIONE]     (senza versione la legge da server.jar)
+Uso:  python panel.py assets [VERSIONE]     (senza versione la legge dal jar del server)
 """
 import hashlib
 import io
@@ -28,9 +28,62 @@ def present():
     return all(os.path.exists(os.path.join(ASSETS, p)) for p in ("block", "item", "hud", "skin", "lang.json", "texcolors.json"))
 
 
-def server_version(server_dir):
-    with zipfile.ZipFile(os.path.join(server_dir, "server.jar")) as z:
-        return json.loads(z.read("version.json"))["id"]
+# nomi riconosciuti, in ordine: i launcher di Fabric/Quilt e i fork come Paper si portano dietro il server.jar vanilla
+JAR_PREFIXES = ("fabric-server-launch", "fabric-server", "quilt-server", "paper", "purpur", "folia", "pufferfish", "server")
+
+
+def find_jar(server_dir, configured=None):
+    """Nome del jar da avviare: quello scelto in config, altrimenti il primo riconosciuto; None se non c'e'."""
+    if configured:
+        return configured if os.path.isfile(os.path.join(server_dir, configured)) else None
+    try:
+        jars = sorted(n for n in os.listdir(server_dir) if n.lower().endswith(".jar") and "installer" not in n.lower())
+    except OSError:
+        return None
+    for pre in JAR_PREFIXES:
+        hit = next((n for n in jars if n.lower().startswith(pre)), None)
+        if hit:
+            return hit
+    return jars[0] if len(jars) == 1 else None
+
+
+_JAVA = {}   # versione di Minecraft -> Java richiesto (dal manifest di Mojang, una volta per processo)
+
+
+def jar_info(server_dir, jar=None):
+    """(versione di Minecraft, Java richiesto) dal jar del server; None dove non si capisce."""
+    ver = java = None
+    for name in (jar, "server.jar"):
+        if not name:
+            continue
+        try:
+            with zipfile.ZipFile(os.path.join(server_dir, name)) as z:
+                names = set(z.namelist())
+                if "version.json" in names:   # vanilla, Paper e derivati
+                    v = json.loads(z.read("version.json"))
+                    ver, java = ver or v.get("id"), v.get("java_version")
+                    break
+                if "install.properties" in names:   # launcher di Fabric: scarica il vanilla al primo avvio
+                    props = dict(x.split("=", 1) for x in z.read("install.properties").decode("utf-8", "replace").splitlines() if "=" in x)
+                    ver = ver or props.get("game-version")
+        except (OSError, ValueError, KeyError, zipfile.BadZipFile):
+            pass
+    if ver and not java:
+        if ver not in _JAVA:
+            try:
+                v = next(x for x in json.loads(_get(MANIFEST))["versions"] if x["id"] == ver)
+                _JAVA[ver] = json.loads(_get(v["url"], v.get("sha1")))["javaVersion"]["majorVersion"]
+            except Exception:  # noqa: BLE001  (offline o versione sconosciuta: si riprova al prossimo avvio)
+                _JAVA[ver] = None
+        java = _JAVA[ver]
+    return ver, (int(java) if java else None)
+
+
+def server_version(server_dir, jar=None):
+    ver = jar_info(server_dir, jar or find_jar(server_dir))[0]
+    if not ver:
+        raise ValueError("cannot tell the Minecraft version of the server: pass it, e.g.  panel.py assets 26.3")
+    return ver
 
 
 def _get(url, sha1=None):
@@ -212,8 +265,8 @@ def extract(jar, dest):
         json.dump(colors, f, separators=(",", ":"))
 
 
-def install(server_dir, version=None, log=print):
-    version = version or server_version(server_dir)
+def install(server_dir, version=None, log=print, jar=None):
+    version = version or server_version(server_dir, jar)
     log("Downloading the Minecraft %s client from Mojang..." % version)
     _, jar = mojang_jar(version, "client")
     tmp = os.path.join(HERE, "assets.download-tmp")

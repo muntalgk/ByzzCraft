@@ -11,6 +11,8 @@ rem Java: set JAVA to a full path if java is not in PATH
 if not defined JAVA set "JAVA=java"
 rem the panel passes PYTHON too: the backup uses its zipfile module (Git's tar in PATH cannot write zips)
 if not defined PYTHON set "PYTHON=python"
+rem jar to run: the panel passes the one it found (Fabric, Paper or the vanilla server.jar)
+if not defined SERVER_JAR set "SERVER_JAR=server.jar"
 
 rem --- world backup before every start (the panel cleans up the old ones)
 if not exist "world" goto start
@@ -38,7 +40,7 @@ if not exist "logs" mkdir "logs"
  -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true ^
  --enable-native-access=ALL-UNNAMED ^
  -Xlog:gc:file=logs/gc.log:time,uptime:filecount=3,filesize=10M ^
- -jar server.jar nogui
+ -jar "%SERVER_JAR%" nogui
 
 echo.
 echo Server stopped.

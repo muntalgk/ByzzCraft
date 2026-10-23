@@ -52,4 +52,27 @@ check("serratura", px[4 * 16 + 7][:2] == (1, 1) and px[7 * 16 + 8][:2] == (2, 4)
 check("bordo trasparente", px[0][3] == 0 and px[15][3] == 0)
 px = A.png_rgba(ic["shield"])[2]
 check("scudo: righe saltate", [px[i * 16 + 3][1] for i in (0, 2, 15)] == [2, 5, 21] and px[3 * 16 + 12][0] == 11)
+# quale jar avviare e quale Java serve: vanilla, Paper (version.json), launcher di Fabric (install.properties)
+import json, shutil, tempfile
+d = tempfile.mkdtemp(prefix="jar_test_")
+try:
+    def jar(name, files):
+        with zipfile.ZipFile(os.path.join(d, name), "w") as z:
+            for n, data in files.items():
+                z.writestr(n, data)
+    check("cartella vuota", A.find_jar(d) is None)
+    jar("server.jar", {"version.json": json.dumps({"id": "26.3", "java_version": 25})})
+    check("vanilla", A.find_jar(d) == "server.jar" and A.jar_info(d, "server.jar") == ("26.3", 25))
+    jar("paper-26.3-218.jar", {"version.json": json.dumps({"id": "26.3", "java_version": 25})})
+    check("Paper prima del vanilla", A.find_jar(d) == "paper-26.3-218.jar")
+    jar("fabric-server-launch.jar", {"install.properties": "fabric-loader-version=0.20.1\ngame-version=1.21.4"})
+    A._JAVA["1.21.4"] = 21   # niente rete nel test: e' la risposta del manifest di Mojang
+    os.remove(os.path.join(d, "server.jar"))
+    check("Fabric prima di tutti", A.find_jar(d) == "fabric-server-launch.jar")
+    check("Fabric: versione dal launcher, Java dal manifest", A.jar_info(d, "fabric-server-launch.jar") == ("1.21.4", 21))
+    check("jar da config", A.find_jar(d, "paper-26.3-218.jar") == "paper-26.3-218.jar" and A.find_jar(d, "manca.jar") is None)
+    jar("forge-installer.jar", {})
+    check("installer ignorato", A.find_jar(d) == "fabric-server-launch.jar")
+finally:
+    shutil.rmtree(d, ignore_errors=True)
 print("PASS %d  FAIL %d" % (OK, FAIL))

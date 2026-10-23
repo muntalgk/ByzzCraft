@@ -348,6 +348,21 @@ def run():
     r3 = b.restore("backups/ok.zip", False)
     check("restore senza mondo", r3["moved_to"] == "" and os.path.isfile(os.path.join(s, "world", "level.dat")))
 
+    # ---------- spazio disco: ci si ferma prima di scrivere, con un messaggio
+    root, s, st = fresh(); b = mk(s, st)
+    mkzip(os.path.join(s, "backups", "x.zip"), ["world/level.dat"])
+    real_du = B.shutil.disk_usage
+    B.shutil.disk_usage = lambda p: real_du(p)._replace(free=100 * 1024 * 1024)   # 100 MB liberi
+    try:
+        msg = raises("backup senza spazio", ValueError, b.create, "manuale", False)
+        check("messaggio spazio", "disk space" in msg, msg)
+        check("niente zip a meta'", not [x for x in os.listdir(os.path.join(s, "backups")) if x.endswith(".part")])
+        raises("ripristino senza spazio", ValueError, b.restore, "backups/x.zip", False)
+        check("mondo intatto", open(os.path.join(s, "world", "level.dat"), "rb").read() == b"LEVEL-ORIG")
+    finally:
+        B.shutil.disk_usage = real_du
+    check("con spazio il backup va", b.create("manuale", False)["kind"] == "manuale")
+
     # ---------- dir vera, sola lettura
     if not os.environ.get("BYZZ_REAL_SERVER"):
         return

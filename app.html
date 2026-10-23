@@ -575,6 +575,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
           <div class="row"><label class="toggle"><input type="checkbox" id="us-admin"> {{Admin: can use console, settings, backups and access}}</label></div>
           <div class="row"><button class="btn primary" id="us-save">{{Save user}}</button><button class="btn" id="us-cancel" hidden>{{Cancel}}</button></div></div>
       </div>
+      <p class="note" id="version" style="margin-top:16px"></p>
     </section>
 
     <!-- REGISTRO -->
@@ -1239,7 +1240,9 @@ const ACC={users:[],editing:null,
   async del(n,btn){if(!btn.classList.contains("ask")){btn.classList.add("ask");btn.textContent=_t("Delete?");clearTimeout(btn._t);btn._t=setTimeout(()=>this.render(),3000);return}
     btn.disabled=true;const j=await api("/api/users/delete",{name:n});toast(j.message,j.ok?"good":"bad");if(this.editing==n)this.reset();this.load()}};
 $("#us-list").onclick=e=>{const b=e.target.closest("button[data-a]");if(!b||b.disabled)return;if(b.dataset.a=="edit")ACC.edit(b.dataset.n);else ACC.del(b.dataset.n,b)};
-$("#us-save").onclick=()=>ACC.save();$("#us-cancel").onclick=()=>ACC.reset();
+$("#us-save").onclick=()=>ACC.save();
+$("#version").innerHTML="ByzzCraft "+esc(BOOT.version)+" · "+(BOOT.latest?"<b>"+esc(_t("Version %s is available",BOOT.latest))+"</b> · ":"")
+  +"<a href='https://github.com/"+esc(BOOT.repo)+"' target=_blank rel=noopener>GitHub</a>";$("#us-cancel").onclick=()=>ACC.reset();
 
 /* ---------------- controlli di salute (dashboard) e log tecnico (registro) ---------------- */
 const HL={

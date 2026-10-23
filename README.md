@@ -21,7 +21,8 @@ it reads the server's own files and talks to it over RCON.
 - English and Italian interface, Windows and Linux.
 
 It can also set up a new server from nothing: it downloads `server.jar` from Mojang and Java from
-[Eclipse Temurin](https://adoptium.net) if they are missing.
+[Eclipse Temurin](https://adoptium.net) if they are missing. Vanilla, Paper (and its forks) and Fabric servers
+are recognised by their jar; set `server_jar` in `panel-config.json` if yours has an unusual name.
 
 ## Install
 
@@ -155,7 +156,11 @@ python3 panel.py assets                             # download textures and name
 cd byzzcraft && git pull && sudo systemctl restart byzzcraft
 ```
 
-Settings, users, backups and the map cache stay: they are not in the repository.
+Settings, users, backups and the map cache stay: they are not in the repository. When a new release is out
+the Dashboard tells admins, with this command; the version you run is at the bottom of the **Account** page.
+
+Backups and restores check the free disk space first and stop with a message instead of filling the disk; the
+Dashboard warns when less than three backups would fit.
 
 ## Configuration
 
@@ -171,6 +176,8 @@ Settings, users, backups and the map cache stay: they are not in the repository.
 | `auto_stop_minutes` | `30` | stop the server after N minutes empty (0 = never) |
 | `mc_address` | | server address shown to players, with a copy button |
 | `java_auto` | chosen at setup | download Java by itself when it is missing |
+| `server_jar` | found by itself | jar to start (Fabric launcher, Paper, `server.jar`), passed to the start script as `SERVER_JAR` |
+| `update_check` | `true` | once a day ask GitHub for a newer release (one GET, nothing sent) |
 
 ## Troubleshooting
 

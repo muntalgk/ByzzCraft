@@ -3,14 +3,14 @@
 Avvio:            python3 panel.py    al primo avvio stampa il link (con un codice) per configurarlo da un altro PC
 Setup da shell:   python3 panel.py setup CARTELLA --admin NOME [--lang it] [--network] [--accept-eula] [--new-server] [--no-java]
 Servizio:         python3 panel.py service       (unit systemd su Linux, avvio automatico su Windows)
-Java:             python3 panel.py java          (scarica la versione chiesta da server.jar)
+Java:             python3 panel.py java          (scarica la versione chiesta dal jar del server)
 Utenti:           python panel.py adduser NOME [--admin]
                   python panel.py passwd NOME
                   python panel.py deluser NOME
                   python panel.py users
 Asset:            python panel.py assets [VERSIONE]   (texture e traduzioni scaricate da Mojang)
 """
-import base64, getpass, hashlib, hmac, html, json, logging, logging.handlers, os, queue, re, secrets, shutil, socket, struct, subprocess, sys, threading, time
+import base64, getpass, hashlib, hmac, html, json, logging, logging.handlers, os, queue, re, secrets, shutil, socket, struct, subprocess, sys, threading, time, urllib.request
 from collections import deque
 from datetime import datetime
 from http.cookies import SimpleCookie
@@ -18,6 +18,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+VERSION = "0.1.0"
+REPO = "muntalgk/byzzcraft"
 sys.path.insert(0, HERE)
 import players as PL  # noqa: E402
 import mapgen  # noqa: E402
@@ -34,6 +36,7 @@ CONFIG_PATH = os.environ.get("PANEL_CONFIG", os.path.join(HERE, "panel-config.js
 DEFAULTS = {
     "server_dir": os.path.dirname(HERE),
     "start_script": "start.bat" if os.name == "nt" else "start.sh",
+    "server_jar": "",             # jar da avviare; vuoto = riconosciuto da solo (Fabric, Paper, vanilla server.jar)
     "listen": "127.0.0.1",
     "port": 8765,
     "auto_stop_minutes": 30,      # spegne il server se resta vuoto per N minuti (0 = mai)
@@ -44,7 +47,8 @@ DEFAULTS = {
     "users_file": "panel-users.json",
     "log_file": "panel.log",
     "mc_address": "",
-    "user_mc": {},                # utente del pannello -> nick Minecraft (faccia nella barra laterale)
+    "user_mc": {},
+    "update_check": True,         # una volta al giorno chiede a GitHub se c'e' una versione nuova                # utente del pannello -> nick Minecraft (faccia nella barra laterale)
 }
 SESSION_HOURS = 12
 PBKDF2_ROUNDS = 240_000
@@ -572,9 +576,11 @@ class ServerControl:
             if busy or OP_PENDING.is_set():
                 return False, t("Wait for it to finish: %s in progress.") % (busy or t("backup operation")).lower()
             env = dict(os.environ, NOPAUSE="1", PYTHON=sys.executable)
-            java = RT.java_for(RT.required(CFG["server_dir"]))[0]
+            jar = server_jar()
+            java = RT.java_for(RT.required(CFG["server_dir"], jar))[0]
             if java:
                 env["JAVA"] = java   # gli script d'esempio lo usano; uno script proprio puo' ignorarlo
+            env["SERVER_JAR"] = jar or "server.jar"
             script = os.path.join(CFG["server_dir"], CFG["start_script"])
             if not os.path.exists(script):
                 return False, t("Start script %s not found: see the Dashboard checks.") % script
@@ -623,7 +629,7 @@ START_HINTS = (   # (testo nell'output dello script, spiegazione per l'utente)
     (r"UnsupportedClassVersionError|has been compiled by a more recent version", "Java is too old for this Minecraft version: download the right one from the Dashboard checks."),
     (r"agree to the EULA", "You have not accepted the Minecraft EULA: accept it from the Dashboard checks."),
     (r"FAILED TO BIND|Address already in use|BindException", "The Minecraft port is already in use: is another server running?"),
-    (r"Unable to access jarfile|Invalid or corrupt jarfile", "server.jar is missing or damaged."),
+    (r"Unable to access jarfile|Invalid or corrupt jarfile", "The server jar is missing or damaged: check server_jar in panel-config.json."),
     (r"Could not reserve enough space|Invalid maximum heap size|insufficient memory", "Not enough memory for the RAM set in the start script."),
 )
 
@@ -1122,7 +1128,7 @@ def _page(body):
 
 def guess_server_dir():
     for d in (CFG["server_dir"], os.path.dirname(HERE), os.getcwd()):
-        if any(os.path.isfile(os.path.join(d, f)) for f in ("server.jar", "server.properties")):
+        if AS.find_jar(d) or os.path.isfile(os.path.join(d, "server.properties")):
             return d
     return ""
 
@@ -1173,7 +1179,7 @@ def setup_page(error="", form=None, token="", remote=False):
     opts = "".join("<option value=%s%s>%s</option>" % (k, " selected" if k == lang else "", v) for k, v in (("en", "English"), ("it", "Italiano")))
     sd = f.get("server_dir", guess_server_dir() or os.path.join(os.path.expanduser("~"), "minecraft"))
     network = f.get("network", "1" if remote else "") == "1"
-    has_jar = bool(sd) and os.path.isfile(os.path.join(sd, "server.jar"))
+    has_jar = bool(sd) and bool(AS.find_jar(sd))
     chk = lambda on: " checked" if on else ""
     body = """<main><div class=logo>%s</div><h1>%s</h1><p>%s</p>
 <form method=post action=/setup><input type=hidden name=token value="%s">
@@ -1215,9 +1221,9 @@ def do_setup(f):
         return t("Invalid user name: lowercase letters, digits, . _ -")
     if len(pw) < 10:
         return t("Password too short: at least 10 characters.")
-    if not os.path.isfile(os.path.join(sd, "server.jar")):
+    if not AS.find_jar(sd):
         if f.get("new_server") != "1":
-            return t("No server.jar in %s.") % sd
+            return t("No Minecraft server (.jar) in %s.") % sd
         try:
             AS.download_server(sd, log=L.info)
         except Exception as e:  # noqa: BLE001
@@ -1296,13 +1302,17 @@ def restart_soon():
 
 def download_assets():
     def run():
-        AS.install(CFG["server_dir"], log=L.info)
+        AS.install(CFG["server_dir"], log=L.info, jar=server_jar())
         log("panel downloaded the Minecraft assets")
     job("assets", run)
 
 
+def server_jar():
+    return AS.find_jar(CFG["server_dir"], CFG.get("server_jar"))
+
+
 def download_java():
-    need = RT.required(CFG["server_dir"])
+    need = RT.required(CFG["server_dir"], server_jar())
 
     def run():
         RT.install(need, log=L.info)
@@ -1350,13 +1360,14 @@ def health():
     """Cosa manca per far partire il server, con la soluzione (pulsante `fix` o comando)."""
     sd = CFG["server_dir"]
     p = server_props()
-    need = RT.required(sd)
+    jar = server_jar()
+    need = RT.required(sd, jar)
     java, found = RT.java_for(need)
     eula_path = os.path.join(sd, "eula.txt")
     eula = os.path.exists(eula_path) and "eula=true" in open(eula_path, encoding="utf-8", errors="replace").read()
     script = os.path.join(sd, CFG["start_script"])
     checks = [
-        ("server", os.path.isfile(os.path.join(sd, "server.jar")), t("No server.jar in %s.") % sd, None),
+        ("server", bool(jar), t("No Minecraft server (.jar) in %s.") % sd, None),
         # uno script proprio sceglie il suo Java (es. quello del launcher): si controlla solo con gli script d'esempio
         ("java", bool(java) or not need or CFG["start_script"] not in ("start.sh", "start.bat"),
          t("Java %s is not installed (found: %s).") % (need, found or t("none")), "java"),
@@ -1369,6 +1380,13 @@ def health():
         ("service", bool(os.environ.get("INVOCATION_ID")) or os.name == "nt" and (os.path.exists(STARTUP_CMD) or not sys.stdout),
          t("The panel does not start by itself after a reboot."), None),
     ]
+    sizes = [e["size"] for e in BACKUPS.list() if e.get("folder") == "backups"]
+    free = shutil.disk_usage(sd).free
+    if sizes and free < max(1073741824, 3 * max(sizes)):   # meno di tre backup grandi come il piu' grande
+        checks.append(("disk", False, t("Little disk space left: %s free, the biggest backup is %s. Delete old backups or lower how many to keep.")
+                       % (BK._mb(free), BK._mb(max(sizes))), None))
+    if UPDATE.get("newer"):
+        checks.append(("update", False, t("ByzzCraft %s is available (you have %s).") % (UPDATE["latest"], VERSION), None))
     out = []
     for cid, ok, text, fix in checks:
         if cid in JOBS:
@@ -1376,8 +1394,36 @@ def health():
             ok, text = False, (t("Downloading %s...") % what if JOBS[cid] == "running" else t("Download of %s failed: %s") % (what, JOBS[cid]))
         if not ok:
             out.append({"id": cid, "text": text, "fix": None if JOBS.get(cid) == "running" else fix,
-                        "cmd": SERVICE_HINT if cid == "service" else None})
+                        "cmd": SERVICE_HINT if cid == "service" else UPDATE_HINT if cid == "update" else None})
     return out
+
+
+UPDATE = {}   # ultima versione pubblicata su GitHub: {"latest": "0.2.0", "newer": True}
+UPDATE_HINT = (("cd %s && git pull && " % HERE + ("sudo systemctl restart byzzcraft" if os.environ.get("INVOCATION_ID") else "restart the panel"))
+               if os.path.isdir(os.path.join(HERE, ".git")) else "https://github.com/%s/releases/latest" % REPO)
+
+
+def _vtuple(v):
+    return tuple(int(x) for x in re.findall(r"\d+", v)[:3])
+
+
+def update_checker():
+    """Una volta al giorno: c'e' una release piu' nuova su GitHub? Solo una richiesta GET, nessun dato inviato."""
+    time.sleep(60)
+    while True:
+        if CFG.get("update_check", True):
+            try:
+                req = urllib.request.Request("https://api.github.com/repos/%s/releases/latest" % REPO,
+                                             headers={"User-Agent": "byzzcraft/" + VERSION, "Accept": "application/vnd.github+json"})
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    tag = json.loads(r.read())["tag_name"].lstrip("v")
+                UPDATE.update(latest=tag, newer=_vtuple(tag) > _vtuple(VERSION))
+                if UPDATE["newer"]:
+                    L.info("ByzzCraft %s is available (running %s)", tag, VERSION)
+                    HUB.publish("health", {})
+            except Exception as e:  # noqa: BLE001  (offline, nessuna release ancora: si riprova domani)
+                L.info("update check: %s", e)
+        time.sleep(86400)
 
 
 def fix_health(cid, who):
@@ -1402,7 +1448,8 @@ def app_page(sess):
         tpl = f.read()
     boot = {"user": sess["user"], "admin": sess["admin"], "csrf": sess["csrf"], "title": CFG["title"],
             "address": CFG.get("mc_address") or "", "autostop": CFG["auto_stop_minutes"], "cores": NCPU,
-            "mc": mc_names().get(sess["user"], ""), "lang": i18n.LANG, "i18n": i18n.TABLE}
+            "mc": mc_names().get(sess["user"], ""), "lang": i18n.LANG, "i18n": i18n.TABLE,
+            "version": VERSION, "latest": UPDATE.get("latest") if UPDATE.get("newer") else None, "repo": REPO}
     tpl = tpl.replace("{{TITLE}}", html.escape(CFG["title"])).replace("{{LANG}}", i18n.LANG)
     tpl = tpl.replace("{{LOGO}}", LOGO_SVG).replace("{{ICON}}", LOGO_ICON)
     # {{testo}} nell'HTML statico: tradotto qui; nel JavaScript si usa t("testo")
@@ -1940,11 +1987,11 @@ def cli(args):
     users = load_users()
     cmd = args[0]
     if cmd == "assets":
-        return AS.install(CFG["server_dir"], args[1] if len(args) > 1 else None)
+        return AS.install(CFG["server_dir"], args[1] if len(args) > 1 else None, jar=server_jar())
     if cmd == "java":
-        need = int(args[1]) if len(args) > 1 else RT.required(CFG["server_dir"])
+        need = int(args[1]) if len(args) > 1 else RT.required(CFG["server_dir"], server_jar())
         if not need:
-            sys.exit("no server.jar in %s: pass the Java version, e.g.  panel.py java 25" % CFG["server_dir"])
+            sys.exit("cannot tell which Java the server in %s needs: pass it, e.g.  panel.py java 25" % CFG["server_dir"])
         return RT.install(need)
     if cmd == "service":
         return service()
@@ -1969,11 +2016,11 @@ def cli(args):
                         "eula": "1" if a.accept_eula else "", "new_server": "1" if a.new_server else "", "java": "" if a.no_java else "1"})
         if err:
             sys.exit(err)
-        need = RT.required(CFG["server_dir"])
+        need = RT.required(CFG["server_dir"], server_jar())
         if not a.no_java and need and not RT.java_for(need)[0]:
             RT.install(need, log=L.info)
         if not AS.present():
-            AS.install(CFG["server_dir"], log=L.info)
+            AS.install(CFG["server_dir"], log=L.info, jar=server_jar())
         L.info("done. Start the panel with:  %s panel.py   or keep it running with:  %s", sys.executable, SERVICE_HINT)
         return
     if cmd == "users":
@@ -2009,18 +2056,18 @@ def main():
     if len(sys.argv) > 1:
         return cli(sys.argv[1:])
     setup_logging()
-    L.info("ByzzCraft starting: Python %s on %s, config %s", sys.version.split()[0], sys.platform, CONFIG_PATH)
+    L.info("ByzzCraft %s starting: Python %s on %s, config %s", VERSION, sys.version.split()[0], sys.platform, CONFIG_PATH)
     if os.name != "nt" and os.geteuid() == 0:
         L.warning("running as root: the server files would belong to root. Run it as a normal user.")
     load_sessions()
     listen, port = CFG["listen"], CFG["port"]
     if load_users():
         load_audit()
-        need = RT.required(CFG["server_dir"])
+        need = RT.required(CFG["server_dir"], server_jar())
         java, found = RT.java_for(need)
         L.info("server folder %s, listen %s:%d, language %s", CFG["server_dir"], listen, port, i18n.LANG)
         L.info("Java: needed %s, using %s (in PATH: %s)", need, java, found)
-        for target in (sampler, tailers, player_watcher, map_warmer, backup_scheduler, world_watcher):
+        for target in (sampler, tailers, player_watcher, map_warmer, backup_scheduler, world_watcher, update_checker):
             threading.Thread(target=worker(target), name=target.__name__, daemon=True).start()
         if not AS.present():
             download_assets()
