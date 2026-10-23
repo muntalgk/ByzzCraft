@@ -28,7 +28,7 @@ no database: it reads the server's own files and talks to it over RCON.
 ## Install
 
 ```bash
-git clone https://github.com/<you>/byzzcraft.git
+git clone https://github.com/muntalgk/byzzcraft.git
 cd byzzcraft
 python panel.py init /path/to/minecraft-server
 python panel.py assets

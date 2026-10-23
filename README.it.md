@@ -28,7 +28,7 @@ dipendenza, nessun database: legge i file del server e gli parla via RCON.
 ## Installazione
 
 ```bash
-git clone https://github.com/<tu>/byzzcraft.git
+git clone https://github.com/muntalgk/byzzcraft.git
 cd byzzcraft
 python panel.py init /percorso/del/server-minecraft
 python panel.py assets
