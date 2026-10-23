@@ -1171,13 +1171,13 @@ def setup_page(error="", form=None, token="", remote=False):
     err = '<p class="err">%s</p>' % e(error) if error else ""
     lang = f.get("lang", i18n.LANG)
     opts = "".join("<option value=%s%s>%s</option>" % (k, " selected" if k == lang else "", v) for k, v in (("en", "English"), ("it", "Italiano")))
-    sd = f.get("server_dir", guess_server_dir())
+    sd = f.get("server_dir", guess_server_dir() or os.path.join(os.path.expanduser("~"), "minecraft"))
     network = f.get("network", "1" if remote else "") == "1"
     has_jar = bool(sd) and os.path.isfile(os.path.join(sd, "server.jar"))
     chk = lambda on: " checked" if on else ""
     body = """<main><div class=logo>%s</div><h1>%s</h1><p>%s</p>
 <form method=post action=/setup><input type=hidden name=token value="%s">
-<label for=d>%s</label><input id=d name=server_dir value="%s" required placeholder="/home/me/minecraft">
+<label for=d>%s</label><input id=d name=server_dir value="%s" required>
 <label class=chk><input type=checkbox name=new_server value=1%s> %s</label>
 <label for=l>%s</label><select id=l name=lang>%s</select>
 <label for=u>%s</label><input id=u name=user autocomplete=username required pattern="[a-z0-9_.\\-]{1,32}" value="%s">
@@ -1247,15 +1247,33 @@ def do_setup(f):
     return None
 
 
+def port_free(port):
+    with socket.socket() as so:
+        try:
+            so.bind(("0.0.0.0", port))
+            return True
+        except OSError:
+            return False
+
+
+def free_port(start):
+    return next((pt for pt in range(start, start + 100) if port_free(pt)), start)
+
+
 def prepare_server(sd, accept_eula):
     """Cartella del server pronta per il pannello: RCON attivo, EULA se accettata, script di avvio d'esempio."""
     props = os.path.join(sd, "server.properties")
     if not os.path.exists(props):
         open(props, "w").close()   # server mai avviato: Minecraft completa il file al primo avvio
     p = server_props()
+    ch = {}
+    if "server-port" not in p and not port_free(25565):   # server nuovo su una macchina che ne ha gia' uno acceso
+        ch["server-port"] = str(free_port(25566))
     if p.get("enable-rcon") != "true" or not p.get("rcon.password"):
-        write_props({"enable-rcon": "true", "rcon.port": p.get("rcon.port") or "25575",
-                     "rcon.password": p.get("rcon.password") or secrets.token_urlsafe(24)}, "setup")
+        ch.update({"enable-rcon": "true", "rcon.port": p.get("rcon.port") or str(free_port(25575)),
+                   "rcon.password": p.get("rcon.password") or secrets.token_urlsafe(24)})
+    if ch:
+        write_props(ch, "setup")
     eula = os.path.join(sd, "eula.txt")
     if accept_eula and "eula=true" not in (open(eula, encoding="utf-8").read() if os.path.exists(eula) else ""):
         with open(eula, "w", encoding="utf-8") as f:
