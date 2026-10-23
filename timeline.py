@@ -95,14 +95,14 @@ class _DeathMatcher:
 
 
 class Timeline:
-    def __init__(self, server_dir, cache_dir):
+    def __init__(self, server_dir, cache_dir, panel_log=None):
         self.server_dir = server_dir
         self.cache_dir = cache_dir
         self.logs_dir = os.path.join(server_dir, "logs")
-        self.panel_log = os.path.join(server_dir, "pannello", "panel.log")
+        self.panel_log = panel_log or os.path.join(os.path.dirname(os.path.abspath(__file__)), "panel.log")
         self.cache_path = os.path.join(cache_dir, CACHE_NAME)
         self._lock = threading.RLock()
-        self._deaths = _DeathMatcher(os.path.join(server_dir, "pannello", "assets", "lang.json"))
+        self._deaths = _DeathMatcher(os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "lang.json"))
         self._gz = {}       # nome -> {"size": int, "events": [...]}
         self._latest = {"pos": 0, "head": "", "cur_day": None, "last_secs": None, "events": []}
         self._panel = {"size": -1, "events": []}

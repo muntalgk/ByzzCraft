@@ -5,6 +5,7 @@ Utenti:           python panel.py adduser NOME [--admin]
                   python panel.py passwd NOME
                   python panel.py deluser NOME
                   python panel.py users
+Asset:            python panel.py assets [VERSIONE]   (texture e traduzioni scaricate da Mojang)
 """
 import base64, ctypes, getpass, hashlib, hmac, html, json, os, queue, re, secrets, shutil, socket, struct, subprocess, sys, threading, time
 from collections import deque
@@ -22,6 +23,7 @@ import timeline as TL  # noqa: E402
 import backups as BK  # noqa: E402
 import accessi as AC  # noqa: E402
 import registro as RG  # noqa: E402
+import assets as AS  # noqa: E402
 CONFIG_PATH = os.environ.get("PANEL_CONFIG", os.path.join(HERE, "panel-config.json"))
 DEFAULTS = {
     "server_dir": os.path.dirname(HERE),
@@ -685,7 +687,7 @@ def sampler():
         time.sleep(max(0.2, SAMPLE_SECONDS - (time.time() - t0)))
 
 
-TLINE = TL.Timeline(CFG["server_dir"], os.path.join(HERE, "cache"))
+TLINE = TL.Timeline(CFG["server_dir"], os.path.join(HERE, "cache"), CFG["log_file"])
 MAP_SEM = threading.BoundedSemaphore(2)     # massimo 2 tile generate insieme: non rubare CPU al server
 MARKERS_FILE = os.path.join(HERE, "markers.json")
 WORLD_BUSY = threading.Event()              # ripristino in corso: niente letture del mondo (mappa)
@@ -1514,6 +1516,8 @@ class Server(ThreadingHTTPServer):
 def cli(args):
     users = load_users()
     cmd = args[0]
+    if cmd == "assets":
+        return AS.install(CFG["server_dir"], args[1] if len(args) > 1 else None)
     if cmd == "users":
         for n, u in sorted(users.items()):
             print("%s%s" % (n, "  (admin)" if u.get("admin") else ""))
@@ -1546,6 +1550,8 @@ def main():
         return cli(sys.argv[1:])
     if not load_users():
         sys.exit("Nessun utente: crea prima un utente con  python panel.py adduser NOME --admin")
+    if not AS.present():
+        log("asset di Minecraft mancanti: esegui  python panel.py assets  (mappa e icone restano vuote)")
     load_audit()
     load_sessions()
     for target in (sampler, tailers, player_watcher, map_warmer, backup_scheduler, world_watcher):
