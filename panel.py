@@ -1338,13 +1338,16 @@ def health():
     script = os.path.join(sd, CFG["start_script"])
     checks = [
         ("server", os.path.isfile(os.path.join(sd, "server.jar")), t("No server.jar in %s.") % sd, None),
-        ("java", bool(java) or not need, t("Java %s is not installed (found: %s).") % (need, found or t("none")), "java"),
+        # uno script proprio sceglie il suo Java (es. quello del launcher): si controlla solo con gli script d'esempio
+        ("java", bool(java) or not need or CFG["start_script"] not in ("start.sh", "start.bat"),
+         t("Java %s is not installed (found: %s).") % (need, found or t("none")), "java"),
         ("eula", eula, t("The Minecraft EULA is not accepted yet: the server will not start."), "eula"),
         ("rcon", p.get("enable-rcon") == "true" and bool(p.get("rcon.password")), t("RCON is off: the panel cannot talk to the server."), "rcon"),
         ("script", os.path.exists(script), t("Start script %s not found.") % script,
          "script" if os.path.exists(os.path.join(HERE, "examples", CFG["start_script"])) else None),
         ("assets", AS.present(), t("Map textures and item icons are not downloaded yet."), "assets"),
-        ("service", bool(os.environ.get("INVOCATION_ID")) or os.name == "nt" and os.path.exists(STARTUP_CMD),
+        # systemd imposta INVOCATION_ID; su Windows pythonw (senza console) vuol dire avvio automatico, non da terminale
+        ("service", bool(os.environ.get("INVOCATION_ID")) or os.name == "nt" and (os.path.exists(STARTUP_CMD) or not sys.stdout),
          t("The panel does not start by itself after a reboot."), None),
     ]
     out = []
