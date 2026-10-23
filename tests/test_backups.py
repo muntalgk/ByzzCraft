@@ -1,5 +1,4 @@
 import ctypes, os, shutil, sys, tempfile, time, zipfile, traceback
-from ctypes import wintypes
 from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # cartella pannello
@@ -26,14 +25,24 @@ def raises(name, exc, fn, *a, **k):
     check(name, False, "nessuna eccezione")
     return ""
 
-k32 = ctypes.windll.kernel32
-k32.CreateFileW.restype = wintypes.HANDLE
-k32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
-                            wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
-def lock_exclusive(path):
-    h = k32.CreateFileW(path, 0x80000000 | 0x40000000, 0, None, 3, 0x80, None)  # share=0, OPEN_EXISTING
-    assert h not in (None, wintypes.HANDLE(-1).value), "lock fallito"
-    return h
+if os.name == "nt":
+    from ctypes import wintypes
+    k32 = ctypes.windll.kernel32
+    k32.CreateFileW.restype = wintypes.HANDLE
+    k32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
+                                wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    def lock_exclusive(path):
+        h = k32.CreateFileW(path, 0x80000000 | 0x40000000, 0, None, 3, 0x80, None)  # share=0, OPEN_EXISTING
+        assert h not in (None, wintypes.HANDLE(-1).value), "lock fallito"
+        return h
+    unlock = k32.CloseHandle
+else:
+    # Linux non blocca i file aperti: un file illeggibile simula lo stesso caso (non vale da root)
+    def lock_exclusive(path):
+        os.chmod(path, 0)
+        return path
+    def unlock(path):
+        os.chmod(path, 0o644)
 
 def write(p, data=b"x"):
     os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -117,7 +126,7 @@ def run():
         r = Rcon(); time.sleep(1.1)
         raises("create on con file bloccato fallisce", OSError, b.create, "manuale", True, r)
         check("save-on anche se la copia fallisce", r.calls[-1] == "save-on", r.calls)
-        ctypes.windll.kernel32.CloseHandle(hl); hl = None
+        unlock(hl); hl = None
         time.sleep(1.1)
         e = b.create("manuale", server_on=False, note="nota prova")
         check("create off nome", e["name"].startswith("manuale_") and e["kind"] == "manuale" and e["note"] == "nota prova", e)
@@ -161,8 +170,8 @@ def run():
         check("save-on dopo save-off fallito", r.calls[-1] == "save-on", r.calls)
     finally:
         if hl:
-            k32.CloseHandle(hl)
-        k32.CloseHandle(hs)
+            unlock(hl)
+        unlock(hs)
 
     # occupato
     import threading

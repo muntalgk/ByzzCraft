@@ -7,9 +7,8 @@ Utenti:           python panel.py adduser NOME [--admin]
                   python panel.py users
 Asset:            python panel.py assets [VERSIONE]   (texture e traduzioni scaricate da Mojang)
 """
-import base64, ctypes, getpass, hashlib, hmac, html, json, os, queue, re, secrets, shutil, socket, struct, subprocess, sys, threading, time
+import base64, getpass, hashlib, hmac, html, json, os, queue, re, secrets, shutil, socket, struct, subprocess, sys, threading, time
 from collections import deque
-from ctypes import wintypes
 from datetime import datetime
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -24,10 +23,11 @@ import backups as BK  # noqa: E402
 import accessi as AC  # noqa: E402
 import registro as RG  # noqa: E402
 import assets as AS  # noqa: E402
+from sysinfo import NCPU, ProcSampler, listening_pid, pid_alive, system_memory, system_times  # noqa: E402
 CONFIG_PATH = os.environ.get("PANEL_CONFIG", os.path.join(HERE, "panel-config.json"))
 DEFAULTS = {
     "server_dir": os.path.dirname(HERE),
-    "start_script": "avvia-server.bat",
+    "start_script": "start.bat" if os.name == "nt" else "start.sh",
     "listen": "127.0.0.1",
     "port": 8765,
     "auto_stop_minutes": 30,      # spegne il server se resta vuoto per N minuti (0 = mai)
@@ -356,117 +356,6 @@ class Rcon:
 RCON = Rcon()
 
 
-# ---------------------------------------------------------------- Windows: processo, CPU, RAM
-k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-iphl = ctypes.WinDLL("iphlpapi")
-
-
-class FILETIME(ctypes.Structure):
-    _fields_ = [("lo", wintypes.DWORD), ("hi", wintypes.DWORD)]
-
-    def val(self):
-        return (self.hi << 32) | self.lo
-
-
-class PMC(ctypes.Structure):
-    _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD)] + [(n, ctypes.c_size_t) for n in (
-        "PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage", "QuotaPagedPoolUsage", "QuotaPeakNonPagedPoolUsage",
-        "QuotaNonPagedPoolUsage", "PagefileUsage", "PeakPagefileUsage", "PrivateUsage")]
-
-
-class MEMSTAT(ctypes.Structure):
-    _fields_ = [("dwLength", wintypes.DWORD), ("dwMemoryLoad", wintypes.DWORD)] + [(n, ctypes.c_ulonglong) for n in (
-        "ullTotalPhys", "ullAvailPhys", "ullTotalPageFile", "ullAvailPageFile", "ullTotalVirtual", "ullAvailVirtual", "ullAvailExtendedVirtual")]
-
-
-k32.OpenProcess.restype = wintypes.HANDLE
-k32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-k32.CloseHandle.argtypes = [wintypes.HANDLE]
-k32.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(FILETIME)] * 4
-k32.K32GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(PMC), wintypes.DWORD]
-NCPU = os.cpu_count() or 1
-
-
-def listening_pid(port):
-    """PID del processo in ascolto su una porta TCP (IPv4 o IPv6)."""
-    for af, rowsize in ((2, 24), (23, 56)):
-        size = wintypes.DWORD(0)
-        iphl.GetExtendedTcpTable(None, ctypes.byref(size), False, af, 3, 0)
-        buf = ctypes.create_string_buffer(size.value + 512)
-        size = wintypes.DWORD(len(buf))
-        if iphl.GetExtendedTcpTable(buf, ctypes.byref(size), False, af, 3, 0) != 0:
-            continue
-        raw = buf.raw
-        (n,) = struct.unpack_from("<I", raw, 0)
-        for i in range(n):
-            off = 4 + i * rowsize
-            if af == 2:
-                _state, _la, lport, _ra, _rp, pid = struct.unpack_from("<6I", raw, off)
-            else:
-                lport, = struct.unpack_from("<I", raw, off + 20)
-                pid, = struct.unpack_from("<I", raw, off + 52)
-            if socket.ntohs(lport & 0xFFFF) == port:
-                return pid
-    return None
-
-
-class ProcSampler:
-    def __init__(self):
-        self.pid = None; self.last = None
-
-    def sample(self, pid):
-        """(cpu % del PC, working set MB, privata MB, avviato_epoch) oppure None."""
-        if pid is None:
-            self.pid = None; self.last = None
-            return None
-        h = k32.OpenProcess(0x1000 | 0x0010, False, pid)  # QUERY_LIMITED_INFORMATION | VM_READ
-        if not h:
-            return None
-        try:
-            c, e, kt, ut = FILETIME(), FILETIME(), FILETIME(), FILETIME()
-            k32.GetProcessTimes(h, ctypes.byref(c), ctypes.byref(e), ctypes.byref(kt), ctypes.byref(ut))
-            pmc = PMC(); pmc.cb = ctypes.sizeof(PMC)
-            k32.K32GetProcessMemoryInfo(h, ctypes.byref(pmc), pmc.cb)
-        finally:
-            k32.CloseHandle(h)
-        busy, now = kt.val() + ut.val(), time.time()
-        cpu = None
-        if self.pid == pid and self.last:
-            dt = now - self.last[1]
-            if dt > 0:
-                cpu = max(0.0, (busy - self.last[0]) / 1e7 / dt / NCPU * 100)
-        self.pid, self.last = pid, (busy, now)
-        started = c.val() / 1e7 - 11644473600
-        return cpu, pmc.WorkingSetSize / 1048576, pmc.PrivateUsage / 1048576, started
-
-
-def pid_alive(pid):
-    if not pid:
-        return False
-    h = k32.OpenProcess(0x1000, False, pid)
-    if not h:
-        return False
-    try:
-        code = wintypes.DWORD()
-        k32.GetExitCodeProcess(h, ctypes.byref(code))
-        return code.value == 259  # STILL_ACTIVE
-    finally:
-        k32.CloseHandle(h)
-
-
-def system_times():
-    """(inattivo, totale) in unita' da 100 ns di tutte le CPU: la CPU del PC e' 1 - d(inattivo)/d(totale)."""
-    idle, kern, user = FILETIME(), FILETIME(), FILETIME()
-    k32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kern), ctypes.byref(user))
-    return idle.val(), kern.val() + user.val()   # il tempo kernel comprende gia' quello inattivo
-
-
-def system_memory():
-    m = MEMSTAT(); m.dwLength = ctypes.sizeof(MEMSTAT)
-    k32.GlobalMemoryStatusEx(ctypes.byref(m))
-    return m.ullAvailPhys / 1048576, m.ullTotalPhys / 1048576
-
-
 # ---------------------------------------------------------------- tail di latest.log e gc.log
 class Tailer:
     def __init__(self, path, initial_lines=0):
@@ -593,10 +482,13 @@ class ServerControl:
                 return False, "Aspetta che finisca: %s in corso." % (busy or "operazione sui backup").lower()
             env = dict(os.environ, NOPAUSE="1")
             script = os.path.join(CFG["server_dir"], CFG["start_script"])
-            flags = subprocess.CREATE_NO_WINDOW if CFG.get("hide_console") else subprocess.CREATE_NEW_CONSOLE
-            self.proc = subprocess.Popen(["cmd.exe", "/c", script], cwd=CFG["server_dir"], env=env,
-                                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                         creationflags=flags)
+            io = dict(cwd=CFG["server_dir"], env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if os.name == "nt":
+                flags = subprocess.CREATE_NO_WINDOW if CFG.get("hide_console") else subprocess.CREATE_NEW_CONSOLE
+                self.proc = subprocess.Popen(["cmd.exe", "/c", script], creationflags=flags, **io)
+            else:
+                # sessione propria: il server non si ferma se il pannello viene riavviato
+                self.proc = subprocess.Popen(["sh", script], start_new_session=True, **io)
             self.state, self.started_at = "starting", time.time()
         log("%s ha acceso il server" % who)
         HUB.publish("status", self.snapshot())
@@ -1021,7 +913,10 @@ LOCKED = {}
 
 
 def client_id(handler):
-    return handler.headers.get("Tailscale-User-Login") or handler.headers.get("X-Forwarded-For") or handler.client_address[0]
+    ip = handler.client_address[0]
+    if ip not in ("127.0.0.1", "::1", "::ffff:127.0.0.1"):
+        return ip   # header di proxy validi solo da un proxy locale (tailscale serve, nginx): altrimenti falsificabili
+    return handler.headers.get("Tailscale-User-Login") or handler.headers.get("X-Forwarded-For") or ip
 
 
 def locked(keys):

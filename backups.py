@@ -1,4 +1,4 @@
-"""Gestione backup del mondo Minecraft (solo libreria standard, Windows).
+"""Gestione backup del mondo Minecraft (solo libreria standard, Windows e Linux).
 
 Usato da panel.py. Un'operazione alla volta (backup / ripristino / eliminazione).
 """
@@ -9,8 +9,12 @@ import shutil
 import threading
 import time
 import zipfile
-from ctypes import wintypes
 from datetime import datetime, timedelta
+
+if os.name == "nt":
+    from ctypes import wintypes
+else:
+    wintypes = None
 
 TS_FMT = "%Y-%m-%d_%H-%M-%S"
 KINDS_KEEP = ("avvio", "programmato", "manuale")
@@ -45,17 +49,18 @@ def _rmfile(p):
 
 
 # ---------------------------------------------------------------- Cestino
-class _SHFILEOPSTRUCTW(ctypes.Structure):
-    _fields_ = [
-        ("hwnd", wintypes.HWND),
-        ("wFunc", wintypes.UINT),
-        ("pFrom", wintypes.LPCWSTR),
-        ("pTo", wintypes.LPCWSTR),
-        ("fFlags", ctypes.c_ushort),
-        ("fAnyOperationsAborted", wintypes.BOOL),
-        ("hNameMappings", ctypes.c_void_p),
-        ("lpszProgressTitle", wintypes.LPCWSTR),
-    ]
+if wintypes:
+    class _SHFILEOPSTRUCTW(ctypes.Structure):
+        _fields_ = [
+            ("hwnd", wintypes.HWND),
+            ("wFunc", wintypes.UINT),
+            ("pFrom", wintypes.LPCWSTR),
+            ("pTo", wintypes.LPCWSTR),
+            ("fFlags", ctypes.c_ushort),
+            ("fAnyOperationsAborted", wintypes.BOOL),
+            ("hNameMappings", ctypes.c_void_p),
+            ("lpszProgressTitle", wintypes.LPCWSTR),
+        ]
 
 
 def _recycle_limit(path):
@@ -107,6 +112,27 @@ def _to_recycle_bin(path, size=None):
         raise OSError("Spostamento nel Cestino non riuscito (codice %s)" % rc)
     if os.path.exists(path):
         raise OSError("Il file è ancora presente dopo lo spostamento nel Cestino")
+
+
+TRASH_DAYS = 7
+
+
+def _to_trash_dir(path, trash):
+    """Linux: niente Cestino di sistema sui server, si sposta in trash/ (stesso disco del server: istantaneo).
+    shortcut: chi resta in trash/ piu' di TRASH_DAYS giorni viene eliminato, come fa il Cestino di Windows quando e' pieno."""
+    os.makedirs(trash, exist_ok=True)
+    limit = time.time() - TRASH_DAYS * 86400
+    for n in os.listdir(trash):
+        p = os.path.join(trash, n)
+        try:
+            if os.path.getmtime(p) < limit:
+                _rmtree(p) if os.path.isdir(p) else _rmfile(p)
+        except OSError:
+            pass
+    dst = os.path.join(trash, "%s_%s" % (datetime.now().strftime(TS_FMT), os.path.basename(path)))
+    shutil.move(path, dst)
+    os.utime(dst)   # l'eta' nel cestino conta da adesso, non dalla data del backup
+    return dst
 
 
 # ---------------------------------------------------------------- classe
@@ -542,7 +568,10 @@ class Backups:
             self._end()
 
     def _recycle(self, e):
-        _to_recycle_bin(self._abs(e), e.get("size"))
+        if os.name == "nt":
+            _to_recycle_bin(self._abs(e), e.get("size"))
+        else:
+            _to_trash_dir(self._abs(e), os.path.join(self.server_dir, "trash"))
         with self._mu:
             self._state["pinned"].discard(e["id"])
             self._state["note"].pop(e["id"], None)
