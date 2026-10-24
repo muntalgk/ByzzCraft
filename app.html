@@ -452,6 +452,10 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
   .quick button{min-height:36px}.chip button{min-height:32px;padding:0 8px}.wm-ui button,.wm-ui select{min-width:36px;min-height:36px}
 }
 @media (max-width:360px){.pl-list{grid-template-columns:1fr}}
+/* map on phones: the whole screen above the bottom bar, no header, no page scroll */
+@media (max-width:760px){body[data-v=map] .top{display:none}
+  body[data-v=map] #map-full{position:fixed;left:0;right:0;top:0;bottom:calc(62px + env(safe-area-inset-bottom));height:auto;min-height:0;border:0;border-radius:0}
+  body[data-v=map] #map-full .wm-ui{top:calc(10px + env(safe-area-inset-top))!important}}
 /* phones: the same inner spacing in every card, compact filter chips */
 @media (max-width:520px){.bk-bulk.on{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.bk-bulk b{grid-column:1/-1}.bk-bulk .sp{display:none}.bk-bulk .btn{justify-content:center}
   .card-head:has(#bk-wfilter){flex-direction:column;align-items:stretch}#bk-wfilter:empty{display:none}
@@ -701,7 +705,7 @@ const SUBS={dash:()=>_t("Live server and world status"),map:()=>matchMedia("(poi
   timeline:()=>_t("Play sessions and events from the server logs"),metrics:()=>_t("PC and server · last 10 minutes, one point every 2 seconds"),console:()=>_t("Live log and RCON commands"),props:()=>_t("server.properties · every save backs up the file"),access:()=>_t("Whitelist, operators and bans"),audit:()=>_t("Who did what in the panel"),account:()=>BOOT.admin?_t("Your password and the panel users"):_t("Your password"),
   backups:()=>BK.items?_t("%s backups",BK.items.length)+" · "+gb(BK.items.reduce((a,e)=>a+e.size,0))+" · "+_t("%s free on disk",gb(BK.disk.free)):_t("World copies, schedule and restore")};
 let CUR="dash";function setSub(){$("#v-sub").textContent=SUBS[CUR]?SUBS[CUR]():""}
-function go(v){if(!TITLES[v])v="dash";CUR=v;$$(".tab").forEach(t=>{t.classList.toggle("on",t.dataset.v==v);});$("#more").classList.toggle("on",!!$(".tab.on:not(.nb)"));navMore(0);Object.keys(TITLES).forEach(x=>$("#v-"+x).hidden=x!=v);
+function go(v){if(!TITLES[v])v="dash";CUR=v;document.body.dataset.v=v;$$(".tab").forEach(t=>{t.classList.toggle("on",t.dataset.v==v);});$("#more").classList.toggle("on",!!$(".tab.on:not(.nb)"));navMore(0);Object.keys(TITLES).forEach(x=>$("#v-"+x).hidden=x!=v);
   $("#v-title").textContent=TITLES[v];setSub();if(v=="props"){loadProps();PS.load()}if(v=="console"){renderConsole();setTimeout(()=>$("#cmd").focus(),50)}if(v=="metrics")charts.forEach(c=>c.draw());
   if(v=="players")loadPlayers();if(v=="map")MAPF.show();if(v=="timeline")TLV.open();if(v=="dash")MAPM.show();if(v=="backups")BK.load();if(v=="access")ACV.load();if(v=="audit")RGV.load();if(v=="account")ACC.load();location.hash=v;scrollTo(0,0)}
 $$(".tab").forEach(t=>t.onclick=()=>go(t.dataset.v));
