@@ -41,6 +41,7 @@
  "%s% of the CPU": "%s% della CPU",
  "%s% of the PC CPU": "%s% della CPU del PC",
  "(empty for %s min)": "(vuoto da %s min)",
+ "- from this device the panel will not open any more after the setup": "- da questo dispositivo il pannello non si aprirà più dopo il setup",
  "50 ms limit (below = 20 TPS)": "limite 50 ms (sotto = 20 TPS)",
  "Accept the Minecraft EULA? Read it at https://aka.ms/MinecraftEULA": "Accetti l'EULA di Minecraft? La trovi su https://aka.ms/MinecraftEULA",
  "Access": "Accessi",
