@@ -151,7 +151,7 @@ main{padding:22px 28px 60px;min-width:0}
 .audit li:last-child{border-bottom:0}
 .audit time{color:var(--mute);font:12.5px var(--mono);white-space:nowrap;padding-top:2px}
 /* ---------- toasts ---------- */
-#toasts{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(420px,calc(100vw - 32px));display:flex;flex-direction:column;gap:8px;z-index:60;pointer-events:none}
+#toasts{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top));transform:translateX(-50%);width:min(420px,calc(100vw - 32px));display:flex;flex-direction:column;gap:8px;z-index:60;pointer-events:none}
 .toast{background:#0b0d10;border:1px solid var(--line2);border-left:3px solid var(--info);border-radius:10px;padding:10px 14px;font-size:14px;box-shadow:0 10px 30px #0009;animation:in .2s ease;position:relative;padding-right:44px;pointer-events:auto}
 .toast .x{position:absolute;top:5px;right:5px;width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:var(--mute);font-size:18px;line-height:1;cursor:pointer}.toast .x:hover{background:#ffffff10;color:var(--text)}
 .toast.bad{border-left-color:var(--crit)}.toast.good{border-left-color:var(--good)}
@@ -176,7 +176,7 @@ main{padding:22px 28px 60px;min-width:0}
 .pl-top{display:grid;grid-template-columns:260px 1fr;gap:16px;margin-top:16px}
 .viewer{height:340px;border-radius:14px;background:radial-gradient(ellipse at 50% 85%,#2a3a2c 0,#15181d 60%);border:1px solid var(--line);position:relative;overflow:hidden;cursor:grab;touch-action:none;perspective:900px}
 .viewer:active{cursor:grabbing}
-.viewer .hint{position:absolute;bottom:8px;left:0;right:0;text-align:center;color:var(--mute);font-size:11px;pointer-events:none}
+.viewer .hint{position:absolute;top:8px;left:0;right:0;text-align:center;color:var(--mute);font-size:11px;pointer-events:none}
 .scene{position:absolute;left:50%;top:52%;transform-style:preserve-3d}
 .part,.part .bx{position:absolute;transform-style:preserve-3d}
 .face{position:absolute;image-rendering:pixelated;backface-visibility:hidden;background-repeat:no-repeat}
@@ -447,7 +447,7 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
   nav.open .tab.nb{grid-column:span 3;order:2}nav.open .tab[data-v=dash]{grid-column:1/span 3}nav.open .tab:not(.nb){display:flex;grid-column:span 5;order:1;padding:14px 4px!important}
   #nav-bd{position:fixed;inset:0;background:#0009;z-index:4}
   .pl-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible;gap:6px}.pl-item{width:100%;min-width:0;padding:8px;gap:8px}.pl-item>div{min-width:0}.pl-item b,.pl-item small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .viewer{height:270px}
+  .viewer{height:290px}
   input[type=checkbox]{width:22px;height:22px;border-radius:6px}input[type=checkbox]:checked::after{width:5px;height:11px}
   .quick button{min-height:36px}.chip button{min-height:32px;padding:0 8px}.wm-ui button,.wm-ui select{min-width:36px;min-height:36px}
 }
@@ -1067,7 +1067,7 @@ class WorldMap{
   url(k,mt){const [rx,rz]=k.split(",");return "/map/"+this.dim+"/"+rx+"."+rz+".png?v="+mt}
   home(){const me=(P.positions||[]).filter(p=>p.dim==this.dim);let x,z;
     if(me.length){x=me.reduce((a,p)=>a+p.pos[0],0)/me.length;z=me.reduce((a,p)=>a+p.pos[2],0)/me.length}
-    else{const h=this.markers.find(m=>m.icon=="home");if(h){x=h.x;z=h.z}else if(this.spawn&&this.dim=="overworld"){x=this.spawn[0];z=this.spawn[2]}
+    else{const h=this.markers.find(m=>m.icon=="home");if(h){x=h.x;z=h.z}else if(this.spawn&&this.dim=="overworld"){x=this.spawn[0];z=this.spawn[2]}else if(this.dim=="the_end"&&this.regions.size){x=0;z=0}   /* the main island is always at 0 0 */
       else if(this.regions.size){   /* the overworld spawn means nothing in the Nether and the End: the explored region nearest the middle of them all */
         const ks=[...this.regions.keys()].map(k=>k.split(",").map(Number)),mx=ks.reduce((a,k)=>a+k[0],0)/ks.length,mz=ks.reduce((a,k)=>a+k[1],0)/ks.length,
           b=ks.reduce((a,k)=>Math.hypot(k[0]-mx,k[1]-mz)<Math.hypot(a[0]-mx,a[1]-mz)?k:a);x=b[0]*512+256;z=b[1]*512+256}else{x=0;z=0}}
