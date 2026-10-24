@@ -30,6 +30,17 @@ CHUNK = 1024 * 1024
 SPACE_MARGIN = 512 * 1024 * 1024   # resta sempre libero: il server deve poter salvare il mondo anche dopo un backup
 
 
+EXTRA = ("_nether", "_the_end")   # Paper e Spigot tengono Nether ed End accanto al mondo: world_nether, world_the_end
+
+
+class Busy(ValueError):
+    """Un'altra operazione e' in corso: non e' un errore del backup, si riprova al giro dopo."""
+
+
+def _extras(world):
+    return [(sfx, world + sfx) for sfx in EXTRA if os.path.isdir(world + sfx)]
+
+
 def _mb(n):
     return "%d MB" % (n // 1048576) if n < 10 * 1073741824 else "%.1f GB" % (n / 1073741824)
 
@@ -219,7 +230,7 @@ class Backups:
 
     def _begin(self, op, label):
         if not self._op_lock.acquire(blocking=False):
-            raise ValueError(tr("Another operation is in progress"))
+            raise Busy(tr("Another operation is in progress"))
         with self._mu:
             self._busy = {"op": op, "label": label, "progress": 0.0, "started": time.time()}
             self._last_error = None
@@ -297,6 +308,8 @@ class Backups:
             names = []
         for n in names:
             p = os.path.join(self.old_dir, n)
+            if any(n.endswith(sfx) and n[:-len(sfx)] in names for sfx in EXTRA):
+                continue
             try:
                 if not os.path.isdir(p):
                     continue
@@ -450,8 +463,8 @@ class Backups:
             ts = datetime.now().strftime(TS_FMT)
             final = self._unique(os.path.join(self.backups_dir, "%s_%s.zip" % (prefix, ts)))
             part = final + ".part"
-            src = self.world_dir
-            total = self._tree_bytes(self.world_dir)
+            srcs = [("world", self.world_dir)] + [("world" + sfx, p) for sfx, p in _extras(self.world_dir)]
+            total = sum(self._tree_bytes(p) for _a, p in srcs)
             # zip al massimo grande quanto il mondo; a server acceso prima c'e' anche la copia temporanea
             self.check_space(total * (2 if server_on else 1), self.backups_dir)
             if server_on:
@@ -463,7 +476,9 @@ class Backups:
                     save_off = True
                     rcon("save-all flush")
                     time.sleep(1.0)
-                    self._copy_world(self.world_dir, os.path.join(tmpdir, "world"), total)
+                    done = 0
+                    for arc, p in srcs:
+                        done = self._copy_world(p, os.path.join(tmpdir, arc), total, done)
                 finally:
                     # sempre, anche se save-off sembra fallito (la risposta puo' essersi persa)
                     err = None
@@ -477,11 +492,11 @@ class Backups:
                             time.sleep(2)
                     if err is not None and save_off:
                         self._set_error(tr("WARNING: save-on failed (%s): type save-on in the Console") % err)
-                src = os.path.join(tmpdir, "world")
+                srcs = [(arc, os.path.join(tmpdir, arc)) for arc, _p in srcs]
                 base, span = 0.3, 0.7
             else:
                 base, span = 0.0, 1.0
-            self._zip_world(src, part, base, span)
+            self._zip_world(srcs, part, base, span)
             os.replace(part, final)
             part = None
             if tmpdir:
@@ -529,8 +544,7 @@ class Backups:
                     pass
         return max(t, 1)
 
-    def _copy_world(self, src, dst, total):
-        done = 0
+    def _copy_world(self, src, dst, total, done=0):
         for r, dirs, files in os.walk(src):
             rel = os.path.relpath(r, src)
             tgt = dst if rel == "." else os.path.join(dst, rel)
@@ -547,26 +561,33 @@ class Backups:
                     _rmfile(d)   # un backup a cui manca un pezzo non va spacciato per buono
                     raise OSError(tr("unreadable file: %s (%s)") % (os.path.relpath(s, src), ex))
                 self._progress(0.3 * done / total)
+        return done
 
-    def _zip_world(self, src, part, base, span):
-        total = self._tree_bytes(src)
+    def _zip_world(self, srcs, part, base, span):
+        """srcs: [(nome nello zip, cartella)]: world, e per Paper world_nether e world_the_end."""
+        total = sum(self._tree_bytes(p) for _a, p in srcs)
         done = 0
         with zipfile.ZipFile(part, "w", zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as zf:
-            for r, dirs, files in os.walk(src):
-                rel = os.path.relpath(r, src)
-                arc_dir = "world" if rel == "." else "world/" + rel.replace(os.sep, "/")
-                if not dirs and not files:
-                    zf.writestr(arc_dir + "/", b"")
-                for fn in files:
-                    if fn == "session.lock":
-                        continue
-                    s = os.path.join(r, fn)
-                    try:
-                        zf.write(s, arc_dir + "/" + fn)
-                        done += os.path.getsize(s)
-                    except OSError as ex:
-                        raise OSError(tr("unreadable file: %s (%s)") % (os.path.relpath(s, src), ex))
-                    self._progress(base + span * done / total)
+            for arc, src in srcs:
+                done = self._zip_dir(zf, arc, src, done, total, base, span)
+
+    def _zip_dir(self, zf, arc, src, done, total, base, span):
+        for r, dirs, files in os.walk(src):
+            rel = os.path.relpath(r, src)
+            arc_dir = arc if rel == "." else arc + "/" + rel.replace(os.sep, "/")
+            if not dirs and not files:
+                zf.writestr(arc_dir + "/", b"")
+            for fn in files:
+                if fn == "session.lock":
+                    continue
+                s = os.path.join(r, fn)
+                try:
+                    zf.write(s, arc_dir + "/" + fn)
+                    done += os.path.getsize(s)
+                except OSError as ex:
+                    raise OSError(tr("unreadable file: %s (%s)") % (os.path.relpath(s, src), ex))
+                self._progress(base + span * done / total)
+        return done
 
     # ------------------------------------------------------------ eliminazione
     def delete(self, id):
@@ -583,10 +604,12 @@ class Backups:
             self._end()
 
     def _recycle(self, e):
-        if os.name == "nt":
-            _to_recycle_bin(self._abs(e), e.get("size"))
-        else:
-            _to_trash_dir(self._abs(e), os.path.join(self.server_dir, "trash"))
+        paths = [self._abs(e)] + ([p for _s, p in _extras(self._abs(e))] if e["folder"] != "backups" else [])
+        for p in paths:
+            if os.name == "nt":
+                _to_recycle_bin(p, e.get("size") if p == paths[0] else None)
+            else:
+                _to_trash_dir(p, os.path.join(self.server_dir, "trash"))
         with self._mu:
             self._state["pinned"].discard(e["id"])
             self._state["note"].pop(e["id"], None)
@@ -661,7 +684,7 @@ class Backups:
             self.create("programmato", server_on=server_on, rcon=rcon if server_on else None)
         except Exception as ex:  # noqa: BLE001
             # last_error è già salvato da create; non conta come fatto: si riprova tra 15 minuti
-            if "in corso" not in str(ex):
+            if not isinstance(ex, Busy):
                 with self._mu:
                     self._retry_at = now + 900
             return
@@ -689,16 +712,24 @@ class Backups:
         e = self._find(id)
         self._begin("restore", tr("Restoring %s") % e["name"])
         tmp = os.path.join(self.server_dir, "world.ripristino-tmp")
+        tmps = [tmp + sfx for sfx in EXTRA]
         try:
-            _rmtree(tmp)
+            for p in [tmp] + tmps:
+                _rmtree(p)
             src = self._abs(e)
             if e["folder"] == "backups":
                 with zipfile.ZipFile(src) as zf:
                     self.check_space(sum(i.file_size for i in zf.infolist()))
+                    tops = {i.filename.replace("\\", "/").split("/")[0] for i in zf.infolist()}
                 self._extract_zip(src, tmp)
+                for sfx in EXTRA:
+                    if "world" + sfx in tops:
+                        self._extract_zip(src, tmp + sfx, top="world" + sfx)
             else:
-                self.check_space(self._tree_bytes(src))
+                self.check_space(sum(self._tree_bytes(p) for p in [src] + [p for _s, p in _extras(src)]))
                 self._copy_folder(src, tmp)
+                for sfx, p in _extras(src):
+                    self._copy_folder(p, tmp + sfx)
             if not os.path.isfile(os.path.join(tmp, "level.dat")):
                 raise ValueError(tr("The backup does not contain level.dat"))
             os.makedirs(self.old_dir, exist_ok=True)
@@ -713,10 +744,18 @@ class Backups:
                 if old:
                     os.replace(old, self.world_dir)
                 raise
+            # Nether ed End di Paper: si sostituiscono solo quelli che il backup contiene, i vecchi vanno accanto al mondo vecchio
+            for sfx in EXTRA:
+                if os.path.isdir(tmp + sfx):
+                    if os.path.isdir(self.world_dir + sfx):
+                        os.makedirs(self.old_dir, exist_ok=True)
+                        os.replace(self.world_dir + sfx, (old or self._unique(os.path.join(self.old_dir, "world"))) + sfx)
+                    os.replace(tmp + sfx, self.world_dir + sfx)
             self._notify()
             return {"moved_to": os.path.basename(old) if old else ""}
         except Exception as ex:
-            _rmtree(tmp)
+            for p in [tmp] + tmps:
+                _rmtree(p)
             self._set_error(tr("Restore failed: %s") % ex)
             raise
         finally:
@@ -733,10 +772,12 @@ class Backups:
                 raise ValueError(tr("Unsafe zip: invalid path (%s)") % name)
         return parts
 
-    def _extract_zip(self, zpath, dest):
+    def _extract_zip(self, zpath, dest, top=None):
         with zipfile.ZipFile(zpath) as zf:
             names = {i.filename.replace("\\", "/") for i in zf.infolist()}
-            if "world/level.dat" in names:
+            if top:
+                prefix = [top]
+            elif "world/level.dat" in names:
                 prefix = ["world"]
             elif "level.dat" in names:
                 prefix = []

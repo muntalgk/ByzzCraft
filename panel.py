@@ -47,8 +47,8 @@ DEFAULTS = {
     "users_file": "panel-users.json",
     "log_file": "panel.log",
     "mc_address": "",
-    "user_mc": {},
-    "update_check": True,         # una volta al giorno chiede a GitHub se c'e' una versione nuova                # utente del pannello -> nick Minecraft (faccia nella barra laterale)
+    "user_mc": {},                # utente del pannello -> nick Minecraft (faccia nella barra laterale)
+    "update_check": True,         # una volta al giorno chiede a GitHub se c'e' una versione nuova
 }
 SESSION_HOURS = 12
 PBKDF2_ROUNDS = 240_000
@@ -176,6 +176,18 @@ def log(msg):
     HUB.publish("audit", {"line": line, "entry": RG.parse(line)}, admin_only=True)
 
 
+_LOOP_ERR = {}
+
+
+def loop_error(where, e):
+    """Errore di un ciclo di lavoro: nel log tecnico, una volta finche' non cambia. Non nel registro "chi ha fatto cosa",
+    dove si ripeterebbe ogni pochi secondi (es. cartella del server su un disco smontato)."""
+    msg = "%s: %s" % (type(e).__name__, e)
+    if _LOOP_ERR.get(where) != msg:
+        _LOOP_ERR[where] = msg
+        L.error("%s error", where, exc_info=e)
+
+
 def qint(q, key, default, lo, hi):
     try:
         return max(lo, min(hi, int(q.get(key, [default])[0] or default)))
@@ -301,7 +313,7 @@ def _read_varint(sock):
     while True:
         b = sock.recv(1)
         if not b:
-            raise ConnectionError("chiuso")
+            raise ConnectionError("connection closed")
         n |= (b[0] & 0x7F) << shift
         if not b[0] & 0x80:
             return n
@@ -350,7 +362,7 @@ class Rcon:
             while len(data) < n:
                 c = self.sock.recv(n - len(data))
                 if not c:
-                    raise ConnectionError("RCON chiuso")
+                    raise ConnectionError(t("RCON connection closed"))
                 data += c
             return data
         (ln,) = struct.unpack("<i", need(4))
@@ -409,7 +421,7 @@ class Rcon:
         rid, _ = self._recv()
         if rid == -1:
             self._close()
-            raise RuntimeError("password RCON rifiutata")
+            raise RuntimeError(t("RCON password rejected"))
 
     def command(self, text, timeout=5):
         with self.lock:
@@ -710,7 +722,7 @@ def sampler():
             if mins and info is not None and SRV.state == "on" and SRV.empty_since and time.time() - SRV.empty_since >= mins * 60:
                 SRV.stop("panel", "empty for %d minutes" % mins)
         except Exception as e:  # noqa: BLE001
-            log("sampling error: %s" % e)
+            loop_error("sampling", e)
         time.sleep(max(0.2, SAMPLE_SECONDS - (time.time() - t0)))
 
 
@@ -727,15 +739,19 @@ WORLD = {}
 
 
 def world_watcher():
-    """Ora del giorno, fase lunare e meteo, via RCON e solo a server acceso (comandi della 26.x:
-    le ore sono la timeline minecraft:day, la luna la timeline minecraft:moon)."""
+    """Ora del giorno, fase lunare e meteo, via RCON e solo a server acceso. 26.x: le ore sono la timeline
+    minecraft:day ("is at N ticks"), la luna la timeline minecraft:moon. Fino alla 1.21: "time query daytime"
+    da' i tick del giorno e "time query day" i giorni passati ("The time is N")."""
     global WORLD
-    ticks = lambda out: int(re.search(r"is at (\d+) tick", out).group(1))  # noqa: E731
+    num = lambda out: int(re.search(r"(?:is at|time is) (\d+)", out).group(1))  # noqa: E731
     while True:
         try:
             if SRV.state == "on":
-                day = ticks(RCON.command("time query day"))
-                moon = ticks(RCON.command("time query moon"))
+                out = RCON.command("time query day")
+                if "tick" in out:
+                    day, moon = num(out), num(RCON.command("time query moon"))
+                else:
+                    day, moon = num(RCON.command("time query daytime")), num(out) * 24000
                 rain = "passed" in RCON.command('execute if predicate {type:"minecraft:weather_check",raining:true}')
                 thunder = rain and "passed" in RCON.command('execute if predicate {type:"minecraft:weather_check",thundering:true}')
                 info = SRV.info
@@ -871,7 +887,7 @@ def map_warmer():
                     errors += 1
                 time.sleep(0.3)
         if errors:
-            log("map: %d tiles not updated this round, retrying in 5 minutes" % errors)
+            L.warning("map: %d tiles not updated this round, retrying in 5 minutes", errors)
         time.sleep(300)
 
 
@@ -901,7 +917,7 @@ def tailers():
                     HEAP.append(ev)
                     HUB.publish("heap", ev)
         except Exception as e:  # noqa: BLE001
-            log("log read error: %s" % e)
+            loop_error("log read", e)
         time.sleep(0.5)
 
 
@@ -924,7 +940,7 @@ def known_players():
             names[e["uuid"]] = e["name"]
     except (OSError, ValueError):
         pass
-    pdir = os.path.join(world_dir(), "players", "data")
+    pdir = PL.player_dir(world_dir(), "data")
     on_disk = {f[:-4] for f in os.listdir(pdir) if f.endswith(".dat")} if os.path.isdir(pdir) else set()
     return {u: names.get(u, u[:8]) for u in set(names) | on_disk if u in on_disk or names.get(u)}
 
@@ -947,7 +963,7 @@ def player_data(uuid, name):
     live = LIVE.get(uuid)
     if name in online_names() and live and time.time() - live["t"] < 15:
         return {"live": True, "saved": live["t"], **live["data"]}
-    path = os.path.join(world_dir(), "players", "data", uuid + ".dat")
+    path = os.path.join(PL.player_dir(world_dir(), "data"), uuid + ".dat")
     try:
         d = PL.normalize(PL.read_nbt_file(path))
         return {"live": False, "saved": os.path.getmtime(path), **d}
@@ -1009,7 +1025,7 @@ def player_watcher():
                 ROSTER_SENT = key
                 HUB.publish("roster", r)
         except Exception as e:  # noqa: BLE001
-            log("players error: %s" % e)
+            loop_error("players", e)
         time.sleep(3)
 
 
@@ -1359,6 +1375,9 @@ WantedBy=multi-user.target
 def health():
     """Cosa manca per far partire il server, con la soluzione (pulsante `fix` o comando)."""
     sd = CFG["server_dir"]
+    if not os.path.isdir(sd):   # disco smontato, cartella spostata: gli altri controlli non avrebbero senso
+        return [{"id": "server_dir", "text": t("Server folder %s not found: is the disk mounted? Otherwise change server_dir in panel-config.json.") % sd,
+                 "fix": None, "cmd": None}]
     p = server_props()
     jar = server_jar()
     need = RT.required(sd, jar)
@@ -1582,7 +1601,7 @@ class Handler(BaseHTTPRequestHandler):
             uuid = (parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}).get("uuid", [""])[0]
             names = known_players()
             if not UUID_RE.match(uuid) or uuid not in names:
-                return self.json(404, {"error": "giocatore sconosciuto"})
+                return self.json(404, {"error": "unknown player"})
             d = player_data(uuid, names[uuid]) or {}
             return self.json(200, {"uuid": uuid, "name": names[uuid], "online": names[uuid] in online_names(),
                                    "slim": PL.skin(uuid)[1], "hardcore": hardcore_world(), "stats": PL.stats(world_dir(), uuid), **d})
@@ -1602,10 +1621,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/map":
             dim = q.get("dim", ["overworld"])[0]
             if dim not in mapgen.DIMS:
-                return self.json(404, {"error": "dimensione"})
+                return self.json(404, {"error": "unknown dimension"})
             spawn = None
             try:
-                sp = (PL.read_nbt_file(os.path.join(world_dir(), "level.dat"))["Data"].get("spawn") or {})
+                d = PL.read_nbt_file(os.path.join(world_dir(), "level.dat"))["Data"]
+                sp = d.get("spawn") or ({"pos": [d["SpawnX"], d["SpawnY"], d["SpawnZ"]]} if "SpawnX" in d else {})   # fino alla 1.21
                 if sp.get("pos") and PL.strip_ns(sp.get("dimension", "overworld")) == dim:
                     spawn = list(sp["pos"])
             except (OSError, KeyError, ValueError, struct.error, EOFError):
@@ -1619,7 +1639,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(503, b"", "image/png")
             cache = os.path.join(HERE, "cache", "map")
             tile = os.path.join(cache, dim, "r.%d.%d.png" % (rx, rz))
-            mca = os.path.join(world_dir(), "dimensions", "minecraft", dim, "region", "r.%d.%d.mca" % (rx, rz))
+            mca = mapgen._region_path(world_dir(), dim, rx, rz)
             try:
                 fresh = os.path.getmtime(tile) >= os.path.getmtime(mca)
             except OSError:
@@ -1650,7 +1670,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/sessions":
             return self.json(200, {"sessions": TLINE.sessions(limit=qint(q, "limit", 30, 1, 200))})
         if path in ("/api/backups", "/api/backups/download", "/api/access", "/api/audit", "/api/users", "/api/health", "/api/syslog") and not s["admin"]:
-            return self.json(403, {"error": "solo admin"})
+            return self.json(403, {"error": "admins only"})
         if path == "/api/access":
             p = server_props()
             return self.json(200, {**AC.snapshot(CFG["server_dir"]), "online": sorted(online_names()), "state": SRV.state,
@@ -1681,7 +1701,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(404, {"error": str(e)})
         if path == "/api/properties":
             if not s["admin"]:
-                return self.json(403, {"error": "solo admin"})
+                return self.json(403, {"error": "admins only"})
             items = [{"key": k, "value": "" if k in SECRET_KEYS else v, "secret": k in SECRET_KEYS, "locked": k in LOCKED_KEYS}
                      for k, v in server_props().items()]
             return self.json(200, {"items": items})
@@ -2036,6 +2056,8 @@ def cli(args):
             sys.exit("invalid user name: lowercase letters, digits, . _ -")
         if cmd == "passwd" and name not in users:
             sys.exit("no such user '%s'" % name)
+        if cmd == "adduser" and name in users:
+            sys.exit("user '%s' already exists: use passwd to change the password" % name)
         pw = os.environ.get("PANEL_PASSWORD")
         if not pw:
             pw = getpass.getpass("Password for %s: " % name)
@@ -2050,7 +2072,12 @@ def cli(args):
         print("user %s saved%s" % (name, " as admin" if admin else ""))
         return
     if cmd == "deluser":
-        users.pop(args[1].strip().lower(), None); save_users(users); print("removed")
+        name = args[1].strip().lower()
+        if name not in users:
+            sys.exit("no such user '%s'" % name)
+        if users[name].get("admin") and sum(1 for u in users.values() if u.get("admin")) == 1:
+            sys.exit("'%s' is the last admin: add another admin first" % name)
+        del users[name]; save_users(users); print("removed")
         return
     sys.exit(__doc__)
 

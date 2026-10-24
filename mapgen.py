@@ -1,4 +1,4 @@
-"""Tile PNG viste dall'alto di un mondo Minecraft Java 26.x leggendo i file region (.mca).
+"""Tile PNG viste dall'alto di un mondo Minecraft Java (1.18 e successive) leggendo i file region (.mca).
 
 Solo libreria standard. API usata dal pannello web:
     DIMS, list_regions, render_region, get_tile, bounds
@@ -9,7 +9,7 @@ CLI:
 import json, math, os, re, struct, sys, threading, time, zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from players import nbt_parse  # noqa: E402
+from players import dim_dir, nbt_parse  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIMS = ("overworld", "the_nether", "the_end")
@@ -397,7 +397,7 @@ def _png(img, w, h):
 
 
 def _region_path(world_dir, dim, rx, rz):
-    return os.path.join(world_dir, "dimensions", "minecraft", dim, "region", "r.%d.%d.mca" % (rx, rz))
+    return os.path.join(dim_dir(world_dir, dim), "region", "r.%d.%d.mca" % (rx, rz))
 
 
 def render_region(world_dir, dim, rx, rz):
@@ -436,7 +436,7 @@ def render_region(world_dir, dim, rx, rz):
 
 # ------------------------------------------------------------------ API pannello
 def list_regions(world_dir, dim):
-    d = os.path.join(world_dir, "dimensions", "minecraft", dim, "region")
+    d = os.path.join(dim_dir(world_dir, dim), "region")
     out = []
     try:
         names = os.listdir(d)

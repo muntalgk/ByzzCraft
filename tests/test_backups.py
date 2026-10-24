@@ -363,6 +363,39 @@ def run():
         B.shutil.disk_usage = real_du
     check("con spazio il backup va", b.create("manuale", False)["kind"] == "manuale")
 
+    # ---------- Paper: Nether ed End accanto al mondo (world_nether, world_the_end)
+    root, s, st = fresh(); b = mk(s, st)
+    write(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), b"NETHER")
+    write(os.path.join(s, "world_the_end", "DIM1", "region", "r.0.0.mca"), b"END")
+    for on in (False, True):   # a server spento e acceso (copia temporanea)
+        e = b.create("manuale", on, Rcon() if on else None)
+        names = zipfile.ZipFile(os.path.join(s, "backups", e["name"])).namelist()
+        check("paper: zip con tre cartelle (on=%s)" % on, "world_nether/DIM-1/region/r.0.0.mca" in names
+              and "world_the_end/DIM1/region/r.0.0.mca" in names and "world/level.dat" in names, names)
+    write(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), b"NETHER-NUOVO")
+    r = b.restore("backups/" + e["name"], False)
+    check("paper: nether ripristinato", open(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), "rb").read() == b"NETHER")
+    old = os.path.join(s, "mondi-vecchi", r["moved_to"])
+    check("paper: nether vecchio accanto al mondo vecchio", open(old + "_nether/DIM-1/region/r.0.0.mca", "rb").read() == b"NETHER-NUOVO")
+    l = [x for x in b.list() if x["folder"] == "mondi-vecchi"]
+    check("paper: un solo mondo vecchio in elenco", [x["name"] for x in l] == [r["moved_to"]], l)
+    write(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), b"ALTRO")
+    b.restore(l[0]["id"], False)   # dalla cartella del mondo vecchio: torna anche il suo nether
+    check("paper: ripristino da cartella", open(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), "rb").read() == b"NETHER-NUOVO")
+    # un backup senza le cartelle di Paper lascia stare quelle attuali
+    mkzip(os.path.join(s, "backups", "vanilla.zip"), ["world/level.dat"])
+    b.restore("backups/vanilla.zip", False)
+    check("paper: nether attuale intatto", open(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), "rb").read() == b"NETHER-NUOVO")
+
+    # ---------- operazione in corso: Busy, non un errore che rimanda di 15 minuti
+    b._op_lock.acquire()
+    try:
+        raises("busy", B.Busy, b.create, "manuale", False)
+        b._run_scheduled("interval", time.time(), False, None)
+        check("busy: si riprova al giro dopo", b._retry_at is None)
+    finally:
+        b._op_lock.release()
+
     # ---------- dir vera, sola lettura
     if not os.environ.get("BYZZ_REAL_SERVER"):
         return

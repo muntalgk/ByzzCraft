@@ -4,6 +4,7 @@ import base64, gzip, json, os, re, struct, threading, time, urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(HERE, "assets")
 CACHE = os.path.join(HERE, "cache")
+UA = "byzzcraft (+https://github.com/muntalgk/byzzcraft)"
 
 
 # ---------------------------------------------------------------- NBT binario (file .dat)
@@ -141,6 +142,30 @@ def lang():
     return _LANG
 
 
+# ---------------------------------------------------------------- dove stanno i file del mondo
+_OLD_DIM = {"overworld": "", "the_nether": "DIM-1", "the_end": "DIM1"}
+
+
+def dim_dir(world, dim):
+    """Cartella di una dimensione: 26.x <world>/dimensions/minecraft/<dim>; fino alla 1.21 <world>, <world>/DIM-1, <world>/DIM1;
+    Paper e Spigot tengono Nether ed End in <world>_nether/DIM-1 e <world>_the_end/DIM1."""
+    new = os.path.join(world, "dimensions", "minecraft", dim)
+    if os.path.isdir(new) or os.path.isdir(os.path.join(world, "dimensions")):
+        return new
+    old = os.path.join(world, _OLD_DIM[dim])
+    if dim == "overworld" or os.path.isdir(old):
+        return old.rstrip("\\/")
+    return os.path.join(world + "_" + dim.replace("the_nether", "nether"), _OLD_DIM[dim])
+
+
+def player_dir(world, kind):
+    """kind: data, stats, advancements. 26.x: <world>/players/<kind>; prima <world>/playerdata, stats, advancements."""
+    new = os.path.join(world, "players", kind)
+    if os.path.isdir(new):
+        return new
+    return os.path.join(world, "playerdata" if kind == "data" else kind)
+
+
 def strip_ns(s):
     return str(s).split(":", 1)[1] if ":" in str(s) else str(s)
 
@@ -239,7 +264,7 @@ def normalize(d):
 def stats(world, uuid):
     out = {}
     try:
-        s = json.load(open(os.path.join(world, "players", "stats", uuid + ".json"), encoding="utf-8")).get("stats", {})
+        s = json.load(open(os.path.join(player_dir(world, "stats"), uuid + ".json"), encoding="utf-8")).get("stats", {})
     except (OSError, ValueError):
         s = {}
     c = {strip_ns(k): v for k, v in s.get("minecraft:custom", {}).items()}
@@ -256,7 +281,7 @@ def stats(world, uuid):
                  lang().get("entity.minecraft." + strip_ns(k), strip_ns(k)), v, strip_ns(k)] for k, v in sorted(d.items(), key=lambda kv: -kv[1])[:n]]
     out["mined"], out["killed"], out["killed_by"], out["crafted"] = top("minecraft:mined"), top("minecraft:killed"), top("minecraft:killed_by"), top("minecraft:crafted")
     try:
-        adv = json.load(open(os.path.join(world, "players", "advancements", uuid + ".json"), encoding="utf-8"))
+        adv = json.load(open(os.path.join(player_dir(world, "advancements"), uuid + ".json"), encoding="utf-8"))
         done = [k for k, v in adv.items() if isinstance(v, dict) and v.get("done") and "recipes/" not in k]
         out["advancements"] = len(done)
     except (OSError, ValueError):
@@ -356,11 +381,11 @@ def skin(uuid):
         if not fresh:
             try:
                 req = urllib.request.Request("https://sessionserver.mojang.com/session/minecraft/profile/" + uuid.replace("-", ""),
-                                             headers={"User-Agent": "pannello-mc"})
+                                             headers={"User-Agent": UA})
                 prof = json.load(urllib.request.urlopen(req, timeout=6))
                 tex = json.loads(base64.b64decode(prof["properties"][0]["value"]))["textures"]["SKIN"]
                 url = tex["url"].replace("http://", "https://")
-                data = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "pannello-mc"}), timeout=6).read()
+                data = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": UA}), timeout=6).read()
                 open(png, "wb").write(data)
                 json.dump({"slim": (tex.get("metadata") or {}).get("model") == "slim"}, open(meta, "w"))
             except Exception:  # noqa: BLE001 - offline o profilo senza skin: si usa quella di default
