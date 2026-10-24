@@ -426,7 +426,7 @@
  "The Recycle Bin is disabled on this drive: delete the file by hand if you are sure": "Il Cestino di questo disco è disattivato: elimina il file a mano se sei sicuro",
  "The backup does not contain level.dat": "Il backup non contiene level.dat",
  "The current password is wrong.": "La password attuale è sbagliata.",
- "The current world is moved to <b>mondi-vecchi</b>, not deleted.": "Il mondo attuale viene spostato in <b>mondi-vecchi</b>, non cancellato.",
+ "The current world is moved to <b>old-worlds</b>, not deleted.": "Il mondo attuale viene spostato in <b>old-worlds</b>, non cancellato.",
  "The file is still there after moving it to the Recycle Bin": "Il file è ancora presente dopo lo spostamento nel Cestino",
  "The new passwords do not match.": "Le nuove password non coincidono.",
  "The panel does not start by itself after a reboot.": "Il pannello non si avvia da solo dopo un riavvio della macchina.",

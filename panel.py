@@ -2117,7 +2117,7 @@ class Handler(BaseHTTPRequestHandler):
                 BACKUPS.world_dir = world_dir()
                 log("%s started a restore of %s" % (who, name))
                 backup_job(who, "restore of " + name, lambda: do_restore(bid),
-                           lambda r: t("World restored from %s. The previous one is in %s.") % (name, os.path.join("mondi-vecchi", r["moved_to"])),
+                           lambda r: t("World restored from %s. The previous one is in %s.") % (name, os.path.join(os.path.basename(BACKUPS.old_dir), r["moved_to"])),
                            t("Restore failed: %s"))
                 return self.json(200, {"ok": True, "message": t("Restore started.")})
             if op == "delete":

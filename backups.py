@@ -19,6 +19,7 @@ else:
     wintypes = None
 
 TS_FMT = "%Y-%m-%d_%H-%M-%S"
+OLD_DIRS = ("old-worlds", "mondi-vecchi")   # dove vanno i mondi sostituiti; il secondo e' il nome prima della 1.0, solo letto
 KINDS_KEEP = ("avvio", "programmato", "manuale")
 DEFAULT_SCHEDULE = {
     "every_hours": 2,
@@ -50,7 +51,7 @@ def _kind_of_zip(name):
         return "avvio"
     if name.startswith("auto_"):
         return "programmato"
-    if name.startswith("manuale_"):
+    if name.startswith(("manual_", "manuale_")):
         return "manuale"
     return "altro"
 
@@ -160,7 +161,7 @@ class Backups:
         self.state_file = state_file
         self.on_change = on_change
         self.backups_dir = os.path.join(self.server_dir, "backups")
-        self.old_dir = os.path.join(self.server_dir, "mondi-vecchi")
+        self.old_dir = os.path.join(self.server_dir, OLD_DIRS[0])
         self.world_dir = os.path.join(self.server_dir, "world")
         self._op_lock = threading.Lock()
         self._mu = threading.RLock()  # stato / busy
@@ -302,24 +303,25 @@ class Backups:
             out.append({"id": i, "name": n, "folder": "backups", "kind": _kind_of_zip(n),
                         "size": stt.st_size, "mtime": stt.st_mtime,
                         "pinned": i in pinned, "note": notes.get(i, "")})
-        try:
-            names = os.listdir(self.old_dir)
-        except OSError:
-            names = []
-        for n in names:
-            p = os.path.join(self.old_dir, n)
-            if any(n.endswith(sfx) and n[:-len(sfx)] in names for sfx in EXTRA):
-                continue
+        for folder in OLD_DIRS:
             try:
-                if not os.path.isdir(p):
-                    continue
-                mt = os.stat(p).st_mtime
+                names = os.listdir(os.path.join(self.server_dir, folder))
             except OSError:
-                continue
-            i = "mondi-vecchi/" + n
-            out.append({"id": i, "name": n, "folder": "mondi-vecchi", "kind": "mondo",
-                        "size": self._folder_size(p, mt), "mtime": mt,
-                        "pinned": i in pinned, "note": notes.get(i, "")})
+                names = []
+            for n in names:
+                p = os.path.join(self.server_dir, folder, n)
+                if any(n.endswith(sfx) and n[:-len(sfx)] in names for sfx in EXTRA):
+                    continue
+                try:
+                    if not os.path.isdir(p):
+                        continue
+                    mt = os.stat(p).st_mtime
+                except OSError:
+                    continue
+                i = folder + "/" + n
+                out.append({"id": i, "name": n, "folder": folder, "kind": "mondo",
+                            "size": self._folder_size(p, mt), "mtime": mt,
+                            "pinned": i in pinned, "note": notes.get(i, "")})
         out.sort(key=lambda e: e["mtime"], reverse=True)
         return out
 
@@ -337,7 +339,7 @@ class Backups:
         if not isinstance(id, str) or not id:
             raise ValueError(tr("Invalid backup"))
         parts = id.split("/")
-        if (len(parts) != 2 or parts[0] not in ("backups", "mondi-vecchi")
+        if (len(parts) != 2 or parts[0] not in ("backups",) + OLD_DIRS
                 or parts[1] in ("", ".", "..") or "\\" in id or ":" in id):
             raise ValueError(tr("Invalid backup"))
         for e in self.list():
@@ -446,7 +448,7 @@ class Backups:
 
     # ------------------------------------------------------------ creazione
     def create(self, kind="manuale", server_on=False, rcon=None, note=""):
-        prefix = {"manuale": "manuale", "programmato": "auto", "auto": "auto", "avvio": "world"}.get(kind)
+        prefix = {"manuale": "manual", "programmato": "auto", "auto": "auto", "avvio": "world"}.get(kind)
         if prefix is None:
             raise ValueError(tr("Invalid backup type"))
         if server_on and rcon is None:
@@ -711,7 +713,7 @@ class Backups:
             raise ValueError(tr("Stop the server first"))
         e = self._find(id)
         self._begin("restore", tr("Restoring %s") % e["name"])
-        tmp = os.path.join(self.server_dir, "world.ripristino-tmp")
+        tmp = os.path.join(self.server_dir, "world.restore-tmp")
         tmps = [tmp + sfx for sfx in EXTRA]
         try:
             for p in [tmp] + tmps:
@@ -736,7 +738,7 @@ class Backups:
             old = None
             if os.path.isdir(self.world_dir):
                 old = self._unique(os.path.join(
-                    self.old_dir, "world_%s_prima-del-ripristino" % datetime.now().strftime(TS_FMT)))
+                    self.old_dir, "world_%s_before-restore" % datetime.now().strftime(TS_FMT)))
                 os.replace(self.world_dir, old)
             try:
                 os.replace(tmp, self.world_dir)

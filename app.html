@@ -1136,7 +1136,7 @@ const BK={items:null,disk:null,st:null,f:"",dirty:false,
   restoreDlg(e){if(S.status.state!="off"){toast(_t("Stop the server first: the world cannot be replaced while in use."),"bad");return}
     const bg=document.createElement("div");bg.className="modal-bg";bg.innerHTML="<div class='modal' role='dialog' aria-modal='true'><h3>"+_t("Restore this world?")+"</h3>"
       +"<p><b>"+esc(e.note||e.name)+"</b><br><span style='color:var(--mute);font-size:13px'>"+new Date(e.mtime*1000).toLocaleString(LOC)+" · "+gb(e.size)+"</span></p>"
-      +"<ul><li>"+_t("The current world is moved to <b>mondi-vecchi</b>, not deleted.")+"</li><li>"+_t("Everyone goes back to how they were at that moment: position, inventory, health. Whoever died after that comes back to life.")+"</li><li>"+_t("Afterwards you can start the server as usual.")+"</li></ul>"
+      +"<ul><li>"+_t("The current world is moved to <b>old-worlds</b>, not deleted.")+"</li><li>"+_t("Everyone goes back to how they were at that moment: position, inventory, health. Whoever died after that comes back to life.")+"</li><li>"+_t("Afterwards you can start the server as usual.")+"</li></ul>"
       +"<p style='font-size:13px'>"+_t("To confirm type %s","<b style='font-family:var(--mono)'>"+_t("RESTORE")+"</b>")+"</p><input autocomplete='off' spellcheck='false'>"
       +"<div class='row'><button class='btn' data-x>"+_t("Cancel")+"</button><button class='btn primary' data-ok disabled>"+_t("Restore")+"</button></div></div>";
     document.body.append(bg);const inp=bg.querySelector("input"),ok=bg.querySelector("[data-ok]"),close=()=>{bg.remove();document.removeEventListener("keydown",kd)};

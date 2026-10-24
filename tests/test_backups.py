@@ -129,7 +129,7 @@ def run():
         unlock(hl); hl = None
         time.sleep(1.1)
         e = b.create("manuale", server_on=False, note="nota prova")
-        check("create off nome", e["name"].startswith("manuale_") and e["kind"] == "manuale" and e["note"] == "nota prova", e)
+        check("create off nome", e["name"].startswith("manual_") and e["kind"] == "manuale" and e["note"] == "nota prova", e)
         with zipfile.ZipFile(b.path(e["id"])) as z:
             n = z.namelist()
         check("zip ha world/level.dat", "world/level.dat" in n, n)
@@ -288,18 +288,18 @@ def run():
     zid = "backups/world_2026-10-19_14-39-35.zip"
     raises("restore server acceso", ValueError, b.restore, zid, True)
     res = b.restore(zid, False)
-    check("restore moved_to", res["moved_to"].endswith("_prima-del-ripristino") and os.path.isdir(os.path.join(s, "mondi-vecchi", res["moved_to"])), res)
+    check("restore moved_to", res["moved_to"].endswith("_before-restore") and os.path.isdir(os.path.join(s, "old-worlds", res["moved_to"])), res)
     check("restore: mondo nuovo", open(os.path.join(s, "world", "level.dat"), "rb").read() == b"data-world/level.dat")
-    check("restore: vecchio salvato", open(os.path.join(s, "mondi-vecchi", res["moved_to"], "level.dat"), "rb").read() == b"LEVEL-ORIG")
+    check("restore: vecchio salvato", open(os.path.join(s, "old-worlds", res["moved_to"], "level.dat"), "rb").read() == b"LEVEL-ORIG")
     check("restore: sub", os.path.isfile(os.path.join(s, "world", "sub", "f.txt")))
-    check("restore: no tmp", not os.path.exists(os.path.join(s, "world.ripristino-tmp")))
+    check("restore: no tmp", not os.path.exists(os.path.join(s, "world.restore-tmp")))
 
     # restore da cartella (sorgente resta)
     time.sleep(1.1)
-    old_id = "mondi-vecchi/" + res["moved_to"]
+    old_id = "old-worlds/" + res["moved_to"]
     res2 = b.restore(old_id, False)
     check("restore cartella", open(os.path.join(s, "world", "level.dat"), "rb").read() == b"LEVEL-ORIG")
-    check("restore cartella: sorgente resta", os.path.isdir(os.path.join(s, "mondi-vecchi", res["moved_to"])))
+    check("restore cartella: sorgente resta", os.path.isdir(os.path.join(s, "old-worlds", res["moved_to"])))
 
     # struttura alternativa: unica cartella di primo livello con level.dat
     mkzip(os.path.join(s, "backups", "alt.zip"), ["mondo-x/level.dat", "mondo-x/z/y.txt"])
@@ -309,10 +309,10 @@ def run():
     # struttura sconosciuta
     mkzip(os.path.join(s, "backups", "boh.zip"), ["a/x.txt", "b/y.txt"])
     cur = open(os.path.join(s, "world", "level.dat"), "rb").read()
-    nold = len(os.listdir(os.path.join(s, "mondi-vecchi")))
+    nold = len(os.listdir(os.path.join(s, "old-worlds")))
     raises("zip senza level.dat", ValueError, b.restore, "backups/boh.zip", False)
     check("fallito: mondo intatto", open(os.path.join(s, "world", "level.dat"), "rb").read() == cur)
-    check("fallito: nulla spostato", len(os.listdir(os.path.join(s, "mondi-vecchi"))) == nold)
+    check("fallito: nulla spostato", len(os.listdir(os.path.join(s, "old-worlds"))) == nold)
 
     # zip malevoli
     for evil in ["world/../../evil", "world/..\\..\\evil2", "world/C:/evil", "/abs/evil"]:
@@ -321,7 +321,7 @@ def run():
         raises("zip malevolo %r" % evil, ValueError, b.restore, "backups/evil.zip", False)
         check("evil: mondo intatto %r" % evil, open(os.path.join(s, "world", "level.dat"), "rb").read() == cur)
         check("evil: niente file fuori", not os.path.exists(os.path.join(s, "evil")) and not os.path.exists(os.path.join(os.path.dirname(s), "evil")))
-        check("evil: no tmp", not os.path.exists(os.path.join(s, "world.ripristino-tmp")))
+        check("evil: no tmp", not os.path.exists(os.path.join(s, "world.restore-tmp")))
         os.remove(os.path.join(s, "backups", "evil.zip"))
     # zip corrotto
     write(os.path.join(s, "backups", "rotto.zip"), b"non e uno zip")
@@ -332,7 +332,7 @@ def run():
     mkzip(os.path.join(s, "backups", "ok.zip"), ["world/level.dat"])
     real_replace = os.replace
     def bad_replace(a, c, *x, **k):
-        if str(a).endswith("ripristino-tmp"):
+        if str(a).endswith("restore-tmp"):
             raise OSError("rename simulato fallito")
         return real_replace(a, c, *x, **k)
     os.replace = bad_replace
@@ -341,7 +341,7 @@ def run():
     finally:
         os.replace = real_replace
     check("rollback: mondo originale rimesso", open(os.path.join(s, "world", "level.dat"), "rb").read() == cur)
-    check("rollback: tmp rimosso", not os.path.exists(os.path.join(s, "world.ripristino-tmp")))
+    check("rollback: tmp rimosso", not os.path.exists(os.path.join(s, "world.restore-tmp")))
     check("rollback: busy libero", b.status()["busy"] is None and "Restore failed" in b.status()["last_error"])
     # mondo assente: restore funziona, moved_to vuoto
     shutil.rmtree(os.path.join(s, "world"))
@@ -375,9 +375,9 @@ def run():
     write(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), b"NETHER-NUOVO")
     r = b.restore("backups/" + e["name"], False)
     check("paper: nether ripristinato", open(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), "rb").read() == b"NETHER")
-    old = os.path.join(s, "mondi-vecchi", r["moved_to"])
+    old = os.path.join(s, "old-worlds", r["moved_to"])
     check("paper: nether vecchio accanto al mondo vecchio", open(old + "_nether/DIM-1/region/r.0.0.mca", "rb").read() == b"NETHER-NUOVO")
-    l = [x for x in b.list() if x["folder"] == "mondi-vecchi"]
+    l = [x for x in b.list() if x["folder"] == "old-worlds"]
     check("paper: un solo mondo vecchio in elenco", [x["name"] for x in l] == [r["moved_to"]], l)
     write(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), b"ALTRO")
     b.restore(l[0]["id"], False)   # dalla cartella del mondo vecchio: torna anche il suo nether
