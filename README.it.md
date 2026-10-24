@@ -55,7 +55,8 @@ Solo la libreria standard di Python: nessuna dipendenza, nessun database. Legge 
 - **Timeline**: sessioni di gioco, morti, progressi e chat, ricostruiti dai log del server.
 - **Console**: log dal vivo e comandi RCON.
 - **Impostazioni**: editor di `server.properties` che salva una copia del file a ogni modifica.
-- **Backup**: backup del mondo manuali e programmati, conservazione, download, ripristino.
+- **Backup**: backup del mondo manuali e programmati (intervallo, fascia oraria, orari giornalieri e giorni), conservazione
+  per mondo per numero, età e spazio con anteprima, selezione multipla per eliminare e fissare, download, ripristino.
 - **Accessi**: whitelist, operatori, ban ed espulsioni, anche a server spento.
 - **Account**: ogni amico ha il suo login; gli admin vedono tutto, i giocatori possono accendere il server e guardare.
 - Interfaccia in inglese e italiano, Windows e Linux.

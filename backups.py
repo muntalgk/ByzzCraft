@@ -23,11 +23,17 @@ OLD_DIRS = ("old-worlds", "mondi-vecchi")   # where replaced worlds go; the seco
 KINDS_KEEP = ("startup", "scheduled", "manual")
 OLD_KINDS = {"avvio": "startup", "programmato": "scheduled", "manuale": "manual"}   # names in state files from before 1.0
 DEFAULT_SCHEDULE = {
-    "every_hours": 2,
+    "every_minutes": 120,
     "only_when_online": True,
-    "daily_at": "04:00",
+    "window": None,   # {"from": "HH:MM", "to": "HH:MM"}: interval backups only inside it (from > to crosses midnight)
+    "daily_at": ["04:00"],
+    "days": [0, 1, 2, 3, 4, 5, 6],   # Monday = 0, for the daily times
     "keep": {"startup": 10, "scheduled": 12, "manual": 0},
+    "max_days": {"startup": 0, "scheduled": 0, "manual": 0},
+    "max_gb": 0,
 }
+MAX_DAILY = 6
+SLOT_FMT = "%Y-%m-%d %H:%M"
 CHUNK = 1024 * 1024
 SPACE_MARGIN = 512 * 1024 * 1024   # always left free: the server must still be able to save the world after a backup
 
@@ -159,6 +165,53 @@ def _to_trash_dir(path, trash):
     return dst
 
 
+def _in_window(win, dt):
+    if not win:
+        return True
+    m = dt.hour * 60 + dt.minute
+    f, t = (int(x[:2]) * 60 + int(x[3:]) for x in (win["from"], win["to"]))
+    return f <= m < t if f < t else (m >= f or m < t)
+
+
+def _slots(cfg, dt):
+    """Today's daily slots as "YYYY-MM-DD HH:MM" (strings compare in time order)."""
+    if dt.weekday() not in cfg["days"]:
+        return []
+    return ["%s %s" % (dt.strftime("%Y-%m-%d"), h) for h in cfg["daily_at"]]
+
+
+def _prune_plan(entries, sch, now=None):
+    """[(entry, reason)] in deletion order. Count and age per (world, kind), then the size cap of the automatic
+    ones. Age and size never take the newest of a group: a world left alone for weeks keeps a backup."""
+    now = now or time.time()
+    plan, gone = [], set()
+    for kind in KINDS_KEEP:
+        n, days = sch["keep"].get(kind, 0), sch["max_days"].get(kind, 0)
+        groups = {}
+        for e in entries:
+            if e["kind"] == kind and not e["pinned"]:
+                groups.setdefault(e.get("world", ""), []).append(e)
+        for g in groups.values():
+            g.sort(key=lambda e: e["mtime"], reverse=True)
+            for i, e in enumerate(g):
+                why = "count" if n > 0 and i >= n else "age" if days > 0 and i > 0 and now - e["mtime"] > days * 86400 else None
+                if why:
+                    plan.append((e, why))
+                    gone.add(e["id"])
+    if sch["max_gb"] > 0:
+        auto = sorted((e for e in entries if e["kind"] in ("startup", "scheduled") and not e["pinned"]
+                       and e["id"] not in gone), key=lambda e: e["mtime"])
+        newest = {e.get("world", ""): e["id"] for e in auto}   # sorted oldest first: the last one per world wins
+        total = sum(e["size"] for e in auto)
+        for e in auto:
+            if total <= sch["max_gb"] * 1073741824:
+                break
+            if e["id"] != newest[e.get("world", "")]:
+                plan.append((e, "size"))
+                total -= e["size"]
+    return plan
+
+
 # ---------------------------------------------------------------- class
 class Backups:
     def __init__(self, server_dir, state_file, on_change=None):
@@ -191,15 +244,19 @@ class Backups:
             st = {}
         pinned = st.get("pinned")
         notes = st.get("note")
+        worlds = st.get("world")
         out = {
             "pinned": {x for x in pinned if isinstance(x, str)} if isinstance(pinned, list) else set(),
             "note": {k: v for k, v in notes.items() if isinstance(k, str) and isinstance(v, str)}
             if isinstance(notes, dict) else {},
-            "schedule": DEFAULT_SCHEDULE.copy(),
+            "world": {k: v for k, v in worlds.items() if isinstance(k, str) and isinstance(v, str)}
+            if isinstance(worlds, dict) else {},
+            "schedule": json.loads(json.dumps(DEFAULT_SCHEDULE)),
             "last_scheduled": st.get("last_scheduled") if isinstance(st.get("last_scheduled"), (int, float)) else None,
             "last_daily": st.get("last_daily") if isinstance(st.get("last_daily"), str) else None,
         }
-        out["schedule"]["keep"] = dict(DEFAULT_SCHEDULE["keep"])
+        if out["last_daily"] and len(out["last_daily"]) == 10:
+            out["last_daily"] += " 23:59"   # before 1.x only the day was saved: that day counts as done
         try:
             out["schedule"] = self._normalize_schedule(st.get("schedule") or {}, out["schedule"])
         except ValueError:
@@ -211,6 +268,7 @@ class Backups:
             data = {
                 "pinned": sorted(self._state["pinned"]),
                 "note": self._state["note"],
+                "world": self._state["world"],
                 "schedule": self._state["schedule"],
                 "last_scheduled": self._state["last_scheduled"],
                 "last_daily": self._state["last_daily"],
@@ -290,6 +348,9 @@ class Backups:
         with self._mu:
             pinned = set(self._state["pinned"])
             notes = dict(self._state["note"])
+            worlds = dict(self._state["world"])
+        # shortcut: untagged backups (made before the world was recorded) count as the current world, a renamed world needs a manual tag
+        cur = os.path.basename(self.world_dir)
         try:
             names = os.listdir(self.backups_dir)
         except OSError:
@@ -307,7 +368,7 @@ class Backups:
             i = "backups/" + n
             out.append({"id": i, "name": n, "folder": "backups", "kind": _kind_of_zip(n),
                         "size": stt.st_size, "mtime": stt.st_mtime,
-                        "pinned": i in pinned, "note": notes.get(i, "")})
+                        "pinned": i in pinned, "note": notes.get(i, ""), "world": worlds.get(i, cur)})
         for folder in OLD_DIRS:
             try:
                 names = os.listdir(os.path.join(self.server_dir, folder))
@@ -326,7 +387,7 @@ class Backups:
                 i = folder + "/" + n
                 out.append({"id": i, "name": n, "folder": folder, "kind": "world",
                             "size": self._folder_size(p, mt), "mtime": mt,
-                            "pinned": i in pinned, "note": notes.get(i, "")})
+                            "pinned": i in pinned, "note": notes.get(i, ""), "world": worlds.get(i, "")})
         out.sort(key=lambda e: e["mtime"], reverse=True)
         return out
 
@@ -340,14 +401,14 @@ class Backups:
         u = shutil.disk_usage(self.server_dir)
         return {"free": u.free, "total": u.total}
 
-    def _find(self, id):
+    def _find(self, id, entries=None):
         if not isinstance(id, str) or not id:
             raise ValueError(tr("Invalid backup"))
         parts = id.split("/")
         if (len(parts) != 2 or parts[0] not in ("backups",) + OLD_DIRS
                 or parts[1] in ("", ".", "..") or "\\" in id or ":" in id):
             raise ValueError(tr("Invalid backup"))
-        for e in self.list():
+        for e in entries or self.list():
             if e["id"] == id:
                 return e
         raise ValueError(tr("Backup not found"))
@@ -368,34 +429,66 @@ class Backups:
             cfg = json.loads(json.dumps(self._state["schedule"]))
             return {"busy": busy, "last_error": self._last_error, "schedule": cfg,
                     "last_scheduled": self._state["last_scheduled"],
-                    "next_scheduled": self._next_scheduled(cfg)}
+                    "next_scheduled": self._next_scheduled(cfg),
+                    "next_daily": self._next_scheduled(dict(cfg, every_minutes=0))}   # the interval needs the server on
 
     def _next_scheduled(self, cfg):
         cands = []
         base = self._state["last_scheduled"] or self._first_tick
-        if cfg["every_hours"] > 0 and base:
-            cands.append(base + cfg["every_hours"] * 3600)
+        if cfg["every_minutes"] > 0 and base:
+            t = base + cfg["every_minutes"] * 60
+            dt, w = datetime.fromtimestamp(t), cfg["window"]
+            if not _in_window(w, dt):
+                dt = dt.replace(hour=int(w["from"][:2]), minute=int(w["from"][3:]), second=0, microsecond=0)
+                if dt.timestamp() < t:
+                    dt += timedelta(days=1)
+                t = dt.timestamp()
+            cands.append(t)
         if cfg["daily_at"]:
-            h, m = (int(x) for x in cfg["daily_at"].split(":"))
             now = datetime.now()
-            t = now.replace(hour=h, minute=m, second=0, microsecond=0)
-            if self._state["last_daily"] == now.strftime("%Y-%m-%d"):
-                t += timedelta(days=1)
-            elif t < now:
-                t = now
-            cands.append(t.timestamp())
+            for d in range(8):
+                for slot in _slots(cfg, now + timedelta(days=d)):
+                    t = datetime.strptime(slot, SLOT_FMT)
+                    if d == 0 and slot <= (self._state["last_daily"] or ""):
+                        continue
+                    cands.append(max(t, now).timestamp() if d == 0 else t.timestamp())
         return min(cands) if cands else None
 
-    # ------------------------------------------------------------ pin
+    # ------------------------------------------------------------ pin / note
     def pin(self, id, pinned):
-        e = self._find(id)
+        self.pin_many([id], pinned)
+
+    def pin_many(self, ids, pinned):
+        found = self._many(ids)
         with self._mu:
-            if pinned:
-                self._state["pinned"].add(e["id"])
-            else:
-                self._state["pinned"].discard(e["id"])
+            for e in found:
+                if pinned:
+                    self._state["pinned"].add(e["id"])
+                else:
+                    self._state["pinned"].discard(e["id"])
             self._save_state()
         self._notify()
+
+    def set_note(self, id, note):
+        e = self._find(id)
+        note = "" if note is None else str(note).strip()[:80]
+        with self._mu:
+            if note:
+                self._state["note"][e["id"]] = note
+            else:
+                self._state["note"].pop(e["id"], None)
+            self._save_state()
+        self._notify()
+
+    def _many(self, ids):
+        if not isinstance(ids, list) or not ids:
+            raise ValueError(tr("Invalid backup"))
+        if len(ids) > 500:
+            raise ValueError(tr("Too many backups at once (max %d)") % 500)
+        if not all(isinstance(i, str) for i in ids):
+            raise ValueError(tr("Invalid backup"))
+        entries = self.list()
+        return [self._find(i, entries) for i in dict.fromkeys(ids)]
 
     # ------------------------------------------------------------ schedule
     @staticmethod
@@ -404,35 +497,61 @@ class Backups:
             raise ValueError(tr("Invalid %s") % what)
         try:
             n = int(float(v))
-        except ValueError:
+        except (ValueError, OverflowError):   # "1e999" is inf
             raise ValueError(tr("Invalid %s") % what)
         if not lo <= n <= hi:
             raise ValueError(tr("%s must be between %d and %d") % (what, lo, hi))
         return n
 
+    @staticmethod
+    def _hhmm(v, msg):
+        try:
+            return datetime.strptime(v.strip(), "%H:%M").strftime("%H:%M")
+        except (ValueError, AttributeError):
+            raise ValueError(msg)
+
     def _normalize_schedule(self, cfg, base):
         if not isinstance(cfg, dict):
             raise ValueError(tr("Invalid configuration"))
-        out = {"every_hours": base["every_hours"], "only_when_online": base["only_when_online"],
-               "daily_at": base["daily_at"], "keep": dict(base["keep"])}
-        if "every_hours" in cfg:
-            out["every_hours"] = self._int_in(cfg["every_hours"], 0, 48, tr("Hours between backups"))
+        out = json.loads(json.dumps(base))
+        if "every_minutes" in cfg:
+            out["every_minutes"] = self._int_in(cfg["every_minutes"], 0, 2880, tr("Minutes between backups"))
+            if 0 < out["every_minutes"] < 10:
+                raise ValueError(tr("%s must be between %d and %d") % (tr("Minutes between backups"), 10, 2880))
+        elif "every_hours" in cfg:   # state files and clients from before the minutes
+            out["every_minutes"] = self._int_in(cfg["every_hours"], 0, 48, tr("Hours between backups")) * 60
         if "only_when_online" in cfg:
             out["only_when_online"] = bool(cfg["only_when_online"])
+        if "window" in cfg:
+            w = cfg["window"]
+            if not w:
+                out["window"] = None
+            elif isinstance(w, dict):
+                f, t = (self._hhmm(w.get(k), tr("Invalid time window (use HH:MM)")) for k in ("from", "to"))
+                if f == t:
+                    raise ValueError(tr("The time window must start and end at different times"))
+                out["window"] = {"from": f, "to": t}
+            else:
+                raise ValueError(tr("Invalid time window (use HH:MM)"))
         if "daily_at" in cfg:
             d = cfg["daily_at"]
             if d is None:
-                d = ""
-            if not isinstance(d, str):
+                d = []
+            elif isinstance(d, str):
+                d = [d] if d.strip() else []
+            if not isinstance(d, list):
                 raise ValueError(tr("Invalid daily time"))
-            d = d.strip()
-            if d:
-                try:
-                    t = datetime.strptime(d, "%H:%M")
-                except ValueError:
-                    raise ValueError(tr("Invalid daily time (use HH:MM)"))
-                d = t.strftime("%H:%M")
+            d = sorted({self._hhmm(x, tr("Invalid daily time (use HH:MM)")) for x in d})
+            if len(d) > MAX_DAILY:
+                raise ValueError(tr("At most %d daily times") % MAX_DAILY)
             out["daily_at"] = d
+        if "days" in cfg:
+            d = cfg["days"]
+            if not isinstance(d, list):
+                raise ValueError(tr("Invalid days"))
+            out["days"] = sorted({self._int_in(x, 0, 6, tr("Day")) for x in d})
+        if out["daily_at"] and not out["days"]:
+            raise ValueError(tr("Pick at least one day"))
         if "keep" in cfg:
             k = cfg["keep"]
             if not isinstance(k, dict):
@@ -441,7 +560,32 @@ class Backups:
             for kind in KINDS_KEEP:
                 if kind in k:
                     out["keep"][kind] = self._int_in(k[kind], 0, 200, tr("How many to keep (%s)") % kind)
+        if "max_days" in cfg:
+            k = cfg["max_days"]
+            if not isinstance(k, dict):
+                raise ValueError(tr("Invalid retention"))
+            for kind in KINDS_KEEP:
+                if kind in k:
+                    out["max_days"][kind] = self._int_in(k[kind], 0, 3650, tr("Maximum age in days (%s)") % kind)
+        if "max_gb" in cfg:
+            g = cfg["max_gb"]
+            try:
+                if isinstance(g, bool) or not isinstance(g, (int, float, str)):
+                    raise ValueError
+                g = round(float(g), 1)
+            except ValueError:
+                raise ValueError(tr("Invalid %s") % tr("size limit"))
+            if not 0 <= g <= 100000:
+                raise ValueError(tr("%s must be between %d and %d") % (tr("Size limit (GB)"), 0, 100000))
+            out["max_gb"] = int(g) if g == int(g) else g
         return out
+
+    def preview(self, cfg):
+        """What the next cleanup would remove with these rules (nothing is saved)."""
+        with self._mu:
+            sch = self._normalize_schedule(cfg, self._state["schedule"])
+        plan = _prune_plan(self.list(), sch)
+        return {"ids": [e["id"] for e, _w in plan], "bytes": sum(e["size"] for e, _w in plan)}
 
     def set_schedule(self, cfg):
         with self._mu:
@@ -511,10 +655,14 @@ class Backups:
                 _rmtree(tmpdir)
                 tmpdir = None
             eid = "backups/" + os.path.basename(final)
-            if note:
-                with self._mu:
+            with self._mu:
+                self._state["world"][eid] = os.path.basename(self.world_dir)
+                if note:
                     self._state["note"][eid] = str(note)
+                try:
                     self._save_state()
+                except OSError:   # the zip is there: without the tag it counts as the current world
+                    pass
             return self._find(eid)
         except Exception as ex:
             if part:
@@ -611,6 +759,27 @@ class Backups:
         finally:
             self._end()
 
+    def delete_many(self, ids):
+        found = self._many(ids)
+        todo = [e for e in found if not e["pinned"]]
+        res = {"deleted": [], "skipped": len(found) - len(todo), "errors": []}
+        if not todo:
+            return res
+        self._begin("delete", tr("Deleting %d backups") % len(todo))
+        try:
+            for i, e in enumerate(todo):
+                try:
+                    self._recycle(e)
+                    res["deleted"].append(e["id"])
+                except Exception as ex:  # noqa: BLE001
+                    res["errors"].append("%s: %s" % (e["name"], ex))
+                self._progress((i + 1) / len(todo))
+            if res["errors"]:
+                self._set_error(tr("Delete failed: %s") % res["errors"][0])
+        finally:
+            self._end()
+        return res
+
     def _recycle(self, e, auto=False):
         paths = [self._abs(e)] + ([p for _s, p in _extras(self._abs(e))] if e["folder"] != "backups" else [])
         for p in paths:
@@ -627,6 +796,7 @@ class Backups:
         with self._mu:
             self._state["pinned"].discard(e["id"])
             self._state["note"].pop(e["id"], None)
+            self._state["world"].pop(e["id"], None)
             self._save_state()
 
     # ------------------------------------------------------------ retention
@@ -638,20 +808,14 @@ class Backups:
             with self._mu:
                 self._busy = {"op": "delete", "label": tr("Cleaning up old backups"),
                               "progress": 0.0, "started": time.time()}
-            keep = self.status()["schedule"]["keep"]
-            entries = self.list()
-            for kind in KINDS_KEEP:
-                n = keep.get(kind, 0)
-                if n <= 0:
-                    continue
-                cand = [e for e in entries if e["kind"] == kind and not e["pinned"]]
-                cand.sort(key=lambda e: e["mtime"], reverse=True)
-                for e in cand[n:]:
-                    try:
-                        self._recycle(e, auto=kind in ("startup", "scheduled"))
-                        removed.append(e["id"])
-                    except Exception as ex:
-                        self._set_error(tr("Cleanup failed for %s: %s") % (e["name"], ex))
+            with self._mu:
+                sch = json.loads(json.dumps(self._state["schedule"]))
+            for e, _why in _prune_plan(self.list(), sch):
+                try:
+                    self._recycle(e, auto=e["kind"] in ("startup", "scheduled"))
+                    removed.append(e["id"])
+                except Exception as ex:
+                    self._set_error(tr("Cleanup failed for %s: %s") % (e["name"], ex))
         finally:
             with self._mu:
                 self._busy = None
@@ -673,15 +837,14 @@ class Backups:
                 and now >= (self._retry_at or 0)
             if idle:
                 start = None
-                if (cfg["every_hours"] > 0 and server_on
+                dt = datetime.fromtimestamp(now)
+                if (cfg["every_minutes"] > 0 and server_on
                         and (players_online > 0 or not cfg["only_when_online"])
-                        and now - (last or self._first_tick) >= cfg["every_hours"] * 3600):
+                        and now - (last or self._first_tick) >= cfg["every_minutes"] * 60
+                        and _in_window(cfg["window"], dt)):
                     start = "interval"
-                elif cfg["daily_at"]:
-                    dt = datetime.fromtimestamp(now)
-                    h, m = (int(x) for x in cfg["daily_at"].split(":"))
-                    if last_daily != dt.strftime("%Y-%m-%d") and (dt.hour, dt.minute) >= (h, m):
-                        start = "daily"
+                elif any(last_daily is None or last_daily < x for x in _slots(cfg, dt) if x <= dt.strftime(SLOT_FMT)):
+                    start = "daily"
                 if start:
                     th = threading.Thread(target=self._run_scheduled,
                                           args=(start, now, server_on, rcon), daemon=True)
@@ -705,10 +868,11 @@ class Backups:
         with self._mu:
             self._retry_at = None
             self._state["last_scheduled"] = now
-            dt, daily = datetime.fromtimestamp(now), self._state["schedule"]["daily_at"]
-            # an interval backup made after the daily time also counts as the daily one
-            if why == "daily" or (daily and (dt.hour, dt.minute) >= tuple(int(x) for x in daily.split(":"))):
-                self._state["last_daily"] = datetime.fromtimestamp(now).strftime("%Y-%m-%d")
+            dt = datetime.fromtimestamp(now)
+            # an interval backup made after a daily time also covers the slots up to now
+            passed = [x for x in _slots(self._state["schedule"], dt) if x <= dt.strftime(SLOT_FMT)]
+            if passed:
+                self._state["last_daily"] = max(passed)
             try:
                 self._save_state()
             except OSError:

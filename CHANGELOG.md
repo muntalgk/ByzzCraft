@@ -24,6 +24,10 @@
 - Force stop while starting: no false "start failed", and a clear message during the pre-start backup.
 - BungeeCord/Velocity: real UUIDs kept for whitelist changes with the server off.
 - Setup from another device warns that "Only this machine" locks it out.
+- Confirmations (stop, force stop, restart, EULA, marker delete) are panel dialogs, not browser pop-ups.
+- Backups: retention per world (how many and how many days per kind, plus a size cap for automatic ones),
+  interval from 15 minutes with an optional time window, several daily times and weekdays, select many to
+  delete or pin, a preview of what the next cleanup removes, notes editable afterwards, filter by world.
 
 Upgrading a Docker install from 1.0.0:
 - stop the Minecraft server from the panel first: the old container cannot stop it cleanly yet;
