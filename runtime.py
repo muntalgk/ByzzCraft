@@ -41,7 +41,9 @@ def parse_version(text):
 
 def version_of(java):
     try:
-        r = subprocess.run([java, "-version"], capture_output=True, text=True, timeout=30)
+        # no console window flashing on Windows when the panel runs without one (pythonw)
+        r = subprocess.run([java, "-version"], capture_output=True, text=True, timeout=30,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except (OSError, subprocess.TimeoutExpired):
         return None
     return parse_version(r.stderr + r.stdout)

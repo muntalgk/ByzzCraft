@@ -701,7 +701,8 @@ class ServerControl:
                     continue
                 try:
                     if os.name == "nt":
-                        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, timeout=20)
+                        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, timeout=20,
+                                       creationflags=subprocess.CREATE_NO_WINDOW)
                     elif group:
                         os.killpg(pid, 9)   # own session (start_new_session): script and java together
                     else:
