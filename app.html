@@ -2,7 +2,7 @@
 <html lang="{{LANG}}">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>{{TITLE}}</title>
 {{ICON}}
 <style>
@@ -32,6 +32,7 @@ nav{background:linear-gradient(180deg,#16191f,#111318);border-right:1px solid va
 .tab.on{background:linear-gradient(90deg,#3fb95024,#3fb9500a 65%,transparent);color:var(--text);font-weight:600}
 .tab.on:before{content:"";position:absolute;left:-12px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--good);box-shadow:0 0 12px var(--good)}
 .tab.on svg{opacity:1;color:#7ee08f}
+.tab.more{display:none}   /* phones only: opens the sheet with the other pages */
 .tab:focus-visible,.srv-pill:focus-visible,#logout:focus-visible{outline:2px solid #3fb950aa;outline-offset:1px}
 .me{margin-top:auto;display:flex;align-items:center;gap:10px;padding:9px 9px 9px 10px;border-radius:12px;background:#ffffff06;border:1px solid var(--line)}
 .me-face{width:32px;height:32px;border-radius:8px;flex:none;box-shadow:0 0 0 1px #ffffff1a;display:grid;place-items:center;font-weight:800;color:#06210c;background:linear-gradient(135deg,#3fb950,#1f7a33)}
@@ -241,7 +242,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .card-head b{font-size:14px}
 .link{background:none;border:0;color:var(--text2);cursor:pointer;font-size:13px;padding:2px 4px}.link:hover{color:var(--text)}
 /* ---------- map ---------- */
-.wm{position:relative;overflow:hidden;background:#0b0d10;border-radius:12px;border:1px solid var(--line);touch-action:none;cursor:grab;user-select:none}
+.wm{position:relative;z-index:0;overflow:hidden;background:#0b0d10;border-radius:12px;border:1px solid var(--line);touch-action:none;cursor:grab;user-select:none}
 .wm:active{cursor:grabbing}
 .wm-world{position:absolute;left:0;top:0;transform-origin:0 0}/* no will-change: the browser would paint at one scale only (missing tiles, blurry text when zoomed) */
 .wm-world img{position:absolute;width:513px;height:513px;image-rendering:auto}   /* 1 px overlap: no seams between tiles when zoomed out */
@@ -422,7 +423,18 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
   .prop{grid-template-columns:1fr}
   #con-full{height:calc(100vh - 330px)}
   .st h2{font-size:22px}
+  main{padding-bottom:calc(90px + env(safe-area-inset-bottom))}
+  nav{overflow:visible;padding-bottom:calc(6px + env(safe-area-inset-bottom))}
+  .tab.nb{flex:1 1 0;min-width:0}.tab:not(.nb){display:none}.tab.more{display:flex}
+  nav.open{display:grid;grid-template-columns:repeat(15,minmax(0,1fr));gap:4px 0;border-radius:16px 16px 0 0}
+  nav.open .tab.nb{grid-column:span 3;order:2}nav.open .tab[data-v=dash]{grid-column:1/span 3}nav.open .tab:not(.nb){display:flex;grid-column:span 5;order:1;padding:14px 4px!important}
+  #nav-bd{position:fixed;inset:0;background:#0009;z-index:4}
+  .pl-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible;gap:6px}.pl-item{width:100%;min-width:0;padding:8px;gap:8px}.pl-item>div{min-width:0}.pl-item b,.pl-item small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .viewer{height:270px}
+  .toggle input,.bk .cb,.bk-sel input{width:22px;height:22px}
+  .quick button{min-height:36px}.chip button{min-height:32px;padding:0 8px}.wm-ui button,.wm-ui select{min-width:36px;min-height:36px}
 }
+@media (max-width:360px){.pl-list{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -431,21 +443,23 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
     <div class="brand"><div class="logo">{{LOGO}}</div><div class="bt"><b id="b-title"></b><small>{{Minecraft server panel}}</small></div></div>
     <button class="srv-pill" id="srv-pill" title="{{Copy the server address}}"><i></i><span class="st">...</span><span class="addr" id="srv-addr"></span></button>
     <p class="nav-sec">{{World}}</p>
-    <button class="tab on" data-v="dash" data-s="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Dashboard</button>
-    <button class="tab" data-v="map"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4 3 6.5v13.5l6-2.5 6 2.5 6-2.5V4l-6 2.5z"/><path d="M9 4v13.5M15 6.5V20"/></svg>{{Map}}</button>
-    <button class="tab" data-v="players"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.8c1.6.8 2.7 2.5 3 5.2"/></svg>{{Players}}<span class="cnt" id="cnt-pl"></span></button>
+    <button class="tab nb on" data-v="dash" data-s="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Dashboard</button>
+    <button class="tab nb" data-v="map"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4 3 6.5v13.5l6-2.5 6 2.5 6-2.5V4l-6 2.5z"/><path d="M9 4v13.5M15 6.5V20"/></svg>{{Map}}</button>
+    <button class="tab nb" data-v="players"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.8c1.6.8 2.7 2.5 3 5.2"/></svg>{{Players}}<span class="cnt" id="cnt-pl"></span></button>
     <button class="tab" data-v="timeline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg>Timeline</button>
     <button class="tab" data-v="metrics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 15 4-5 3 3 5-7"/></svg>{{Metrics}}</button>
     <p class="nav-sec adm">{{Administration}}</p>
-    <button class="tab adm" data-v="console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-5-6-5M12 19h8"/></svg>Console</button>
+    <button class="tab nb adm" data-v="console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-5-6-5M12 19h8"/></svg>Console</button>
     <button class="tab adm" data-v="props" data-s="Config"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>{{Settings}}</button>
     <button class="tab adm" data-v="backups"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></svg>Backup<span class="cnt" id="cnt-bk"></span></button>
     <button class="tab adm" data-v="access"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>{{Access}}</button>
     <button class="tab adm" data-v="audit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>{{Log}}</button>
     <button class="tab" data-v="account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.2 4.2-6.5 8-6.5s7 2.3 8 6.5"/></svg>{{Account}}</button>
+    <button class="tab nb more" id="more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>{{More}}</button>
     <div class="me"><div class="me-face" id="me-face"></div><div class="me-t"><b id="who"></b><span class="role" id="me-role"></span></div>
       <button id="logout" title="{{Log out}}" aria-label="{{Log out}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4"/></svg><span>{{Log out?}}</span></button></div>
   </nav>
+  <div id="nav-bd" hidden></div>
 
   <main>
     <div class="top"><div><h1 id="v-title">Dashboard</h1><p class="v-sub" id="v-sub"></p></div><span class="live off" id="live"><i></i><span>{{Connecting...}}</span></span></div>
@@ -649,20 +663,23 @@ const WINDOW=10*60*1000;
 /* ---------------- navigation ---------------- */
 $("#b-title").textContent=BOOT.title;$("#who").textContent=BOOT.mc||BOOT.user;
 $("#me-role").textContent=BOOT.admin?_t("Admin"):_t("Player");$("#me-role").classList.toggle("pl",!BOOT.admin);$("#srv-addr").textContent=BOOT.address||"";
-if(!BOOT.admin){$$(".adm,.adm-only").forEach(e=>e.hidden=true)}
+if(!BOOT.admin){$$(".adm,.adm-only").forEach(e=>e.hidden=true);$(".tab[data-v=timeline]").classList.add("nb")}
 function renderMe(){const f=$("#me-face");const me=BOOT.mc&&(P.roster||[]).find(p=>p.name.toLowerCase()==BOOT.mc.toLowerCase());
   if(me){if(f.dataset.u!=me.uuid){f.dataset.u=me.uuid;f.className="me-face fc";f.style.cssText=faceStyle(me.uuid,32);f.textContent=""}}
   else if(!f.dataset.u)f.textContent=(BOOT.mc||BOOT.user).charAt(0).toUpperCase()}
 const TITLES={dash:"Dashboard",map:_t("Map"),players:_t("Players"),timeline:"Timeline",metrics:_t("Metrics"),console:"Console",props:_t("Server settings"),backups:"Backup",access:_t("Access"),audit:_t("Panel log"),account:_t("Account")};
-const SUBS={dash:()=>_t("Live server and world status"),map:()=>_t("Top-down view · drag, zoom, right-click for a marker"),
+const SUBS={dash:()=>_t("Live server and world status"),map:()=>matchMedia("(pointer:coarse)").matches?_t("Top-down view · drag, pinch, long-press for a marker"):_t("Top-down view · drag, zoom, right-click for a marker"),
   players:()=>{const r=P.roster||[],n=r.filter(p=>p.online).length;return _t("%s players recorded",r.length)+" · "+(n?_t("%s online",n):_t("nobody online"))},
   timeline:()=>_t("Play sessions and events from the server logs"),metrics:()=>_t("PC and server · last 10 minutes, one point every 2 seconds"),console:()=>_t("Live log and RCON commands"),props:()=>_t("server.properties · every save backs up the file"),access:()=>_t("Whitelist, operators and bans"),audit:()=>_t("Who did what in the panel"),account:()=>BOOT.admin?_t("Your password and the panel users"):_t("Your password"),
   backups:()=>BK.items?_t("%s backups",BK.items.length)+" · "+gb(BK.items.reduce((a,e)=>a+e.size,0))+" · "+_t("%s free on disk",gb(BK.disk.free)):_t("World copies, schedule and restore")};
 let CUR="dash";function setSub(){$("#v-sub").textContent=SUBS[CUR]?SUBS[CUR]():""}
-function go(v){if(!TITLES[v])v="dash";CUR=v;$$(".tab").forEach(t=>{t.classList.toggle("on",t.dataset.v==v);if(t.dataset.v==v&&innerWidth<=760)t.scrollIntoView({inline:"nearest",block:"nearest"})});Object.keys(TITLES).forEach(x=>$("#v-"+x).hidden=x!=v);
+function go(v){if(!TITLES[v])v="dash";CUR=v;$$(".tab").forEach(t=>{t.classList.toggle("on",t.dataset.v==v);});$("#more").classList.toggle("on",!!$(".tab.on:not(.nb)"));navMore(0);Object.keys(TITLES).forEach(x=>$("#v-"+x).hidden=x!=v);
   $("#v-title").textContent=TITLES[v];setSub();if(v=="props"){loadProps();PS.load()}if(v=="console"){renderConsole();setTimeout(()=>$("#cmd").focus(),50)}if(v=="metrics")charts.forEach(c=>c.draw());
-  if(v=="players")loadPlayers();if(v=="map")MAPF.show();if(v=="timeline")TLV.open();if(v=="dash")MAPM.show();if(v=="backups")BK.load();if(v=="access")ACV.load();if(v=="audit")RGV.load();if(v=="account")ACC.load();location.hash=v}
-$$(".tab").forEach(t=>t.onclick=()=>go(t.dataset.v));$$("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
+  if(v=="players")loadPlayers();if(v=="map")MAPF.show();if(v=="timeline")TLV.open();if(v=="dash")MAPM.show();if(v=="backups")BK.load();if(v=="access")ACV.load();if(v=="audit")RGV.load();if(v=="account")ACC.load();location.hash=v;scrollTo(0,0)}
+$$(".tab").forEach(t=>t.onclick=()=>go(t.dataset.v));
+function navMore(o){$("nav").classList.toggle("open",o);$("#nav-bd").hidden=!o}
+$("#more").onclick=()=>navMore(!$("nav").classList.contains("open"));$("#nav-bd").onclick=()=>navMore(0);addEventListener("keydown",e=>{if(e.key=="Escape")navMore(0)});
+$$("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
 $("#logout").onclick=async e=>{const b=e.currentTarget;
   if(!b.classList.contains("ask")){b.classList.add("ask");clearTimeout(b._t);b._t=setTimeout(()=>b.classList.remove("ask"),3000);return}
   await fetch("/logout",{method:"POST",headers:{"X-CSRF":BOOT.csrf}});location.href="/"};
@@ -920,15 +937,19 @@ function hudRow(kind,val,max,extra){const n=10;let h="";const hc=P.hardcore&&kin
   if(kind=="heart"&&extra>0)for(let i=0;i<Math.ceil(extra/2);i++)h+="<img src='/hud/heart_absorbing_"+hc+(extra-i*2>=2?"full":"half")+".png'>";
   return "<div class='hud "+kind+"'>"+h+"</div>"}
 const SLOT_PH={head:"empty_armor_slot_helmet",chest:"empty_armor_slot_chestplate",legs:"empty_armor_slot_leggings",feet:"empty_armor_slot_boots",offhand:"empty_armor_slot_shield"};
-function slotHTML(it,ph,sel){if(!it)return "<div class='slot"+(sel?" sel":"")+"'>"+(ph?"<img class=ph src='/icon/"+ph+".png?v=3' onerror=\"this.remove()\">":"")+"</div>";
+function slotHTML(it,ph,sel){if(!it)return "<div class='slot"+(sel?" sel":"")+"'>"+(ph?"<img class=ph src='/icon/"+ph+".png?v=4' onerror=\"this.remove()\">":"")+"</div>";
   const tip=encodeURIComponent(JSON.stringify({n:it.name,e:it.ench,g:it.glint,d:it.dmg,m:it.max,id:it.id,c:it.count}));
   const dur=it.max&&it.dmg>0?"<div class=dur><b style='width:"+(100*(1-it.dmg/it.max))+"%;background:hsl("+Math.round(120*(1-it.dmg/it.max))+",90%,45%)'></b></div>":"";
-  const glint=it.glint?"<div class=glint style=\"-webkit-mask-image:url('/icon/"+it.id+".png?v=3');mask-image:url('/icon/"+it.id+".png?v=3')\"></div>":"";
-  return "<div class='slot"+(sel?" sel":"")+"' data-tip='"+tip+"'><img src='/icon/"+it.id+".png?v=3' onerror=\"this.outerHTML='<div class=fb>"+esc(it.name.slice(0,10))+"</div>'\">"+glint+dur+(it.count>1?"<span class=cnt>"+it.count+"</span>":"")+"</div>"}
+  const glint=it.glint?"<div class=glint style=\"-webkit-mask-image:url('/icon/"+it.id+".png?v=4');mask-image:url('/icon/"+it.id+".png?v=4')\"></div>":"";
+  return "<div class='slot"+(sel?" sel":"")+"' data-tip='"+tip+"'><img src='/icon/"+it.id+".png?v=4' alt='"+esc(it.name.slice(0,10))+"' onerror='icoErr(this)'>"+glint+dur+(it.count>1?"<span class=cnt>"+it.count+"</span>":"")+"</div>"}
+/* a failed icon gets one more try (a phone can drop image loads), then its name */
+function icoErr(i){if(!i.dataset.r){i.dataset.r=1;setTimeout(()=>i.src+="&r=1",800)}else i.outerHTML="<div class=fb>"+esc(i.alt)+"</div>"}
+/* only when it changed: rewriting the same inventory on every live update reloads every icon */
+function setHTML(el,h){if(el._h!==h){el._h=h;el.innerHTML=h}}
 function invGrid(items,slots,sel){const by={};items.forEach(i=>by[i.slot]=i);return slots.map(s=>s==="gap"?"<div class=gap></div>":slotHTML(by[s],null,s===sel)).join("")}
 function range(a,b){const r=[];for(let i=a;i<=b;i++)r.push(i);return r}
 function dur2(sec){const d=Math.floor(sec/86400),h=Math.floor(sec%86400/3600),m=Math.floor(sec%3600/60);return d?_t("%s d %s h",d,h):h?h+" h "+m+" min":m+" min"}
-function topList(title,rows){return "<div><h4>"+title+"</h4><ol>"+(rows.length?rows.map(r=>"<li><img src='/icon/"+r[2]+".png?v=3' onerror=\"this.style.visibility='hidden'\">"+esc(r[0])+"<span>"+r[1].toLocaleString(LOC)+"</span></li>").join(""):"<li style='color:var(--mute)'>"+_t("none")+"</li>")+"</ol></div>"}
+function topList(title,rows){return "<div><h4>"+title+"</h4><ol>"+(rows.length?rows.map(r=>"<li><img src='/icon/"+r[2]+".png?v=4' onerror=\"this.style.visibility='hidden'\">"+esc(r[0])+"<span>"+r[1].toLocaleString(LOC)+"</span></li>").join(""):"<li style='color:var(--mute)'>"+_t("none")+"</li>")+"</ol></div>"}
 function renderPlayer(first){const d=P.cur;if(!d)return;const box=$("#pl-detail");
   if(first||!$("#scene")){box.innerHTML="<div class='card'><div class=pl-head><div><h2 id=pl-name></h2><div class=pl-meta id=pl-meta></div></div><div class=pos id=pl-pos></div></div>"+
     "<div class=pl-top><div class=viewer id=viewer><div class=shadow></div><div class=scene id=scene></div><div class=hint>"+_t("drag to rotate")+"</div></div><div class=vitals id=pl-vitals></div></div></div>"+
@@ -947,9 +968,9 @@ function renderPlayer(first){const d=P.cur;if(!d)return;const box=$("#pl-detail"
     (fx?"<div class=vrow><span class=lbl>"+_t("Effects")+"</span><div class=effects>"+fx+"</div></div>":"")+
     (d.fire?"<div class=vrow><span class=lbl></span><span class='badge dead'>"+_t("ON FIRE")+"</span></div>":"")+(d.air<300?"<div class=vrow><span class=lbl>"+_t("Air")+"</span><span class=num>"+Math.max(0,Math.round(d.air/30))+"/10</span></div>":"");
   const eq=d.equipment||{};
-  $("#pl-inv").innerHTML="<div class='inv armor'>"+["head","chest","legs","feet"].map(s=>slotHTML(eq[s],SLOT_PH[s])).join("")+"<div class=gap></div>"+slotHTML(eq.offhand,SLOT_PH.offhand)+"</div>"+
-    "<div class=inv>"+invGrid(d.inventory||[],[...range(9,35),"gap",...range(0,8)],d.selected)+"</div>";
-  $("#pl-ender").innerHTML=invGrid(d.ender||[],range(0,26));
+  setHTML($("#pl-inv"),"<div class='inv armor'>"+["head","chest","legs","feet"].map(s=>slotHTML(eq[s],SLOT_PH[s])).join("")+"<div class=gap></div>"+slotHTML(eq.offhand,SLOT_PH.offhand)+"</div>"+
+    "<div class=inv>"+invGrid(d.inventory||[],[...range(9,35),"gap",...range(0,8)],d.selected)+"</div>");
+  setHTML($("#pl-ender"),invGrid(d.ender||[],range(0,26)));
   if(d.stats){const s=d.stats.summary;$("#pl-stats").innerHTML="<div class=stats>"+[
     [dur2(s.play_time),_t("play time")],[s.deaths,_t("deaths")],[s.mob_kills.toLocaleString(LOC),_t("mobs killed")],[nf(s.distance_km,1)+" km",_t("travelled")],
     [nf(s.damage_dealt/2,0)+" ❤",_t("damage dealt")],[nf(s.damage_taken/2,0)+" ❤",_t("damage taken")],[s.jumps.toLocaleString(LOC),_t("jumps")],[d.stats.advancements,_t("advancements")]]
@@ -996,7 +1017,7 @@ class WorldMap{
     this.markers=[];this.spawn=null;this.follow=null;this.loaded=false;this.centered=false;
     el.innerHTML="<div class=wm-world><div class=wm-tiles></div><div class=wm-marks></div><div class=wm-players></div></div><div class=wm-empty></div>"+(mini?"":
       "<div class=wm-ui style='left:10px;top:10px'><select class=dimsel>"+Object.entries(DIMNAMES).map(([k,v])=>"<option value="+k+">"+v+"</option>").join("")+"</select>"+
-      "<button data-a=home title='"+_t("Center")+"'>⌂</button><button data-a=zin title='"+_t("Zoom in")+"'>+</button><button data-a=zout title='"+_t("Zoom out")+"'>−</button></div><div class=wm-coord>"+_t("move the mouse over the map")+"</div><div class=wm-legend></div>");
+      "<button data-a=home title='"+_t("Center")+"'>⌂</button><button data-a=zin title='"+_t("Zoom in")+"'>+</button><button data-a=zout title='"+_t("Zoom out")+"'>−</button></div><div class=wm-coord>"+(matchMedia("(pointer:coarse)").matches?_t("Drag to move, pinch to zoom"):_t("move the mouse over the map"))+"</div><div class=wm-legend></div>");
     this.world=el.querySelector(".wm-world");this.tiles=el.querySelector(".wm-tiles");this.marks=el.querySelector(".wm-marks");this.players=el.querySelector(".wm-players");this.empty=el.querySelector(".wm-empty");
     if(mini)el.addEventListener("click",()=>go("map"));else this.bind();
     new ResizeObserver(()=>this.apply()).observe(el)}
