@@ -490,7 +490,7 @@
  "Too many attempts: try again in 15 minutes.": "Troppi tentativi: riprova tra 15 minuti.",
  "Too many backups at once (max %d)": "Troppi backup in una volta (max %d)",
  "Too many markers.": "Troppi segnaposti.",
- "Top-down view · drag, pinch, long-press for a marker": "Vista dall'alto · trascina, pizzica, tieni premuto per un segnaposto",
+ "Top-down view · drag, pinch to zoom": "Vista dall'alto · trascina, pizzica per zoomare",
  "Top-down view · drag, zoom, right-click for a marker": "Vista dall'alto · trascina, zooma, tasto destro per un segnaposto",
  "Total RAM": "RAM totale",
  "Turn it on below": "Attivalo qui sotto",

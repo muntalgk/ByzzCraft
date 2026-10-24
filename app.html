@@ -700,7 +700,7 @@ function renderMe(){const f=$("#me-face");const me=BOOT.mc&&(P.roster||[]).find(
   if(me){if(f.dataset.u!=me.uuid){f.dataset.u=me.uuid;f.className="me-face fc";f.style.cssText=faceStyle(me.uuid,32);f.textContent=""}}
   else if(!f.dataset.u)f.textContent=(BOOT.mc||BOOT.user).charAt(0).toUpperCase()}
 const TITLES={dash:"Dashboard",map:_t("Map"),players:_t("Players"),timeline:"Timeline",metrics:_t("Metrics"),console:"Console",props:_t("Server settings"),backups:"Backup",access:_t("Access"),audit:_t("Panel log"),account:_t("Account")};
-const SUBS={dash:()=>_t("Live server and world status"),map:()=>matchMedia("(pointer:coarse)").matches?_t("Top-down view · drag, pinch, long-press for a marker"):_t("Top-down view · drag, zoom, right-click for a marker"),
+const SUBS={dash:()=>_t("Live server and world status"),map:()=>matchMedia("(pointer:coarse)").matches?_t("Top-down view · drag, pinch to zoom"):_t("Top-down view · drag, zoom, right-click for a marker"),
   players:()=>{const r=P.roster||[],n=r.filter(p=>p.online).length;return _t("%s players recorded",r.length)+" · "+(n?_t("%s online",n):_t("nobody online"))},
   timeline:()=>_t("Play sessions and events from the server logs"),metrics:()=>_t("PC and server · last 10 minutes, one point every 2 seconds"),console:()=>_t("Live log and RCON commands"),props:()=>_t("server.properties · every save backs up the file"),access:()=>_t("Whitelist, operators and bans"),audit:()=>_t("Who did what in the panel"),account:()=>BOOT.admin?_t("Your password and the panel users"):_t("Your password"),
   backups:()=>BK.items?_t("%s backups",BK.items.length)+" · "+gb(BK.items.reduce((a,e)=>a+e.size,0))+" · "+_t("%s free on disk",gb(BK.disk.free)):_t("World copies, schedule and restore")};
@@ -1126,17 +1126,17 @@ class WorldMap{
   bind(){const el=this.el,pts=new Map();let start=null,moved=false;
     const snap=()=>{start={tx:this.tx,ty:this.ty,s:this.s,pts:new Map([...pts].map(([k,v])=>[k,{...v}]))}};
     el.addEventListener("pointerdown",e=>{if(e.target.closest(".wm-ui,.wm-legend,.wm-pop,.wm-mk"))return;if(e.button==2)return;el.setPointerCapture(e.pointerId);pts.set(e.pointerId,{x:e.clientX,y:e.clientY});moved=false;snap();this.closePop();
-      if(e.pointerType!="mouse"){clearTimeout(this.lp);const p={x:e.clientX,y:e.clientY};this.lp=setTimeout(()=>{if(!moved&&pts.size==1)this.addAt(p)},650)}});
+});
     el.addEventListener("pointermove",e=>{this.cursor(e);if(!pts.has(e.pointerId)||!start)return;pts.set(e.pointerId,{x:e.clientX,y:e.clientY});const ids=[...pts.keys()];
       if(ids.length==1){const a=start.pts.get(ids[0]),b=pts.get(ids[0]);if(!a)return;const dx=b.x-a.x,dy=b.y-a.y;if(Math.abs(dx)+Math.abs(dy)>5){moved=true;this.follow=null}
         if(moved){this.tx=start.tx+dx;this.ty=start.ty+dy;this.apply()}}
       else{const [i,j]=ids,a1=start.pts.get(i),a2=start.pts.get(j),b1=pts.get(i),b2=pts.get(j);if(!a1||!a2)return;moved=true;this.follow=null;
         const r=el.getBoundingClientRect(),ns=this.clamp(start.s*Math.hypot(b1.x-b2.x,b1.y-b2.y)/Math.max(1,Math.hypot(a1.x-a2.x,a1.y-a2.y)));
         const wx=((a1.x+a2.x)/2-r.left-start.tx)/start.s,wz=((a1.y+a2.y)/2-r.top-start.ty)/start.s;this.s=ns;this.tx=(b1.x+b2.x)/2-r.left-wx*ns;this.ty=(b1.y+b2.y)/2-r.top-wz*ns;this.apply()}});
-    const up=e=>{clearTimeout(this.lp);pts.delete(e.pointerId);snap();if(moved)this.legend()};
+    const up=e=>{pts.delete(e.pointerId);snap();if(moved)this.legend()};
     el.addEventListener("pointerup",up);el.addEventListener("pointercancel",up);
     el.addEventListener("wheel",e=>{e.preventDefault();const r=el.getBoundingClientRect();this.zoomAt(e.clientX-r.left,e.clientY-r.top,e.deltaY<0?1.25:.8)},{passive:false});
-    el.addEventListener("contextmenu",e=>{e.preventDefault();if(!e.target.closest(".wm-ui,.wm-legend,.wm-pop"))this.addAt({x:e.clientX,y:e.clientY})});
+    el.addEventListener("contextmenu",e=>{e.preventDefault();if(!matchMedia("(pointer:coarse)").matches&&!e.target.closest(".wm-ui,.wm-legend,.wm-pop"))this.addAt({x:e.clientX,y:e.clientY})});   /* markers are added from a computer, not from the phone */
     el.querySelectorAll("[data-dim]").forEach(b=>b.onclick=e=>{e.stopPropagation();if(b.dataset.dim==this.dim)return;this.follow=null;this.load(b.dataset.dim).then(()=>{this.home();this.legend()})});
     el.querySelectorAll(".wm-ui [data-a]").forEach(b=>b.onclick=e=>{e.stopPropagation();const W=el.clientWidth/2,H=el.clientHeight/2;
       if(b.dataset.a=="zin")this.zoomAt(W,H,1.5);if(b.dataset.a=="zout")this.zoomAt(W,H,1/1.5);if(b.dataset.a=="home"){this.follow=null;this.s=1;this.home()}})}
