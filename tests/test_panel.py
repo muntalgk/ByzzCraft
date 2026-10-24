@@ -36,6 +36,32 @@ try:
     check("crash report after stop_requested is a crash", run_update(True))
     check("stop_requested without crash report is a clean stop", not run_update(False))
 
+    # force stop while starting: during the backup it waits, during the loading it is a stop, not a failed start
+    c = panel.ServerControl()
+    c.state, c.preparing = "starting", True
+    ok, msg = c.kill("test")
+    check("force stop during the pre-start backup is refused", not ok and c.state == "starting", msg)
+    import subprocess
+    c.preparing = False
+    c.proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=os.name != "nt")
+    ok, _ = c.kill("test")
+    c.proc.wait(timeout=20)
+    check("force stop while loading: off, no start error", ok and c.state == "off" and c.start_error is None, (ok, c.state))
+
+    # BungeeCord/Velocity forward the real UUIDs: no offline UUIDs then
+    check("no proxy config: not forwarded", not panel.uuid_forwarded())
+    with open(j(srv_dir, "spigot.yml"), "w") as f:
+        f.write("settings:\n  bungeecord: true\n")
+    check("spigot.yml bungeecord: forwarded", panel.uuid_forwarded())
+    os.remove(j(srv_dir, "spigot.yml"))
+    os.makedirs(j(srv_dir, "config"))
+    with open(j(srv_dir, "config", "paper-global.yml"), "w") as f:
+        f.write("proxies:\n  velocity:\n    enabled: true\n    online-mode: true\n")
+    check("paper-global.yml velocity: forwarded", panel.uuid_forwarded())
+    with open(j(srv_dir, "config", "paper-global.yml"), "w") as f:
+        f.write("proxies:\n  velocity:\n    enabled: false\n")
+    check("velocity disabled: not forwarded", not panel.uuid_forwarded())
+
     # automatic RAM: half of the machine, never above 80% of the free memory, at least 512 MB
     for mem, want in (((900, 1990), "720M"), ((300, 960), "512M"), ((16000, 32000), "4096M")):
         panel.system_memory = lambda mem=mem: mem

@@ -1,21 +1,50 @@
-# ByzzCraft
+<p align="center">
+  <img src="assets/logo.svg" alt="Logo di ByzzCraft" width="128">
+</p>
 
-[![tests](https://github.com/muntalgk/byzzcraft/actions/workflows/tests.yml/badge.svg)](https://github.com/muntalgk/byzzcraft/actions/workflows/tests.yml)
-
-Pannello web self-hosted per un server Minecraft Java (vanilla, Paper o Fabric). Accendi il server dal
-telefono, guarda chi è online e dove si trova, controlla l'inventario, fai il backup del mondo. Solo la
-libreria standard di Python: nessuna dipendenza, nessun database. Legge i file del server e gli parla via RCON.
-
-[Read me in English](README.md)
+<h1 align="center">ByzzCraft</h1>
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.jpg" alt="Dashboard" width="49%">
-  <img src="docs/screenshots/map.jpg" alt="Map" width="49%">
+  <b>Pannello web self-hosted per il tuo server Minecraft Java</b><br>
+  vanilla · Paper · Fabric &nbsp;—&nbsp; Windows · Linux · Docker
 </p>
+
 <p align="center">
-  <img src="docs/screenshots/settings.jpg" alt="Settings" width="49%">
-  <img src="docs/screenshots/phone.jpg" alt="Dashboard on a phone" width="22%">
+  <a href="https://github.com/muntalgk/ByzzCraft/actions/workflows/tests.yml"><img alt="test" src="https://github.com/muntalgk/ByzzCraft/actions/workflows/tests.yml/badge.svg"></a>
+  <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white">
+  <img alt="Nessuna dipendenza" src="https://img.shields.io/badge/dipendenze-nessuna-3fb950">
+  <a href="LICENSE"><img alt="Licenza MIT" src="https://img.shields.io/badge/licenza-MIT-3fb950"></a>
 </p>
+
+<p align="center"><a href="README.md">Read me in English</a></p>
+
+Accendi il server dal telefono, guarda chi è online e dove si trova, controlla l'inventario, fai il backup del mondo.
+Solo la libreria standard di Python: nessuna dipendenza, nessun database. Legge i file del server e gli parla via RCON.
+
+## Screenshot
+
+<table>
+  <tr>
+    <td colspan="2" width="70%">
+      <img src="docs/screenshots/dashboard.jpg" alt="Dashboard">
+      <p align="center"><b>Dashboard</b> · stato, giocatori online, CPU, RAM e tick in tempo reale</p>
+    </td>
+    <td rowspan="2" width="30%" align="center">
+      <img src="docs/screenshots/phone.jpg" alt="La dashboard sul telefono">
+      <p align="center"><b>Sul telefono</b> · aggiungilo alla schermata Home, si apre come un'app</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="35%">
+      <img src="docs/screenshots/map.jpg" alt="Mappa">
+      <p align="center"><b>Mappa</b> · mondo esplorato, giocatori e segnaposto</p>
+    </td>
+    <td width="35%">
+      <img src="docs/screenshots/settings.jpg" alt="Impostazioni">
+      <p align="center"><b>Impostazioni</b> · server.properties e pannello, dal browser</p>
+    </td>
+  </tr>
+</table>
 
 ## Cosa fa
 
@@ -64,7 +93,7 @@ altro sulla rete può prendersi l'admin. Se il link non si apre proprio, il fire
 `sudo ufw allow 8765/tcp`. Link perso? `grep setup= data/logs/byzzcraft.log`.
 
 Poi fai in modo che resti acceso quando chiudi SSH e dopo un riavvio (il comando stampa un'unit systemd per il
-tuo utente e la tua cartella):
+tuo utente e la tua cartella; lancia `panel.py` col tuo utente normale, solo `tee` vuole `sudo`):
 
 ```bash
 python3 panel.py service | sudo tee /etc/systemd/system/byzzcraft.service

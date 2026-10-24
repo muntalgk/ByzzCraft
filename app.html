@@ -21,8 +21,8 @@ button{font:inherit;color:inherit}
 /* ---------- nav ---------- */
 nav{background:linear-gradient(180deg,#16191f,#111318);border-right:1px solid var(--line);padding:18px 12px 14px;display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:100vh;overflow-y:auto}
 .brand{display:flex;align-items:center;gap:12px;margin:2px 4px 16px}
-.logo{width:44px;height:44px;border-radius:12px;flex:none;display:grid;place-items:center;background:radial-gradient(circle at 50% 30%,#2d4d2f,#15201a 62%,#101418);border:1px solid #2c3a2e;box-shadow:inset 0 1px 0 #ffffff14,0 6px 18px -6px #3fb95066}
-.logo svg{width:28px;height:28px}
+.logo{width:44px;height:44px;flex:none;filter:drop-shadow(0 6px 12px #3fb95040)}
+.logo svg{width:100%;height:100%;display:block}
 .brand .bt{min-width:0}.brand b{display:block;font-size:14.5px;line-height:1.25;font-weight:650;letter-spacing:-.005em}
 .brand small{display:flex;align-items:center;gap:5px;color:var(--mute);font-size:12px;margin-top:2px}.brand small img{width:11px;height:11px;image-rendering:pixelated}
 .nav-sec{margin:16px 12px 6px;font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#686d77}
@@ -1284,7 +1284,7 @@ $("#rg-mode").onclick=async e=>{const b=e.target.closest("button");if(!b)return;
   if(!m)return;const r=await fetch("/api/syslog?file="+m);if(!r.ok)return;const box=$("#rg-sys"),ls=(await r.json()).lines;
   box.innerHTML=ls.length?ls.map(l=>"<div class='l"+(/ ERROR | WARNING |Exception|Error:/.test(l)?" err":"")+"'><span class=m>"+esc(l)+"</span></div>").join(""):esc(_t("Empty."));box.scrollTop=box.scrollHeight};
 
-connect();loadRoster();HL.load();
+connect();loadRoster();   /* health: loaded by the "init" event of connect() */
 function fromHash(){const h=location.hash.slice(1);const v=h in TITLES&&(BOOT.admin||!["console","props","backups","access","audit"].includes(h))?h:"dash";if($("#v-"+v).hidden||!h||!fromHash.done){fromHash.done=true;go(v)}}
 window.addEventListener("hashchange",fromHash);fromHash();
 </script>

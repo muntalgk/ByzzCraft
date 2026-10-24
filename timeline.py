@@ -335,14 +335,19 @@ class Timeline:
             size = os.path.getsize(self.panel_log)
             if size == self._panel.get("size"):
                 return False
+            # only the new lines: the file grows forever. No "pos" (old cache) or a shorter file: from the start
+            pos = self._panel.get("pos", 0)
+            if size < pos:
+                pos = 0
             with open(self.panel_log, "rb") as f:
+                f.seek(pos)
                 data = f.read()
         except OSError:
             return False
         cut = data.rfind(b"\n")
         if cut < 0:
             return False
-        evs = []
+        evs = self._panel.get("events", []) if pos else []
         for ln in self._decode_lines(data[:cut + 1]):
             e = ACT.parse(ln)
             if not e or (e["cat"] == "login" and e["level"] == "warn") or "passw" in e["raw"].lower():
@@ -350,7 +355,7 @@ class Timeline:
             who = tr("panel") if e["user"] == "panel" else e["user"]   # system user
             txt = (who + " " if who else "") + e["text"]
             evs.append(_mk(e["t"], "panel", None, txt, {"cat": e["cat"]}))
-        self._panel = {"size": size, "events": evs}
+        self._panel = {"size": size, "pos": pos + cut + 1, "events": evs}
         return True
 
     # ------------------------------------------------------------ API

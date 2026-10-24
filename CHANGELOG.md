@@ -15,6 +15,13 @@
 - Windows: hints for PowerShell; automatic backups too big for the Recycle Bin are deleted.
 - Root warning on the Dashboard.
 - Login lock per address only.
+- New cartoon "BC" logo and icons; README with logo, badges and a screenshot gallery.
+- Skins: offline-mode players and a Mojang outage no longer slow the pages (default skin cached for 6 hours).
+- Timeline reads only the new lines of panel.log.
+- Windows: no cmd windows flashing; the Dashboard asks for its checks once per page load.
+- Force stop while starting: no false "start failed", and a clear message during the pre-start backup.
+- BungeeCord/Velocity: real UUIDs kept for whitelist changes with the server off.
+- Setup from another device warns that "Only this machine" locks it out.
 
 Upgrading a Docker install from 1.0.0:
 - stop the Minecraft server from the panel first: the old container cannot stop it cleanly yet;

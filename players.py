@@ -1,5 +1,5 @@
 """Player data for the panel: NBT from the files, SNBT from RCON, statistics, icons and skins."""
-import base64, gzip, json, os, re, struct, threading, time, urllib.request
+import base64, gzip, json, os, re, shutil, struct, threading, time, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 from paths import ASSETS, CACHE  # noqa: E402
@@ -351,7 +351,8 @@ def icon_path(iid):
             break
         seen.add(iid)
         p = _icon_lookup(iid)
-    _ICON_CACHE[orig] = p
+    if p:   # only hits: names from the URL are arbitrary, and the icons may arrive later
+        _ICON_CACHE[orig] = p
     return p
 
 
@@ -379,6 +380,8 @@ def skin(uuid):
         fresh = os.path.exists(png) and time.time() - os.path.getmtime(png) < 6 * 3600
         if not fresh:
             try:
+                if uuid[14] != "4":   # offline-mode UUID (version 3): Mojang has no skin for it
+                    raise ValueError("offline UUID")
                 req = urllib.request.Request("https://sessionserver.mojang.com/session/minecraft/profile/" + uuid.replace("-", ""),
                                              headers={"User-Agent": UA})
                 prof = json.load(urllib.request.urlopen(req, timeout=6))
@@ -388,10 +391,14 @@ def skin(uuid):
                 open(png, "wb").write(data)
                 json.dump({"slim": (tex.get("metadata") or {}).get("model") == "slim"}, open(meta, "w"))
             except Exception:  # noqa: BLE001 - offline or a profile without a skin: the default one is used
-                if not os.path.exists(png):
+                # cached like a real skin (or the old one kept), so Mojang is not asked again for 6 hours
+                if os.path.exists(png):
+                    os.utime(png)
+                else:
                     slim = int(uuid.replace("-", "")[-1], 16) % 2 == 1
                     default = os.path.join(ASSETS, "skin", "slim_alex.png" if slim else "wide_steve.png")
-                    return open(default, "rb").read(), slim
+                    shutil.copyfile(default, png)
+                    json.dump({"slim": slim}, open(meta, "w"))
         slim = False
         try:
             slim = json.load(open(meta)).get("slim", False)

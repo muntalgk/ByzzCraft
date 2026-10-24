@@ -1,21 +1,50 @@
-# ByzzCraft
+<p align="center">
+  <img src="assets/logo.svg" alt="ByzzCraft logo" width="128">
+</p>
 
-[![tests](https://github.com/muntalgk/byzzcraft/actions/workflows/tests.yml/badge.svg)](https://github.com/muntalgk/byzzcraft/actions/workflows/tests.yml)
-
-A self-hosted web panel for a Minecraft Java server (vanilla, Paper or Fabric). Start the server from your
-phone, see who is online and where, check their inventory, back up the world. Python standard library only:
-no dependencies, no database. It reads the server's own files and talks to it over RCON.
-
-[Leggimi in italiano](README.it.md)
+<h1 align="center">ByzzCraft</h1>
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.jpg" alt="Dashboard" width="49%">
-  <img src="docs/screenshots/map.jpg" alt="Map" width="49%">
+  <b>A self-hosted web panel for your Minecraft Java server</b><br>
+  vanilla · Paper · Fabric &nbsp;—&nbsp; Windows · Linux · Docker
 </p>
+
 <p align="center">
-  <img src="docs/screenshots/settings.jpg" alt="Settings" width="49%">
-  <img src="docs/screenshots/phone.jpg" alt="Dashboard on a phone" width="22%">
+  <a href="https://github.com/muntalgk/ByzzCraft/actions/workflows/tests.yml"><img alt="tests" src="https://github.com/muntalgk/ByzzCraft/actions/workflows/tests.yml/badge.svg"></a>
+  <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white">
+  <img alt="No dependencies" src="https://img.shields.io/badge/dependencies-none-3fb950">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-3fb950"></a>
 </p>
+
+<p align="center"><a href="README.it.md">Leggimi in italiano</a></p>
+
+Start the server from your phone, see who is online and where, check their inventory, back up the world.
+Python standard library only: no dependencies, no database. It reads the server's own files and talks to it over RCON.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td colspan="2" width="70%">
+      <img src="docs/screenshots/dashboard.jpg" alt="Dashboard">
+      <p align="center"><b>Dashboard</b> · status, players online, CPU, RAM and tick time, live</p>
+    </td>
+    <td rowspan="2" width="30%" align="center">
+      <img src="docs/screenshots/phone.jpg" alt="The dashboard on a phone">
+      <p align="center"><b>On your phone</b> · add it to the Home screen, it opens like an app</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="35%">
+      <img src="docs/screenshots/map.jpg" alt="Map">
+      <p align="center"><b>Map</b> · explored world, players and markers</p>
+    </td>
+    <td width="35%">
+      <img src="docs/screenshots/settings.jpg" alt="Settings">
+      <p align="center"><b>Settings</b> · server.properties and panel, from the browser</p>
+    </td>
+  </tr>
+</table>
 
 ## What it does
 
@@ -65,7 +94,7 @@ all, the firewall blocks the port: `sudo ufw allow 8765/tcp`. Lost the link?
 `grep setup= data/logs/byzzcraft.log`.
 
 Then keep the panel running after you close SSH and after a reboot (the command prints a systemd unit for
-your user and folder):
+your user and folder; run `panel.py` as your normal user, only `tee` needs `sudo`):
 
 ```bash
 python3 panel.py service | sudo tee /etc/systemd/system/byzzcraft.service

@@ -692,10 +692,14 @@ class ServerControl:
             java = self.last_pid if self.state in ("on", "stopping") and pid_alive(self.last_pid) else None
             child = self.proc.pid if self.proc and self.proc.poll() is None else None   # java, or the script with its java
             if self.state == "off" or not (java or child):
+                if self.preparing:   # starting, still in the backup: Java is not there yet
+                    return False, t("Wait for it to finish: %s in progress.") % (backup_busy() or t("backup operation")).lower()
                 return False, t("The server is not running.")
             self.stop_requested, self.restart_pending = True, False
             if self.state == "on":
                 self.state = "stopping"
+            elif self.state == "starting":
+                self.state = "off"   # stopped on purpose: not a failed start
             for pid, group in ((java, False), (child, True)):
                 if not pid:
                     continue
@@ -916,6 +920,19 @@ def world_watcher():
         time.sleep(15)
 
 
+def uuid_forwarded():
+    """A BungeeCord/Velocity proxy in front: the server gets the real UUIDs even with online-mode=false."""
+    def has(name, rx):
+        try:
+            with open(os.path.join(CFG["server_dir"], name), encoding="utf-8", errors="replace") as f:
+                return re.search(rx, f.read()) is not None
+        except OSError:
+            return False
+    velocity = r"velocity(?:-support)?:\s*\n\s+enabled:\s*true"
+    return (has("spigot.yml", r"(?m)^\s*bungeecord:\s*true") or has(os.path.join("config", "paper-global.yml"), velocity)
+            or has("paper.yml", velocity))
+
+
 def access_action(who, action, name, reason):
     """Whitelist / op / ban / kick. Returns (ok, message)."""
     st = SRV.state
@@ -939,7 +956,7 @@ def access_action(who, action, name, reason):
     else:
         try:
             prof = AC.resolve(CFG["server_dir"], action, name, known={p["uuid"]: p["name"] for p in roster()},
-                             offline=server_props().get("online-mode") == "false")
+                             offline=server_props().get("online-mode") == "false" and not uuid_forwarded())
             with LOCK:   # start() takes the same LOCK: the server cannot start while we write the files
                 if SRV.state != "off" or pid_alive(SRV.last_pid):
                     return False, t("The server has just started: try again, the change now goes through the server.")
@@ -1256,8 +1273,8 @@ def note_fail(keys):
 LOGIN_CSS = """
 :root{--bg:#0f1115;--card:#171a20;--line:#272b33;--text:#f0efec;--mute:#9a9ea6;--accent:#3fb950}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(1200px 600px at 50% -10%,#1d2a1f 0,var(--bg) 60%);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-main{width:100%;max-width:400px;padding:16px}.logo{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;margin-bottom:18px;background:radial-gradient(circle at 50% 30%,#2d4d2f,#15201a 62%,#101418);border:1px solid #2c3a2e;box-shadow:inset 0 1px 0 #ffffff14,0 8px 22px -6px #3fb95066}
-.logo svg{width:32px;height:32px}
+main{width:100%;max-width:400px;padding:16px}.logo{width:64px;height:64px;margin-bottom:18px;filter:drop-shadow(0 8px 16px #3fb95040)}
+.logo svg{width:100%;height:100%;display:block}
 h1{font-size:22px;margin:0 0 4px}p{color:var(--mute);margin:0 0 20px;font-size:14px}
 form{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px}
 label{display:block;font-size:13px;color:var(--mute);margin:12px 0 6px}
@@ -1370,7 +1387,8 @@ def setup_page(error="", form=None, token="", remote=False):
         e(t("Minecraft server folder")), e(sd), chk(f.get("new_server") == "1" or not has_jar and not os.path.exists(os.path.join(sd, "server.properties"))),
         e(t("No server yet: download the latest Minecraft server into this folder")),
         e(t("Language")), opts, e(t("Admin user")), e(f.get("user", "")), e(t("Password (at least 10 characters)")), e(t("Repeat the password")),
-        e(t("Who can open the panel")), chk(not network), e(t("Only this machine (then Tailscale, nginx or an SSH tunnel)")),
+        e(t("Who can open the panel")), chk(not network), e(t("Only this machine (then Tailscale, nginx or an SSH tunnel)"))
+        + (" " + e(t("- from this device the panel will not open any more after the setup")) if remote else ""),
         chk(network), e(t("My home network: http://%s:%d (no HTTPS: fine at home, not on the internet)") % (lan_ip(), CFG["port"])),
         chk(f.get("java", "1") == "1"), e(t("Download Java automatically if it is missing")),
         e(t("I accept the Minecraft")), e(t("Set up the panel")), e(t("Downloads can take a minute.")), err)
