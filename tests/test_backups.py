@@ -1,4 +1,4 @@
-import ctypes, os, shutil, sys, tempfile, time, zipfile, traceback
+import ctypes, json, os, shutil, sys, tempfile, time, zipfile, traceback
 from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # cartella pannello
@@ -97,11 +97,11 @@ def run():
     b = mk(s, st)
     l = b.list()
     kinds = {e["name"]: e["kind"] for e in l}
-    check("list kinds", kinds == {"world_2026-10-19_14-39-35.zip": "avvio", "auto_2026-10-19_15-00-00.zip": "programmato",
-          "manuale_2026-10-19_16-00-00.zip": "manuale", "prima-di-survival_x.zip": "altro", "world_old": "mondo"}, kinds)
+    check("list kinds", kinds == {"world_2026-10-19_14-39-35.zip": "startup", "auto_2026-10-19_15-00-00.zip": "scheduled",
+          "manuale_2026-10-19_16-00-00.zip": "manual", "prima-di-survival_x.zip": "other", "world_old": "world"}, kinds)
     check("list ignora .part", not any(e["name"].endswith(".part") for e in l))
     check("list ordine", l[0]["mtime"] >= l[-1]["mtime"])
-    old = [e for e in l if e["kind"] == "mondo"][0]
+    old = [e for e in l if e["kind"] == "world"][0]
     check("size cartella", old["size"] == 13 and old["id"] == "mondi-vecchi/world_old", old)
     d = b.disk(); check("disk", d["free"] > 0 and d["total"] >= d["free"])
     check("status base", b.status()["busy"] is None and b.status()["schedule"]["every_hours"] == 2)
@@ -120,16 +120,16 @@ def run():
     hs = lock_exclusive(os.path.join(s, "world", "session.lock"))
     try:
         # un file illeggibile (diverso da session.lock) fa fallire il backup, non lo salta
-        raises("create con file bloccato fallisce", OSError, b.create, "manuale", False)
+        raises("create con file bloccato fallisce", OSError, b.create, "manual", False)
         check("errore nomina il file", "locked.dat" in (b.status()["last_error"] or ""), b.status()["last_error"])
         check("niente zip parziale", not [x for x in os.listdir(os.path.join(s, "backups")) if x.endswith(".part") or x.startswith(".tmp")])
         r = Rcon(); time.sleep(1.1)
-        raises("create on con file bloccato fallisce", OSError, b.create, "manuale", True, r)
+        raises("create on con file bloccato fallisce", OSError, b.create, "manual", True, r)
         check("save-on anche se la copia fallisce", r.calls[-1] == "save-on", r.calls)
         unlock(hl); hl = None
         time.sleep(1.1)
-        e = b.create("manuale", server_on=False, note="nota prova")
-        check("create off nome", e["name"].startswith("manual_") and e["kind"] == "manuale" and e["note"] == "nota prova", e)
+        e = b.create("manual", server_on=False, note="nota prova")
+        check("create off nome", e["name"].startswith("manual_") and e["kind"] == "manual" and e["note"] == "nota prova", e)
         with zipfile.ZipFile(b.path(e["id"])) as z:
             n = z.namelist()
         check("zip ha world/level.dat", "world/level.dat" in n, n)
@@ -142,9 +142,9 @@ def run():
         # ---------- create server acceso
         r = Rcon()
         time.sleep(1.1)
-        e2 = b.create("programmato", server_on=True, rcon=r)
+        e2 = b.create("scheduled", server_on=True, rcon=r)
         check("rcon ordine", r.calls == ["save-off", "save-all flush", "save-on"], r.calls)
-        check("nome auto_", e2["name"].startswith("auto_") and e2["kind"] == "programmato", e2)
+        check("nome auto_", e2["name"].startswith("auto_") and e2["kind"] == "scheduled", e2)
         with zipfile.ZipFile(b.path(e2["id"])) as z:
             n2 = z.namelist()
         check("zip on: world/level.dat", "world/level.dat" in n2)
@@ -154,7 +154,7 @@ def run():
         # zip che fallisce: save-on comunque, pulizia
         r = Rcon(); b._zip_world = lambda *a, **k: (_ for _ in ()).throw(OSError("zip rotto"))
         time.sleep(1.1)
-        raises("create zip fallito", OSError, b.create, "manuale", True, r)
+        raises("create zip fallito", OSError, b.create, "manual", True, r)
         check("save-on dopo zip fallito", r.calls == ["save-off", "save-all flush", "save-on"], r.calls)
         check("last_error", "zip rotto" in (b.status()["last_error"] or ""))
         check("busy rilasciato", b.status()["busy"] is None)
@@ -162,11 +162,11 @@ def run():
         del b._zip_world
         # flush fallisce -> save-on lo stesso
         r = Rcon(); r.fail_on = "save-all flush"
-        raises("flush fallito", RuntimeError, b.create, "manuale", True, r)
+        raises("flush fallito", RuntimeError, b.create, "manual", True, r)
         check("save-on dopo flush fallito", r.calls == ["save-off", "save-all flush", "save-on"], r.calls)
         # save-off fallisce -> save-on lo stesso
         r = Rcon(); r.fail_on = "save-off"
-        raises("save-off fallito", RuntimeError, b.create, "manuale", True, r)
+        raises("save-off fallito", RuntimeError, b.create, "manual", True, r)
         check("save-on dopo save-off fallito", r.calls[-1] == "save-on", r.calls)
     finally:
         if hl:
@@ -205,24 +205,24 @@ def run():
         mkzip(os.path.join(s, "backups", "manuale_%s.zip" % ts), ["world/level.dat"], base + i * 100)
     mkzip(os.path.join(s, "backups", "altro1.zip"), ["world/level.dat"], base)
     write(os.path.join(s, "mondi-vecchi", "w1", "level.dat"))
-    names = sorted(e["name"] for e in b.list() if e["kind"] == "avvio")
+    names = sorted(e["name"] for e in b.list() if e["kind"] == "startup")
     b.pin("backups/" + names[0], True); b.pin("backups/" + names[1], True)  # i 2 piu vecchi fissati
-    cfg = b.set_schedule({"keep": {"avvio": 2, "programmato": 0, "manuale": 0}})
-    check("set_schedule keep", cfg["keep"]["avvio"] == 2 and cfg["every_hours"] == 2)
+    cfg = b.set_schedule({"keep": {"startup": 2, "scheduled": 0, "manual": 0}})
+    check("set_schedule keep", cfg["keep"]["startup"] == 2 and cfg["every_hours"] == 2)
     rem = b.prune()
-    left = sorted(e["name"] for e in b.list() if e["kind"] == "avvio")
+    left = sorted(e["name"] for e in b.list() if e["kind"] == "startup")
     check("prune: rimossi 2 (6-2 fissati-2 tenuti)", len(rem) == 2, rem)
     check("prune: tiene fissati + 2 recenti", left == names[:2] + names[-2:], (left, names))
-    check("prune: manuali intatti", len([e for e in b.list() if e["kind"] == "manuale"]) == 6)
-    check("prune: altro/mondo intatti", any(e["kind"] == "altro" for e in b.list()) and any(e["kind"] == "mondo" for e in b.list()))
+    check("prune: manuali intatti", len([e for e in b.list() if e["kind"] == "manual"]) == 6)
+    check("prune: altro/mondo intatti", any(e["kind"] == "other" for e in b.list()) and any(e["kind"] == "world" for e in b.list()))
     check("prune: disco", all(not os.path.exists(os.path.join(s, "backups", os.path.basename(r))) for r in rem))
-    b.set_schedule({"keep": {"manuale": 3}})
-    rem = b.prune(); check("prune manuale 3", len(rem) == 3 and len([e for e in b.list() if e["kind"] == "manuale"]) == 3, rem)
+    b.set_schedule({"keep": {"manual": 3}})
+    rem = b.prune(); check("prune manuale 3", len(rem) == 3 and len([e for e in b.list() if e["kind"] == "manual"]) == 3, rem)
     check("prune idempotente", b.prune() == [])
 
     # ---------- validazione schedule
     for bad in [{"every_hours": 49}, {"every_hours": -1}, {"every_hours": "x"}, {"daily_at": "25:00"}, {"daily_at": "4pm"},
-                {"keep": {"avvio": 201}}, {"keep": {"avvio": -1}}, "no", {"every_hours": True}]:
+                {"keep": {"startup": 201}}, {"keep": {"startup": -1}}, "no", {"every_hours": True}]:
         raises("schedule invalido %r" % (bad,), ValueError, b.set_schedule, bad)
     c = b.set_schedule({"every_hours": 0, "daily_at": "", "only_when_online": False})
     check("schedule normalizzato", c["every_hours"] == 0 and c["daily_at"] == "" and c["only_when_online"] is False)
@@ -239,30 +239,30 @@ def run():
         th = b._sched_thread
         if th: th.join(20)
     b.tick(T, True, 1, r); wait()
-    check("tick: primo tick non esegue", not [e for e in b.list() if e["kind"] == "programmato"])
+    check("tick: primo tick non esegue", not [e for e in b.list() if e["kind"] == "scheduled"])
     b.tick(T + 3600, True, 1, r); wait()
-    check("tick: dopo 1h no", not [e for e in b.list() if e["kind"] == "programmato"])
+    check("tick: dopo 1h no", not [e for e in b.list() if e["kind"] == "scheduled"])
     b.tick(T + 7300, True, 0, r); wait()
-    check("tick: senza giocatori no", not [e for e in b.list() if e["kind"] == "programmato"])
+    check("tick: senza giocatori no", not [e for e in b.list() if e["kind"] == "scheduled"])
     b.tick(T + 7300, False, 1, r); wait()
-    check("tick: server spento no (intervallo)", not [e for e in b.list() if e["kind"] == "programmato"])
+    check("tick: server spento no (intervallo)", not [e for e in b.list() if e["kind"] == "scheduled"])
     b.tick(T + 7300, True, 1, r); wait()
-    check("tick: dopo 2h con giocatori esegue", len([e for e in b.list() if e["kind"] == "programmato"]) == 1)
+    check("tick: dopo 2h con giocatori esegue", len([e for e in b.list() if e["kind"] == "scheduled"]) == 1)
     check("tick: rcon usato", r.calls == ["save-off", "save-all flush", "save-on"], r.calls)
     check("tick: last_scheduled", b.status()["last_scheduled"] == T + 7300)
     time.sleep(1.1)
     b.tick(T + 7300 + 3600, True, 1, r); wait()
-    check("tick: subito dopo no", len([e for e in b.list() if e["kind"] == "programmato"]) == 1)
+    check("tick: subito dopo no", len([e for e in b.list() if e["kind"] == "scheduled"]) == 1)
     check("next_scheduled", abs(b.status()["next_scheduled"] - (T + 7300 + 7200)) < 1)
     b.set_schedule({"only_when_online": False})
     time.sleep(1.1)
     b.tick(T + 7300 + 7300, True, 0, r); wait()
-    check("tick: only_when_online off", len([e for e in b.list() if e["kind"] == "programmato"]) == 2)
+    check("tick: only_when_online off", len([e for e in b.list() if e["kind"] == "scheduled"]) == 2)
     # keep nel tick
-    b.set_schedule({"keep": {"programmato": 1}})
+    b.set_schedule({"keep": {"scheduled": 1}})
     time.sleep(1.1)
     b.tick(T + 40000, True, 0, r); wait()
-    check("tick: prune tiene 1 programmato", len([e for e in b.list() if e["kind"] == "programmato"]) == 1,
+    check("tick: prune tiene 1 programmato", len([e for e in b.list() if e["kind"] == "scheduled"]) == 1,
           [e["name"] for e in b.list()])
 
     # ---------- tick giornaliero
@@ -272,7 +272,7 @@ def run():
     b.tick(d1, False, 0, None); wait()
     check("daily: prima dell'orario no", not b.list())
     b.tick(datetime(2026, 10, 21, 4, 30).timestamp(), False, 0, None); wait()
-    check("daily: dopo l'orario a server spento", len(b.list()) == 1 and b.list()[0]["kind"] == "programmato")
+    check("daily: dopo l'orario a server spento", len(b.list()) == 1 and b.list()[0]["kind"] == "scheduled")
     time.sleep(1.1)
     b.tick(datetime(2026, 10, 21, 5, 0).timestamp(), False, 0, None); wait()
     check("daily: non due volte nello stesso giorno", len(b.list()) == 1)
@@ -354,21 +354,21 @@ def run():
     real_du = B.shutil.disk_usage
     B.shutil.disk_usage = lambda p: real_du(p)._replace(free=100 * 1024 * 1024)   # 100 MB liberi
     try:
-        msg = raises("backup senza spazio", ValueError, b.create, "manuale", False)
+        msg = raises("backup senza spazio", ValueError, b.create, "manual", False)
         check("messaggio spazio", "disk space" in msg, msg)
         check("niente zip a meta'", not [x for x in os.listdir(os.path.join(s, "backups")) if x.endswith(".part")])
         raises("ripristino senza spazio", ValueError, b.restore, "backups/x.zip", False)
         check("mondo intatto", open(os.path.join(s, "world", "level.dat"), "rb").read() == b"LEVEL-ORIG")
     finally:
         B.shutil.disk_usage = real_du
-    check("con spazio il backup va", b.create("manuale", False)["kind"] == "manuale")
+    check("con spazio il backup va", b.create("manual", False)["kind"] == "manual")
 
     # ---------- Paper: Nether ed End accanto al mondo (world_nether, world_the_end)
     root, s, st = fresh(); b = mk(s, st)
     write(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), b"NETHER")
     write(os.path.join(s, "world_the_end", "DIM1", "region", "r.0.0.mca"), b"END")
     for on in (False, True):   # a server spento e acceso (copia temporanea)
-        e = b.create("manuale", on, Rcon() if on else None)
+        e = b.create("manual", on, Rcon() if on else None)
         names = zipfile.ZipFile(os.path.join(s, "backups", e["name"])).namelist()
         check("paper: zip con tre cartelle (on=%s)" % on, "world_nether/DIM-1/region/r.0.0.mca" in names
               and "world_the_end/DIM1/region/r.0.0.mca" in names and "world/level.dat" in names, names)
@@ -387,10 +387,15 @@ def run():
     b.restore("backups/vanilla.zip", False)
     check("paper: nether attuale intatto", open(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), "rb").read() == b"NETHER-NUOVO")
 
+    # ---------- state file from before 1.0: Italian kind names in the retention rules
+    with open(st, "w", encoding="utf-8") as f:
+        json.dump({"schedule": {"keep": {"avvio": 3, "programmato": 4, "manuale": 5}}}, f)
+    check("old retention keys", mk(s, st).status()["schedule"]["keep"] == {"startup": 3, "scheduled": 4, "manual": 5})
+
     # ---------- operazione in corso: Busy, non un errore che rimanda di 15 minuti
     b._op_lock.acquire()
     try:
-        raises("busy", B.Busy, b.create, "manuale", False)
+        raises("busy", B.Busy, b.create, "manual", False)
         b._run_scheduled("interval", time.time(), False, None)
         check("busy: si riprova al giro dopo", b._retry_at is None)
     finally:

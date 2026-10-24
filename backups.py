@@ -20,12 +20,13 @@ else:
 
 TS_FMT = "%Y-%m-%d_%H-%M-%S"
 OLD_DIRS = ("old-worlds", "mondi-vecchi")   # dove vanno i mondi sostituiti; il secondo e' il nome prima della 1.0, solo letto
-KINDS_KEEP = ("avvio", "programmato", "manuale")
+KINDS_KEEP = ("startup", "scheduled", "manual")
+OLD_KINDS = {"avvio": "startup", "programmato": "scheduled", "manuale": "manual"}   # names in state files from before 1.0
 DEFAULT_SCHEDULE = {
     "every_hours": 2,
     "only_when_online": True,
     "daily_at": "04:00",
-    "keep": {"avvio": 10, "programmato": 12, "manuale": 0},
+    "keep": {"startup": 10, "scheduled": 12, "manual": 0},
 }
 CHUNK = 1024 * 1024
 SPACE_MARGIN = 512 * 1024 * 1024   # resta sempre libero: il server deve poter salvare il mondo anche dopo un backup
@@ -48,12 +49,12 @@ def _mb(n):
 
 def _kind_of_zip(name):
     if name.startswith("world_"):
-        return "avvio"
+        return "startup"
     if name.startswith("auto_"):
-        return "programmato"
+        return "scheduled"
     if name.startswith(("manual_", "manuale_")):
-        return "manuale"
-    return "altro"
+        return "manual"
+    return "other"
 
 
 def _rmtree(p):
@@ -319,7 +320,7 @@ class Backups:
                 except OSError:
                     continue
                 i = folder + "/" + n
-                out.append({"id": i, "name": n, "folder": folder, "kind": "mondo",
+                out.append({"id": i, "name": n, "folder": folder, "kind": "world",
                             "size": self._folder_size(p, mt), "mtime": mt,
                             "pinned": i in pinned, "note": notes.get(i, "")})
         out.sort(key=lambda e: e["mtime"], reverse=True)
@@ -432,6 +433,7 @@ class Backups:
             k = cfg["keep"]
             if not isinstance(k, dict):
                 raise ValueError(tr("Invalid retention"))
+            k = {OLD_KINDS.get(kind, kind): v for kind, v in k.items()}
             for kind in KINDS_KEEP:
                 if kind in k:
                     out["keep"][kind] = self._int_in(k[kind], 0, 200, tr("How many to keep (%s)") % kind)
@@ -447,8 +449,8 @@ class Backups:
         return res
 
     # ------------------------------------------------------------ creazione
-    def create(self, kind="manuale", server_on=False, rcon=None, note=""):
-        prefix = {"manuale": "manual", "programmato": "auto", "auto": "auto", "avvio": "world"}.get(kind)
+    def create(self, kind="manual", server_on=False, rcon=None, note=""):
+        prefix = {"manual": "manual", "scheduled": "auto", "auto": "auto", "startup": "world"}.get(kind)
         if prefix is None:
             raise ValueError(tr("Invalid backup type"))
         if server_on and rcon is None:
@@ -683,7 +685,7 @@ class Backups:
 
     def _run_scheduled(self, why, now, server_on, rcon):
         try:
-            self.create("programmato", server_on=server_on, rcon=rcon if server_on else None)
+            self.create("scheduled", server_on=server_on, rcon=rcon if server_on else None)
         except Exception as ex:  # noqa: BLE001
             # last_error è già salvato da create; non conta come fatto: si riprova tra 15 minuti
             if not isinstance(ex, Busy):

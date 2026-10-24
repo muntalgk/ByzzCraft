@@ -12,7 +12,7 @@ import sys
 import threading
 import time
 
-import registro as RG
+import activity as ACT
 import i18n
 from i18n import t as tr
 
@@ -341,7 +341,7 @@ class Timeline:
             return False
         evs = []
         for ln in self._decode_lines(data[:cut + 1]):
-            e = RG.parse(ln)
+            e = ACT.parse(ln)
             if not e or (e["cat"] == "login" and e["level"] == "warn") or "passw" in e["raw"].lower():
                 continue
             who = tr("panel") if e["user"] == "panel" else e["user"]   # utente di sistema

@@ -25,8 +25,8 @@ import players as PL  # noqa: E402
 import mapgen  # noqa: E402
 import timeline as TL  # noqa: E402
 import backups as BK  # noqa: E402
-import accessi as AC  # noqa: E402
-import registro as RG  # noqa: E402
+import access as AC  # noqa: E402
+import activity as ACT  # noqa: E402
 import assets as AS  # noqa: E402
 import runtime as RT  # noqa: E402
 import i18n  # noqa: E402
@@ -180,7 +180,7 @@ def log(msg):
         with open(CFG["log_file"], "a", encoding="utf-8") as f:
             f.write(line + "\n")
         AUDIT.append(line)
-    HUB.publish("audit", {"line": line, "entry": RG.parse(line)}, admin_only=True)
+    HUB.publish("audit", {"line": line, "entry": ACT.parse(line)}, admin_only=True)
 
 
 _LOOP_ERR = {}
@@ -625,7 +625,7 @@ class ServerControl:
         if self.preparing:
             try:
                 BACKUPS.world_dir = world_dir()
-                BACKUPS.create("avvio")
+                BACKUPS.create("startup")
             except Exception as e:  # noqa: BLE001  (si parte lo stesso, come faceva lo script)
                 log("panel: backup before start failed (%s)" % e)
                 HUB.publish("notice", {"ok": False, "message": t("World backup before the start failed: %s") % e})
@@ -1891,8 +1891,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(200, {"users": [{"name": n, "admin": bool(u.get("admin")), "mc": u.get("mc") or (CFG.get("user_mc") or {}).get(n, ""),
                                               "me": n == s["user"]} for n, u in sorted(load_users().items())]})
         if path == "/api/audit":
-            entries = RG.read(CFG["log_file"])
-            items, total, counts = RG.query(entries, cat=q.get("cat", [""])[0] or None,
+            entries = ACT.read(CFG["log_file"])
+            items, total, counts = ACT.query(entries, cat=q.get("cat", [""])[0] or None,
                                             user=q.get("user", [""])[0] or None, q=q.get("q", [""])[0][:80],
                                             offset=qint(q, "offset", 0, 0, 10 ** 7), limit=qint(q, "limit", 100, 1, 500))
             return self.json(200, {"entries": items, "total": total, "counts": counts,   # utenti dal log: anche i cancellati
@@ -2128,7 +2128,7 @@ class Handler(BaseHTTPRequestHandler):
                         return self.json(200, {"ok": False, "message": t("The server is starting or stopping: try again shortly.")})
                     OP_PENDING.set()
                 BACKUPS.world_dir = world_dir()
-                backup_job(who, "manual backup", lambda: BACKUPS.create("manuale", st == "on", backup_rcon, note),
+                backup_job(who, "manual backup", lambda: BACKUPS.create("manual", st == "on", backup_rcon, note),
                            lambda e: t("Backup ready: %s (%s MB).") % (e["name"], round(e["size"] / 1048576)), t("Manual backup failed: %s"))
                 return self.json(200, {"ok": True, "message": t("Backup started: the server stays on.") if st == "on" else t("Backup started.")})
             if op == "restore":

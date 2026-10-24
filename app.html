@@ -555,7 +555,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
           <label class="f" for="bk-daily">{{Daily backup (even with the server off)}}</label>
           <div style="display:flex;gap:8px;align-items:center"><label class="toggle"><input type="checkbox" id="bk-daily-on">{{ at}}</label><input type="time" id="bk-daily" style="flex:1"></div>
           <label class="f">{{How many to keep (0 = all)}}</label>
-          <div class="keep"><div><small>{{Pre-start}}</small><input type="number" id="bk-k-avvio" min="0" max="200"></div><div><small>{{Scheduled}}</small><input type="number" id="bk-k-programmato" min="0" max="200"></div><div><small>{{Manual}}</small><input type="number" id="bk-k-manuale" min="0" max="200"></div></div>
+          <div class="keep"><div><small>{{Pre-start}}</small><input type="number" id="bk-k-startup" min="0" max="200"></div><div><small>{{Scheduled}}</small><input type="number" id="bk-k-scheduled" min="0" max="200"></div><div><small>{{Manual}}</small><input type="number" id="bk-k-manual" min="0" max="200"></div></div>
           <p class="note">{{Extra ones go to the trash, oldest first. Pinned backups (star) are never touched, nor are old worlds.}}</p>
           <button class="btn primary" id="bk-save" style="width:100%;justify-content:center;margin-top:6px">{{Save schedule}}</button>
         </div>
@@ -1073,7 +1073,7 @@ $("#tl-clear").onclick=()=>{TLV.sess=null;$("#tl-clear").hidden=true;TLV.renderS
 $("#tl-more").onclick=()=>TLV.load(false);
 
 /* ---------------- backup ---------------- */
-const KIND={avvio:[_t("Pre-start"),"#3987e5"],programmato:[_t("Scheduled"),"#3fb950"],manuale:[_t("Manual"),"#d4a017"],mondo:[_t("Old world"),"#9a5cff"],altro:[_t("Other"),"#8b8f98"]};
+const KIND={startup:[_t("Pre-start"),"#3987e5"],scheduled:[_t("Scheduled"),"#3fb950"],manual:[_t("Manual"),"#d4a017"],world:[_t("Old world"),"#9a5cff"],other:[_t("Other"),"#8b8f98"]};
 const SV=p=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>';
 const BI={zip:SV('<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/>'),
   dir:SV('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
@@ -1095,7 +1095,7 @@ const BK={items:null,disk:null,st:null,f:"",dirty:false,
     $("#bk-filter").innerHTML=[["",_t("All"),it.length],...Object.keys(KIND).filter(k=>cnt[k]).map(k=>[k,KIND[k][0],cnt[k]])]
       .map(([k,l,n])=>"<button data-k='"+k+"' class='"+(this.f==k?"on":"")+"'>"+esc(l)+" <span style='opacity:.6'>"+n+"</span></button>").join("");
     const rows=it.filter(e=>!this.f||e.kind==this.f);const busy=!!(this.st&&this.st.busy);
-    $("#bk-list").innerHTML=rows.length?rows.map(e=>{const k=KIND[e.kind]||KIND.altro,id=esc(e.id),zip=e.folder=="backups";
+    $("#bk-list").innerHTML=rows.length?rows.map(e=>{const k=KIND[e.kind]||KIND.other,id=esc(e.id),zip=e.folder=="backups";
       return "<div class='bk"+(e.pinned?" pin":"")+"'><div class='ic' style='background:"+k[1]+"22;color:"+k[1]+"'>"+(zip?BI.zip:BI.dir)+"</div>"
         +"<div class='tx'><b title='"+esc(e.name)+"'>"+esc(e.note||e.name)+"</b><small><span class='kb' style='color:"+k[1]+";border-color:"+k[1]+"55'>"+k[0]+"</span>"
         +new Date(e.mtime*1000).toLocaleString(LOC,{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})+" · "+bkAgo(e.mtime)+" · "+gb(e.size)
@@ -1127,7 +1127,7 @@ const BK={items:null,disk:null,st:null,f:"",dirty:false,
     $("#bk-next-h").textContent=(parts.length?parts.join(" · ").replace(/^./,x=>x.toUpperCase()):_t("Turn it on below"))+(st.last_scheduled?" · "+_t("last %s",bkAgo(st.last_scheduled)):"")},
   fillSched(){if(this.dirty||!this.st)return;const c=this.st.schedule;$("#bk-every").value=String(c.every_hours);if(!$("#bk-every").value){const o=document.createElement("option");o.value=o.textContent=c.every_hours;$("#bk-every").append(o);$("#bk-every").value=String(c.every_hours)}
     $("#bk-online").checked=c.only_when_online;$("#bk-daily-on").checked=!!c.daily_at;$("#bk-daily").value=c.daily_at||"04:00";$("#bk-daily").disabled=!c.daily_at;
-    ["avvio","programmato","manuale"].forEach(k=>$("#bk-k-"+k).value=c.keep[k])},
+    ["startup","scheduled","manual"].forEach(k=>$("#bk-k-"+k).value=c.keep[k])},
   async act(a,id,btn){const e=this.items.find(x=>x.id==id);if(!e)return;
     if(a=="pin"){const j=await api("/api/backups/pin",{id,pinned:!e.pinned});toast(j.message,j.ok?"good":"bad");this.load()}
     if(a=="del"){if(!btn.classList.contains("ask")){btn.classList.add("ask");btn.textContent=_t("Delete?");clearTimeout(btn._t);btn._t=setTimeout(()=>this.render(),3000);return}
@@ -1146,7 +1146,7 @@ const BK={items:null,disk:null,st:null,f:"",dirty:false,
     setTimeout(()=>inp.focus(),30)},
   async create(){const b=$("#bk-create");b.disabled=true;const j=await api("/api/backups/create",{note:$("#bk-note").value});toast(j.message,j.ok?"good":"bad");if(j.ok)$("#bk-note").value="";else b.disabled=false},
   async save(){const c={every_hours:+$("#bk-every").value,only_when_online:$("#bk-online").checked,daily_at:$("#bk-daily-on").checked?$("#bk-daily").value:"",
-    keep:{avvio:+$("#bk-k-avvio").value,programmato:+$("#bk-k-programmato").value,manuale:+$("#bk-k-manuale").value}};
+    keep:{startup:+$("#bk-k-startup").value,scheduled:+$("#bk-k-scheduled").value,manual:+$("#bk-k-manual").value}};
     const j=await api("/api/backups/schedule",{schedule:c});toast(j.message,j.ok?"good":"bad");if(j.ok){this.dirty=false;this.load()}}};
 $("#bk-filter").onclick=e=>{const b=e.target.closest("button");if(!b)return;BK.f=b.dataset.k;BK.render()};
 $("#bk-list").onclick=e=>{const b=e.target.closest("button[data-a]");if(b&&!b.disabled)BK.act(b.dataset.a,b.dataset.id,b)};
@@ -1217,9 +1217,9 @@ $("#ac-name").onkeydown=e=>{if(e.key=="Enter")$("#ac-add").click()};
 
 /* ---------------- registro del pannello ---------------- */
 const RCAT={server:["Server","#3fb950",'<path d="M12 3v8M6.3 7.3a8 8 0 1 0 11.4 0"/>'],login:["Login","#3987e5",'<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/>'],
-  console:["Console","#9085e9",'<path d="M4 17l6-5-6-5M12 19h8"/>'],impostazioni:[_t("Settings"),"#d4a017",'<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>'],
-  giocatori:[_t("Players"),"#d55181",'<path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6z"/>'],backup:["Backup","#199e70",'<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/>'],
-  mappa:[_t("Map"),"#c98500",'<path d="M12 21s-6-5.7-6-11a6 6 0 0 1 12 0c0 5.3-6 11-6 11z"/><circle cx="12" cy="10" r="2"/>'],sistema:[_t("System"),"#8b8f98",'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>']};
+  console:["Console","#9085e9",'<path d="M4 17l6-5-6-5M12 19h8"/>'],settings:[_t("Settings"),"#d4a017",'<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>'],
+  players:[_t("Players"),"#d55181",'<path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6z"/>'],backup:["Backup","#199e70",'<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/>'],
+  map:[_t("Map"),"#c98500",'<path d="M12 21s-6-5.7-6-11a6 6 0 0 1 12 0c0 5.3-6 11-6 11z"/><circle cx="12" cy="10" r="2"/>'],system:[_t("System"),"#8b8f98",'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>']};
 const RGV={items:[],total:0,counts:{},cat:"",user:"",q:"",loaded:false,mc:{},
   async load(more){const p=new URLSearchParams({limit:100,offset:more?this.items.length:0});if(this.cat)p.set("cat",this.cat);if(this.user)p.set("user",this.user);if(this.q)p.set("q",this.q);
     const req=this.req=(this.req||0)+1;   // vale solo la risposta all'ultima richiesta (ricerca mentre si scrive)
@@ -1234,7 +1234,7 @@ const RGV={items:[],total:0,counts:{},cat:"",user:"",q:"",loaded:false,mc:{},
     $("#rg-cats").innerHTML="<button data-c='' class='"+(this.cat?"":"on")+"'>"+_t("Everything")+" <span style='opacity:.6'>"+all+"</span></button>"+Object.keys(RCAT).filter(k=>this.counts[k]).map(k=>
       "<button data-c='"+k+"' class='"+(this.cat==k?"on":"")+"'>"+RCAT[k][0]+" <span style='opacity:.6'>"+this.counts[k]+"</span></button>").join("");
     let last="",h="";for(const e of this.items){const dl=dayLabel(e.t);if(dl!=last){h+="<div class='day'>"+esc(dl)+"</div>";last=dl}
-      const c=RCAT[e.cat]||RCAT.sistema,d=e.detail;let det="";
+      const c=RCAT[e.cat]||RCAT.system,d=e.detail;let det="";
       if(d&&typeof d=="object"&&d.key)det="<div class='diff'><code>"+esc(d.key)+"</code><span class='old'>"+esc(d.old)+"</span>→<code>"+esc(d.new)+"</code></div>";
       else if(d&&typeof d=="object"&&d.cmd!=null)det="<div class='diff'><code>/"+esc(d.cmd)+"</code></div>";else if(d)det="<small>"+esc(d)+"</small>";
       h+="<div class='re "+(e.level||"")+"'><div class='ic' style='background:"+c[1]+"22;color:"+c[1]+"' title='"+c[0]+"'>"+SV(c[2])+"</div>"
