@@ -1364,7 +1364,7 @@ def setup_page(error="", form=None, token="", remote=False):
     e = html.escape
     err = '<p class="err">%s</p>' % e(error) if error else ""
     lang = f.get("lang", i18n.LANG)
-    opts = "".join("<option value=%s%s>%s</option>" % (k, " selected" if k == lang else "", v) for k, v in (("en", "English"), ("it", "Italiano")))
+    opts = "".join("<option value=%s%s>%s</option>" % (k, " selected" if k == lang else "", LANG_NAMES.get(k, k)) for k in languages())
     sd = f.get("server_dir", guess_server_dir() or os.environ.get("BYZZ_SERVER_DIR") or os.path.join(os.path.expanduser("~"), "minecraft"))
     network = f.get("network", "1" if remote else "") == "1"
     has_jar = bool(sd) and bool(AS.find_jar(sd))
@@ -1423,10 +1423,16 @@ def panel_settings():
     java = RT.java_for(need)[0]
     return {**{k: CFG.get(k, DEFAULTS.get(k)) for k in PANEL_KEYS}, "ram_auto": auto_ram(), "ram_total": round(system_memory()[1]),
             "jar": server_jar(), "java": java, "java_need": need, "start_script": CFG.get("start_script") or "",
-            "java_bundled": bool(java and java.startswith(RT.RUNTIME))}
+            "java_bundled": bool(java and java.startswith(RT.RUNTIME)), "langs": [[c, LANG_NAMES.get(c, c)] for c in languages()]}
 
 
-PANEL_KEYS = ("ram", "java_args", "backup_on_start", "auto_stop_minutes", "mc_address", "auto_restart")
+PANEL_KEYS = ("ram", "java_args", "backup_on_start", "auto_stop_minutes", "mc_address", "auto_restart", "lang")
+LANG_NAMES = {"en": "English", "it": "Italiano"}
+
+
+def languages():
+    """English plus one language per i18n/<code>.json."""
+    return ["en"] + sorted(f[:-5] for f in os.listdir(os.path.join(HERE, "i18n")) if f.endswith(".json"))
 
 
 def save_panel_settings(data, who):
@@ -1452,8 +1458,13 @@ def save_panel_settings(data, who):
     addr = str(data.get("mc_address", "")).strip()
     if len(addr) > 100 or re.search(r"[\s<>\"']", addr):
         raise ValueError(t("Invalid server address."))
+    lang = str(data.get("lang") or CFG["lang"])
+    if lang not in languages():
+        raise ValueError(t("Invalid request."))
+    if lang != CFG["lang"] and (SRV.state in ("starting", "stopping") or backup_busy() or OP_PENDING.is_set()):
+        raise ValueError(t("Change the language when the server is not starting or stopping and no backup is running."))
     new = {"ram": ram, "java_args": args, "backup_on_start": bool(data.get("backup_on_start")), "auto_stop_minutes": mins, "mc_address": addr,
-           "auto_restart": bool(data.get("auto_restart"))}
+           "auto_restart": bool(data.get("auto_restart")), "lang": lang}
     changed = [k for k in PANEL_KEYS if CFG.get(k, DEFAULTS.get(k)) != new[k]]
     if changed:
         save_config(new)
@@ -1479,7 +1490,7 @@ def do_setup(f):
         except Exception as e:  # noqa: BLE001
             L.exception("server download failed")
             return t("Could not download the Minecraft server: %s") % e
-    cfg = save_config({"server_dir": sd, "port": CFG["port"], "lang": f.get("lang") if f.get("lang") in ("en", "it") else "en",
+    cfg = save_config({"server_dir": sd, "port": CFG["port"], "lang": f.get("lang") if f.get("lang") in languages() else "en",
                        "listen": "0.0.0.0" if f.get("network") == "1" else "127.0.0.1", "java_auto": f.get("java") == "1"})
     i18n.load(cfg["lang"])   # this process still serves the first page, before the restart
     prepare_server(sd, f.get("eula") == "1")
@@ -1976,7 +1987,8 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         q = HUB.subscribe(s["admin"])
         try:
-            recent = [e for e in TLINE.events(limit=40) if s["admin"] or e.get("type") != "panel"][:25]
+            # what the dashboard feed shows, filtered before the cut: 25 console commands must not hide the server starts
+            recent = [e for e in TLINE.events(limit=0) if e["type"] != "chat" and (e["type"] != "panel" or s["admin"] and e["detail"].get("cat") == "server")][:25]
             admin0 = s["admin"]
             init = {"status": SRV.snapshot(), "metrics": list(METRICS), "heap": list(HEAP), "audit": list(AUDIT) if admin0 else [],
                     "console": list(CONSOLE) if admin0 else [], "timeline": recent,
@@ -2104,6 +2116,9 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as e:
                 return self.json(200, {"ok": False, "message": str(e)})
             HUB.publish("status", SRV.snapshot())
+            if "lang" in changed:   # every text, the timeline cache included, is translated once per process
+                threading.Thread(target=restart_soon, daemon=True).start()
+                return self.json(200, {"ok": True, "message": t("Saved: the panel restarts in the new language."), "restart": True})
             msg = t("Saved: the new RAM and Java flags apply at the next start.") if {"ram", "java_args"} & set(changed) else t("Saved.") if changed else t("No changes")
             return self.json(200, {"ok": True, "message": msg, "settings": panel_settings()})
         if self.path == "/api/users/save":
@@ -2290,7 +2305,7 @@ def cli(args):
         ap = argparse.ArgumentParser(prog="panel.py setup", description="First setup without a browser.")
         ap.add_argument("server_dir", help="Minecraft server folder (created with --new-server)")
         ap.add_argument("--admin", required=True, help="name of the first admin user")
-        ap.add_argument("--lang", default="en", choices=("en", "it"))
+        ap.add_argument("--lang", default="en", choices=languages())
         ap.add_argument("--network", action="store_true", help="open the panel to the home network (http://IP:%d)" % CFG["port"])
         ap.add_argument("--accept-eula", action="store_true", help="accept the Minecraft EULA (https://aka.ms/MinecraftEULA)")
         ap.add_argument("--new-server", action="store_true", help="download the latest Minecraft server if the folder has none")

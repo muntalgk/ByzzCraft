@@ -246,7 +246,7 @@ Dashboard warns when less than three backups would fit.
 | `java_args` | empty | extra Java flags (also in **Settings → Panel**) |
 | `backup_on_start` | `true` | back up the world before each start (without `start_script`) |
 | `listen`, `port` | `127.0.0.1`, `8765` | where the panel listens (`0.0.0.0` = home network) |
-| `lang` | chosen at setup | interface language: `en`, `it` |
+| `lang` | chosen at setup | interface language: `en`, `it` (also in **Settings → Panel**) |
 | `title` | `ByzzCraft` | name shown in the page |
 | `auto_stop_minutes` | `30` | stop the server after N minutes empty (0 = never) |
 | `mc_address` | | server address shown to players, with a copy button |

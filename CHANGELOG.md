@@ -15,7 +15,9 @@
 - Windows: hints for PowerShell; automatic backups too big for the Recycle Bin are deleted.
 - Root warning on the Dashboard.
 - Login lock per address only.
-- New cartoon "BC" logo and icons; README with logo, badges and a screenshot gallery.
+- New cartoon "BC" logo and icons; README with logo, badges and a screenshot gallery; new screenshots.
+- Language can be changed from **Settings → Panel** (the panel restarts in the new language).
+- Dashboard "Latest events" no longer goes empty after many console commands; no seams between map tiles.
 - Skins: offline-mode players and a Mojang outage no longer slow the pages (default skin cached for 6 hours).
 - Timeline reads only the new lines of panel.log.
 - Windows: no cmd windows flashing; the Dashboard asks for its checks once per page load.
