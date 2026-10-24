@@ -65,3 +65,4 @@ print(A.apply_offline(d, "wl_add", "Dinnerbone", profile=("61699b2e-d327-4a01-9f
 check("file assente = lista nuova", [e["name"] for e in A.snapshot(d)["whitelist"]] == ["Dinnerbone"])
 shutil.rmtree(d)
 print("PASS %d  FAIL %d" % (ok, fail))
+sys.exit(1 if fail else 0)

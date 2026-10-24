@@ -55,7 +55,7 @@ DEFAULTS = {
     "user_mc": {},                # utente del pannello -> nick Minecraft (faccia nella barra laterale)
     "update_check": True,         # una volta al giorno chiede a GitHub se c'e' una versione nuova
 }
-SESSION_HOURS = 12
+SESSION_SECONDS = 30 * 86400   # 30 giorni dall'ultimo uso: dal telefono non si rifa' il login ogni giorno
 PBKDF2_ROUNDS = 240_000
 MAX_FAILS, FAIL_WINDOW, LOCK_SECONDS = 5, 600, 900
 SAMPLE_SECONDS = 2
@@ -69,6 +69,8 @@ def load_config():
     cfg = dict(DEFAULTS)
     if os.path.exists(CONFIG_PATH):
         cfg.update(json.load(open(CONFIG_PATH, encoding="utf-8")))
+    if os.environ.get("BYZZ_LISTEN"):   # Docker: dentro il container si ascolta su tutte le interfacce
+        cfg["listen"] = os.environ["BYZZ_LISTEN"]
     for k in ("users_file", "log_file"):
         if not os.path.isabs(cfg[k]):
             cfg[k] = os.path.join(os.path.dirname(CONFIG_PATH), cfg[k])
@@ -1250,7 +1252,10 @@ button{width:100%;padding:13px;border:0;border-radius:10px;font-size:16px;font-w
 with open(os.path.join(HERE, "assets", "logo.svg"), encoding="utf-8") as _f:
     LOGO_SVG = _f.read().strip()
 # PNG e non SVG: Safari (anche sulla schermata Home dell'iPhone) non usa le icone SVG
-LOGO_ICON = "<link rel=icon type=image/png href=/favicon.ico><link rel=apple-touch-icon href=/apple-touch-icon.png>"
+# manifest e meta: dalla schermata Home del telefono si apre come un'app, senza la barra del browser
+LOGO_ICON = ("<link rel=icon type=image/png href=/favicon.ico><link rel=apple-touch-icon href=/apple-touch-icon.png>"
+             "<link rel=manifest href=/manifest.webmanifest><meta name=theme-color content='#0d0f13'>"
+             "<meta name=apple-mobile-web-app-capable content=yes><meta name=mobile-web-app-capable content=yes>")
 ICONS = {"/favicon.ico": "icon-32.png", "/apple-touch-icon.png": "icon-180.png"}
 
 
@@ -1322,7 +1327,7 @@ def setup_page(error="", form=None, token="", remote=False):
     err = '<p class="err">%s</p>' % e(error) if error else ""
     lang = f.get("lang", i18n.LANG)
     opts = "".join("<option value=%s%s>%s</option>" % (k, " selected" if k == lang else "", v) for k, v in (("en", "English"), ("it", "Italiano")))
-    sd = f.get("server_dir", guess_server_dir() or os.path.join(os.path.expanduser("~"), "minecraft"))
+    sd = f.get("server_dir", guess_server_dir() or os.environ.get("BYZZ_SERVER_DIR") or os.path.join(os.path.expanduser("~"), "minecraft"))
     network = f.get("network", "1" if remote else "") == "1"
     has_jar = bool(sd) and bool(AS.find_jar(sd))
     chk = lambda on: " checked" if on else ""
@@ -1449,6 +1454,13 @@ def do_setup(f):
 
 
 def port_free(port):
+    """Nessuno risponde su 127.0.0.1 e la porta si prende su tutte le interfacce. Il solo bind non basta su Windows:
+    un programma in ascolto su 127.0.0.1 senza SO_EXCLUSIVEADDRUSE non blocca un bind su 0.0.0.0."""
+    try:
+        socket.create_connection(("127.0.0.1", port), timeout=0.5).close()
+        return False
+    except OSError:
+        pass
     with socket.socket() as so:
         try:
             so.bind(("0.0.0.0", port))
@@ -1576,7 +1588,7 @@ def health():
          "script" if script and os.path.exists(os.path.join(HERE, "examples", CFG["start_script"])) else None),
         ("assets", AS.present(), t("Map textures and item icons are not downloaded yet."), "assets"),
         # systemd imposta INVOCATION_ID; su Windows pythonw (senza console) vuol dire avvio automatico, non da terminale
-        ("service", bool(os.environ.get("INVOCATION_ID")) or os.name == "nt" and (os.path.exists(STARTUP_CMD) or not sys.stdout),
+        ("service", bool(os.environ.get("INVOCATION_ID")) or os.path.exists("/.dockerenv") or os.name == "nt" and (os.path.exists(STARTUP_CMD) or not sys.stdout),
          t("The panel does not start by itself after a reboot."), None),
     ]
     sizes = [e["size"] for e in BACKUPS.list() if e.get("folder") == "backups"]
@@ -1658,6 +1670,7 @@ def app_page(sess):
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "byzzcraft"
+    timeout = 120   # una connessione ferma non tiene occupato un thread per sempre (gli eventi mandano un ping ogni 15 s)
     sys_version = ""
 
     def log_message(self, fmt, *args):
@@ -1680,7 +1693,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
-                         "connect-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'")
+                         "connect-src 'self'; img-src 'self' data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'")
 
     def send_file(self, path, name):
         size = os.path.getsize(path)
@@ -1715,6 +1728,9 @@ class Handler(BaseHTTPRequestHandler):
             u = load_users().get(s["user"])
             if u:  # utente ancora esistente: aggiorna anche il ruolo se e' cambiato
                 s["admin"] = bool(u.get("admin"))
+                if s["exp"] < time.time() + SESSION_SECONDS - 86400:
+                    s["exp"] = time.time() + SESSION_SECONDS
+                    save_sessions()
                 return key, s
         if key and SESSIONS.pop(key, None):
             save_sessions()
@@ -1768,7 +1784,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, setup_page(token=token, remote=not is_local(self)))
         if path == "/":
             _, s = self.session()
-            return self.send(200, app_page(s) if s else login_page())
+            if not s:
+                return self.send(200, login_page())
+            tok = SimpleCookie(self.headers.get("Cookie", ""))["sess"].value   # anche il cookie riparte da 30 giorni
+            return self.send(200, app_page(s), headers={"Set-Cookie": self.cookie(tok, SESSION_SECONDS)})
+        if path == "/manifest.webmanifest":
+            return self.send(200, json.dumps({"name": CFG["title"], "short_name": CFG["title"], "start_url": "/", "display": "standalone",
+                                              "background_color": "#0d0f13", "theme_color": "#0d0f13",
+                                              "icons": [{"src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png"}]}).encode(),
+                             "application/manifest+json")
         _, s = self.session()
         if not s:
             return self.json(401, {"error": "login"})
@@ -1937,10 +1961,10 @@ class Handler(BaseHTTPRequestHandler):
                 log("login failed for '%s' from %s" % (user[:32], client_id(self)))
                 return self.send(401, login_page(t("Wrong user or password.")))
             tok = secrets.token_urlsafe(32)
-            SESSIONS[tok_key(tok)] = {"user": user, "admin": bool(u.get("admin")), "csrf": secrets.token_urlsafe(24), "exp": time.time() + SESSION_HOURS * 3600}
+            SESSIONS[tok_key(tok)] = {"user": user, "admin": bool(u.get("admin")), "csrf": secrets.token_urlsafe(24), "exp": time.time() + SESSION_SECONDS}
             save_sessions()
             log("%s logged in from %s" % (user, client_id(self)))
-            return self.redirect("/", self.cookie(tok, SESSION_HOURS * 3600))
+            return self.redirect("/", self.cookie(tok, SESSION_SECONDS))
         tok, s = self.session()
         if self.path == "/logout":
             f = {k: v[0] for k, v in parse_qs(self.body()).items()}
@@ -2180,9 +2204,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, setup_page(err, f, f.get("token", ""), remote))
         name = f["user"].strip().lower()
         tok = secrets.token_urlsafe(32)
-        SESSIONS[tok_key(tok)] = {"user": name, "admin": True, "csrf": secrets.token_urlsafe(24), "exp": time.time() + SESSION_HOURS * 3600}
+        SESSIONS[tok_key(tok)] = {"user": name, "admin": True, "csrf": secrets.token_urlsafe(24), "exp": time.time() + SESSION_SECONDS}
         save_sessions()
-        self.redirect("/", self.cookie(tok, SESSION_HOURS * 3600))
+        self.redirect("/", self.cookie(tok, SESSION_SECONDS))
         threading.Thread(target=restart_soon, daemon=True).start()
 
 
@@ -2324,7 +2348,8 @@ def main():
         fw = ("Windows may ask to let Python through the firewall: allow it on private networks." if os.name == "nt" else
               "The firewall may block the port: sudo ufw allow %d/tcp" % port)
         L.info("ByzzCraft is not set up yet.\n  From your computer open:  http://%s:%d/?setup=%s\n  On this machine:          http://127.0.0.1:%d\n"
-               "  Page does not open? %s (a Tailscale IP of this machine works the same way)", lan_ip(), port, setup_token(), port, fw)
+               "  Page does not open? %s (a Tailscale IP of this machine works the same way)",
+               "IP-OF-THE-DOCKER-HOST" if os.path.exists("/.dockerenv") else lan_ip(), port, setup_token(), port, fw)
     srv.serve_forever()
 
 

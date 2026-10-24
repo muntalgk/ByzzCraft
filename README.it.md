@@ -68,6 +68,19 @@ python3 panel.py setup ~/minecraft --admin alex --lang it --new-server --network
 
 (Ci sono anche `--no-java` e `--help`; la password la chiede, oppure la legge da `PANEL_PASSWORD`.)
 
+### Con Docker
+
+```bash
+git clone https://github.com/muntalgk/byzzcraft.git
+cd byzzcraft
+docker compose up -d
+docker compose logs
+```
+
+Apri il link di configurazione dei log, con l'IP della macchina che fa girare Docker, e lascia `/minecraft` come
+cartella del server. Il pannello scarica server e Java nei due volumi di `docker-compose.yml`. Per aggiornare:
+`git pull && docker compose build --pull && docker compose up -d`.
+
 ### Sul tuo PC (Windows o Linux con desktop)
 
 ```bash

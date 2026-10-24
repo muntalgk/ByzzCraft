@@ -1,0 +1,16 @@
+# docker compose up -d, then open the link that `docker compose logs` prints. The two volumes keep the panel's
+# data and the Minecraft server between updates (docker compose build --pull && docker compose up -d).
+services:
+  byzzcraft:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8765:8765"     # the panel: put HTTPS in front of it (Tailscale, nginx, Caddy) before opening it to the internet
+      - "25565:25565"   # Minecraft
+    volumes:
+      - data:/data
+      - minecraft:/minecraft
+
+volumes:
+  data:
+  minecraft:

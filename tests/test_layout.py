@@ -36,3 +36,4 @@ try:
 finally:
     shutil.rmtree(root, ignore_errors=True)
 print("PASS %d  FAIL %d" % (OK, FAIL))
+sys.exit(1 if FAIL else 0)

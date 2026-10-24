@@ -415,3 +415,4 @@ print("PASS %d  FAIL %d" % (OK, FAIL))
 for d in os.listdir(tempfile.gettempdir()):
     if d.startswith("bk_test_"):
         shutil.rmtree(os.path.join(tempfile.gettempdir(), d), ignore_errors=True)
+sys.exit(1 if FAIL else 0)
