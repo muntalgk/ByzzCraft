@@ -69,7 +69,7 @@ main{padding:22px 28px 60px;min-width:0}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .chip{display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px 12px 4px 4px;font-size:13px}
 .chip .av{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;color:#0b0c0e}
-.chip.plain{padding:4px 12px}
+.chip.plain{padding:4px 12px}.chip.more-pl{color:var(--text2);cursor:pointer;font:inherit;font-size:13px}
 .chip button{border:0;background:transparent;color:var(--mute);cursor:pointer;padding:0;font-size:12px}
 .actions{display:flex;gap:10px;flex-wrap:wrap}
 .btn{border:1px solid var(--line2);background:var(--card2);color:var(--text);border-radius:10px;padding:11px 18px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
@@ -435,6 +435,8 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
   .quick button{min-height:36px}.chip button{min-height:32px;padding:0 8px}.wm-ui button,.wm-ui select{min-width:36px;min-height:36px}
 }
 @media (max-width:360px){.pl-list{grid-template-columns:1fr}}
+/* hero on phones: the address on its own row with copy at the end, player chips the same height below */
+@media (max-width:520px){#players .chip{min-height:40px}#players .chip.addr{flex-basis:100%;padding:4px 6px 4px 14px}#players .chip.addr button{margin-left:auto}#players .chip .av{width:28px;height:28px;font-size:12px}}
 /* server buttons on phones: Restart and Stop side by side, Start and Force stop on their own row */
 @media (max-width:520px){.srv-acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%}.srv-acts .btn{width:100%;justify-content:center}.srv-acts #b-start,.srv-acts #b-kill{grid-column:1/-1}.srv-acts #b-kill{padding:9px;font-size:13px;border-color:#3a2423}}
 </style>
@@ -744,9 +746,11 @@ function renderStatus(){const s=S.status;if(BOOT.admin&&BK.st)BK.renderStatus();
   else if(s.state=="stopping")sub=_t("Saving the world...");else sub=s.start_error||_t("Press Start when you want to play.");$("#st-sub").classList.toggle("st-err",s.state=="off"&&!!s.start_error);
   $("#st-sub").textContent=sub;
   const pl=$("#players");pl.innerHTML="";
-  if(BOOT.address){const c=document.createElement("span");c.className="chip plain";c.innerHTML=_t("Address")+" <b style='font-family:var(--mono)'>"+esc(BOOT.address)+"</b> <button title='"+_t("Copy")+"'>"+_t("copy")+"</button>";
+  if(BOOT.address){const c=document.createElement("span");c.className="chip plain addr";c.innerHTML=_t("Address")+" <b style='font-family:var(--mono)'>"+esc(BOOT.address)+"</b> <button title='"+_t("Copy")+"'>"+_t("copy")+"</button>";
     c.querySelector("button").onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(BOOT.address);toast(_t("Address copied"),"good")};pl.append(c)}
-  (s.players||[]).forEach((n,i)=>{const c=document.createElement("span");c.className="chip";c.innerHTML="<span class=av style='background:"+AVC[[...n].reduce((a,ch)=>a+ch.charCodeAt(0),0)%AVC.length]+"'>"+esc(n[0].toUpperCase())+"</span>"+esc(n);pl.append(c)});
+  const ps=s.players||[],shown=ps.length>7?ps.slice(0,6):ps;   /* a full server: six names and "+N", the full list is in Players */
+  shown.forEach((n,i)=>{const c=document.createElement("span");c.className="chip";c.innerHTML="<span class=av style='background:"+AVC[[...n].reduce((a,ch)=>a+ch.charCodeAt(0),0)%AVC.length]+"'>"+esc(n[0].toUpperCase())+"</span>"+esc(n);pl.append(c)});
+  if(ps.length>shown.length){const c=document.createElement("button");c.className="chip plain more-pl";c.textContent=_t("+%s more",ps.length-shown.length);c.onclick=()=>go("players");pl.append(c)}
   const up=s.state=="on"||s.state=="stopping";$("#b-start").hidden=up;$("#b-stop").hidden=$("#b-restart").hidden=!up;
   $("#b-kill").hidden=!BOOT.admin||s.state=="off"||s.state=="starting"&&s.backup_progress!=null;$("#b-start").disabled=s.state!="off";$("#b-stop").disabled=s.state!="on";$("#b-restart").disabled=s.state!="on";
   $("#banner").classList.toggle("show",!!s.props_changed&&s.state=="on"&&BOOT.admin);
@@ -1249,7 +1253,10 @@ const MOONS=[["🌕",_t("Full moon"),_t("more slimes, better-equipped mobs")],["
   ["🌑",_t("New moon"),_t("darkest night, no swamp slimes")],["🌒",_t("Waxing crescent"),""],["🌓",_t("First quarter"),""],["🌔",_t("Waxing gibbous"),_t("full moon tomorrow")]];
 const SUNSVG='<svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="10.5" fill="#ffd76a"/><g stroke="#ffd76a" stroke-width="3" stroke-linecap="round">'+
   [0,45,90,135,180,225,270,315].map(a=>{const r=a*Math.PI/180,c=Math.cos(r),s=Math.sin(r);return '<line x1="'+(26+c*16)+'" y1="'+(26+s*16)+'" x2="'+(26+c*21)+'" y2="'+(26+s*21)+'"/>'}).join("")+'</g></svg>';
-const MOONSVG='<svg viewBox="0 0 52 52"><path d="M31 8a18 18 0 1 0 13 28A15 15 0 0 1 31 8z" fill="#dfe6ff"/><circle cx="22" cy="30" r="2.5" fill="#c3cbe6"/><circle cx="17" cy="21" r="1.6" fill="#c3cbe6"/></svg>';
+/* the moon as it is tonight: k 0 = full, 4 = new; waning lit on the left, waxing on the right */
+function moonSVG(k){const r=18,c=26,lit="#dfe6ff",dark="#2a3150",rx=(r*Math.abs(Math.cos(Math.PI*k/4))).toFixed(2),L=k>=1&&k<=3,
+  shape=k==0?"<circle cx='26' cy='26' r='18' fill='"+lit+"'/>":k==4?"":"<path fill='"+lit+"' d='M26 8A18 18 0 0 "+(L?0:1)+" 26 44A"+rx+" 18 0 0 "+((k==3||k==5)==L?1:0)+" 26 8z'/>";
+  return "<svg viewBox='0 0 52 52'><circle cx='26' cy='26' r='18' fill='"+dark+"' stroke='#3a4370' stroke-width='.6'/>"+shape+"</svg>"}
 const WV={w:null,
   // rx: arrival time by our own clock (minus the age of the reading), never by the server timestamp
   set(w){this.w=w&&w.t?w:null;if(this.w)this.w.rx=performance.now()-(w.age||0);$("#world").hidden=!this.w;this.draw()},
@@ -1258,13 +1265,13 @@ const WV={w:null,
   draw(){const w=this.w;if(!w)return;const t=this.ticks();
     const h=Math.floor((t/1000+6)%24),m=Math.floor(t%1000*.06);$("#w-clock").textContent=String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
     const ph=t<12000?"day":t<13000?"dusk":t<23000?"night":"dawn";$("#world").className="card wc "+ph;
-    const orb=ph=="night"?MOONSVG:SUNSVG;if($("#w-orb").dataset.k!=orb.length){$("#w-orb").innerHTML=orb;$("#w-orb").dataset.k=orb.length}
+    const ok=ph=="night"?"m"+w.moon:"s";if($("#w-orb").dataset.k!=ok){$("#w-orb").innerHTML=ph=="night"?moonSVG(w.moon||0):SUNSVG;$("#w-orb").dataset.k=ok}
     const dur=x=>{const s=x/20;return s<60?Math.round(s)+" s":Math.round(s/60)+" min"};
     const nxt=t<13000?_t("night in %s",dur(13000-t)):t<23000?_t("dawn in %s",dur(23000-t)):_t("full day in %s",dur(24000-t));
     $("#w-ph").innerHTML="<b>"+{day:_t("Day"),dusk:_t("Dusk"),night:_t("Night"),dawn:_t("Dawn")}[ph]+"</b> · "+(w.running?nxt:_t("world paused until someone plays"));
     $("#w-mark").style.left=(t/240)+"%";
     const sleep=w.thunder||(w.rain?t>=12010&&t<23992:t>=12542&&t<23460),mo=MOONS[w.moon]||MOONS[0];
-    $("#w-chips").innerHTML=(w.thunder?"<span class='wchip warn'>⛈️ "+_t("Thunderstorm")+" <small>"+_t("mobs even by day")+"</small></span>":w.rain?"<span class='wchip'>🌧️ "+_t("Rain")+"</span>":"<span class='wchip'>"+(ph=="night"?"🌙":"☀️")+" "+_t("Clear")+"</span>")
+    $("#w-chips").innerHTML=(w.thunder?"<span class='wchip warn'>⛈️ "+_t("Thunderstorm")+" <small>"+_t("mobs even by day")+"</small></span>":w.rain?"<span class='wchip'>🌧️ "+_t("Rain")+"</span>":"<span class='wchip'>"+(ph=="night"?"✨":"☀️")+" "+_t("Clear")+"</span>")
       +"<span class='wchip' title='"+esc(mo[2])+"'>"+mo[0]+" "+mo[1]+(mo[2]&&(ph=="night"||ph=="dusk"||w.moon==7)?" <small>"+esc(mo[2])+"</small>":"")+"</span>"
       +(sleep?"<span class='wchip sleep'>🛏️ "+_t("You can sleep")+"</span>":"")}};
 setInterval(()=>{if(WV.w&&CUR=="dash")WV.draw()},1000);

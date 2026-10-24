@@ -47,6 +47,7 @@
  "%s% of the CPU": "%s% della CPU",
  "%s% of the PC CPU": "%s% della CPU del PC",
  "(empty for %s min)": "(vuoto da %s min)",
+ "+%s more": "+%s altri",
  "- from this device the panel will not open any more after the setup": "- da questo dispositivo il pannello non si aprirà più dopo il setup",
  "0 = no limit · per world": "0 = nessun limite · per mondo",
  "50 ms limit (below = 20 TPS)": "limite 50 ms (sotto = 20 TPS)",
