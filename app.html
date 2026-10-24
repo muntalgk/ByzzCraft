@@ -326,6 +326,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .modal-bg{position:fixed;inset:0;background:#000a;backdrop-filter:blur(3px);display:grid;place-items:center;z-index:50;padding:16px}
 .modal{background:var(--card);border:1px solid var(--line2);border-radius:16px;padding:22px;max-width:440px;width:100%;box-shadow:0 20px 60px #000c}
 .modal h3{margin:0 0 8px;font-size:18px}.modal p{color:var(--text2);font-size:14px;margin:0 0 10px}
+.modal p a{color:var(--good)}
 .modal ul{margin:0 0 12px;padding-left:18px;color:var(--text2);font-size:13.5px}
 .modal input{width:100%;background:var(--surface);border:1px solid var(--line2);border-radius:10px;padding:10px 12px;color:var(--text);font:600 15px var(--mono);letter-spacing:.06em}
 .modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
@@ -765,11 +766,20 @@ function live(ok){const l=$("#live");l.classList.toggle("off",!ok);l.querySelect
 setInterval(()=>{charts.forEach(c=>c.draw());if(S.status.state=="on")renderStatus()},15000);
 
 /* ---------------- actions ---------------- */
-async function act(path,confirmMsg){if(confirmMsg&&!confirm(confirmMsg))return;const j=await api(path);toast(j.message,j.ok?"good":"bad")}
+/* confirmation in the panel style instead of the browser's confirm(): true (the typed text with o.input), null when cancelled */
+function ask(title,text,ok,o={}){return new Promise(res=>{const bg=document.createElement("div");bg.className="modal-bg";
+  bg.innerHTML="<div class='modal' role='dialog' aria-modal='true'><h3>"+esc(title)+"</h3><p>"+esc(text).replace(/https:\/\/[^\s<]+/g,u=>"<a href='"+u+"' target='_blank' rel='noopener'>"+u+"</a>")+"</p>"
+    +(o.input!=null?"<input placeholder='"+esc(o.input)+"' maxlength='100' style='font:inherit;letter-spacing:0'>":"")
+    +"<div class='row'><button class='btn' data-x>"+_t("Cancel")+"</button><button class='btn "+(o.primary?"primary":"danger")+"' data-ok>"+esc(ok)+"</button></div></div>";
+  document.body.append(bg);const inp=bg.querySelector("input"),val=()=>inp?inp.value:true,done=v=>{bg.remove();document.removeEventListener("keydown",kd);res(v)},
+    kd=e=>{if(e.key=="Escape")done(null);if(e.key=="Enter"&&inp&&e.target==inp)done(val())};
+  document.addEventListener("keydown",kd);bg.querySelector("[data-x]").onclick=()=>done(null);bg.querySelector("[data-ok]").onclick=()=>done(val());bg.onclick=e=>{if(e.target==bg)done(null)};
+  setTimeout(()=>(inp||bg.querySelector("[data-ok]")).focus(),30)})}
+async function act(path,msg,label,primary){if(msg&&!await ask(label,msg,label,{primary}))return;const j=await api(path);toast(j.message,j.ok?"good":"bad")}
 $("#b-start").onclick=()=>act("/api/start");
-$("#b-stop").onclick=()=>act("/api/stop",S.status.online?_t("%s players are online. Stop anyway?",S.status.online):_t("Stop the server?"));
-$("#b-kill").onclick=()=>act("/api/kill",_t("Force stop? Java is closed right away: the last minutes of play may be lost. Use it only if the server does not respond."));
-$("#b-restart").onclick=()=>act("/api/restart",S.status.online?_t("Players are online: they will be disconnected. Restart?"):_t("Restart the server?"));
+$("#b-stop").onclick=()=>act("/api/stop",S.status.online?_t("%s players are online. Stop anyway?",S.status.online):_t("Stop the server?"),_t("Stop"));
+$("#b-kill").onclick=()=>act("/api/kill",_t("Force stop? Java is closed right away: the last minutes of play may be lost. Use it only if the server does not respond."),_t("Force stop"));
+$("#b-restart").onclick=()=>act("/api/restart",S.status.online?_t("Players are online: they will be disconnected. Restart?"):_t("Restart the server?"),_t("Restart"),true);
 $("#b-banner").onclick=$("#b-restart").onclick;
 /* console input */
 const hist=[];let hi=0;
@@ -830,7 +840,7 @@ const PS={async load(){if(!BOOT.admin)return;const r=await fetch("/api/panel-set
     if(j.restart){const again=()=>fetch("/manifest.webmanifest").then(r=>r.ok?location.reload():setTimeout(again,1000)).catch(()=>setTimeout(again,1000));setTimeout(again,2500);return}   /* the panel restarts in the new language */
     if(j.ok){this.render(j.settings);BOOT.address=j.settings.mc_address;renderStatus()}}};
 $("#ps-save").onclick=()=>PS.save();
-$("#p-save").onclick=()=>saveProps(false);$("#p-save-r").onclick=()=>{if(S.status.state!="on"||confirm(_t("Save and restart the server now?")))saveProps(S.status.state=="on")};
+$("#p-save").onclick=()=>saveProps(false);$("#p-save-r").onclick=async()=>{if(S.status.state!="on"||await ask(_t("Save and restart"),_t("Save and restart the server now?"),_t("Save and restart"),{primary:true}))saveProps(S.status.state=="on")};
 
 /* ---------------- players ---------------- */
 const P={roster:[],sel:null,cur:null,hardcore:false,skinFor:null,rot:-30,drag:null,walk:0};
@@ -1019,7 +1029,7 @@ class WorldMap{
     p.addEventListener("pointerdown",e=>e.stopPropagation());this.pop=p;return p}
   markerPop(m,e){const p=this.popAt(e.clientX,e.clientY,"<b>"+esc(m.name)+"</b><span style='color:var(--text2);font-family:var(--mono)'>"+m.x+"  "+m.z+"</span><br><small style='color:var(--mute)'>"+esc(_t("added by %s",m.by))+"</small><div class=row><button data-a=del>"+_t("Remove")+"</button><button data-a=x>"+_t("Close")+"</button></div>");
     p.querySelector("[data-a=x]").onclick=()=>this.closePop();
-    p.querySelector("[data-a=del]").onclick=async()=>{if(!confirm(_t("Remove the marker \"%s\"?",m.name)))return;const j=await api("/api/markers/delete",{id:m.id});toast(j.message,j.ok?"good":"bad");this.closePop()}}
+    p.querySelector("[data-a=del]").onclick=async()=>{if(!await ask(_t("Delete"),_t("Remove the marker \"%s\"?",m.name),_t("Delete")))return;const j=await api("/api/markers/delete",{id:m.id});toast(j.message,j.ok?"good":"bad");this.closePop()}}
   addAt(pt){const [x,z]=this.worldAt(pt.x,pt.y);const X=Math.floor(x),Z=Math.floor(z);
     const p=this.popAt(pt.x,pt.y,"<b>"+_t("New marker")+"</b><span style='font-family:var(--mono);color:var(--text2)'>"+X+"  "+Z+"</span><input class=search style='width:100%;margin-top:8px;min-width:0' maxlength=40 placeholder='"+_t("Name, e.g. Base")+"'><select class=search style='width:100%;margin-top:6px;min-width:0'>"+ICONS.map(([k,v])=>"<option value="+k+">"+v+"</option>").join("")+"</select><div class=row><button data-a=ok>"+_t("Save")+"</button><button data-a=x>"+_t("Cancel")+"</button></div>");
     const inp=p.querySelector("input");inp.focus();p.querySelector("[data-a=x]").onclick=()=>this.closePop();
@@ -1210,11 +1220,8 @@ const ACV={d:null,
     if(ASK[a]&&!btn.classList.contains("ask")){btn.classList.add("ask");btn.textContent=ASK[a];clearTimeout(btn._t);btn._t=setTimeout(()=>this.render(),3000);return}
     let reason="";if(a=="ban"||a=="kick"){reason=await this.reason(a,n);if(reason==null)return}
     btn.disabled=true;const j=await api("/api/access",{action:a,name:n,reason});toast(j.message,j.ok?"good":"bad");this.load()},
-  reason(a,n){return new Promise(res=>{const bg=document.createElement("div");bg.className="modal-bg";
-    bg.innerHTML="<div class='modal' role='dialog' aria-modal='true'><h3>"+esc(a=="ban"?_t("Ban %s?",n):_t("Kick %s?",n))+"</h3><p>"+(a=="ban"?_t("They will not be able to join until you unban them."):_t("They are thrown out of the server; they can rejoin right away."))+"</p>"
-      +"<input placeholder='"+_t("Reason (optional)")+"' maxlength='100' style='font:inherit;letter-spacing:0'><div class='row'><button class='btn' data-x>"+_t("Cancel")+"</button><button class='btn danger' data-ok>"+(a=="ban"?_t("Ban"):_t("Kick"))+"</button></div></div>";
-    document.body.append(bg);const inp=bg.querySelector("input"),done=v=>{bg.remove();document.removeEventListener("keydown",kd);res(v)},kd=e=>{if(e.key=="Escape")done(null);if(e.key=="Enter"&&e.target==inp)done(inp.value)};
-    document.addEventListener("keydown",kd);bg.querySelector("[data-x]").onclick=()=>done(null);bg.querySelector("[data-ok]").onclick=()=>done(inp.value);bg.onclick=e=>{if(e.target==bg)done(null)};setTimeout(()=>inp.focus(),30)})}};
+  reason(a,n){return a=="ban"?ask(_t("Ban %s?",n),_t("They will not be able to join until you unban them."),_t("Ban"),{input:_t("Reason (optional)")})
+    :ask(_t("Kick %s?",n),_t("They are thrown out of the server; they can rejoin right away."),_t("Kick"),{input:_t("Reason (optional)")})}};
 $("#ac-list").onclick=e=>{const b=e.target.closest("button[data-a]");if(b&&!b.disabled)ACV.act(b.dataset.a,b.dataset.n,b)};
 $("#ac-add").onclick=async()=>{const n=$("#ac-name").value.trim();if(!n)return;const b=$("#ac-add");b.disabled=true;const j=await api("/api/access",{action:"wl_add",name:n});
   b.disabled=false;toast(j.message,j.ok?"good":"bad");if(j.ok)$("#ac-name").value="";ACV.load()};
@@ -1279,7 +1286,7 @@ const HL={
     $("#health-list").innerHTML=c.map(x=>"<div class='hc'><span>"+esc(x.text)+"</span>"+(x.fix?"<button class='btn' data-fix='"+esc(x.id)+"'>"+esc(HL.label(x.id))+"</button>":"")
       +(x.cmd?"<code>"+esc(x.cmd)+"</code>":"")+"</div>").join("")}catch(e){}},
   label(id){return {java:_t("Download Java"),eula:_t("I accept the EULA"),rcon:_t("Turn on RCON"),script:_t("Copy the start script"),assets:_t("Download")}[id]||_t("Fix")},
-  async fix(id,b){if(id=="eula"&&!confirm(_t("Accept the Minecraft EULA? Read it at https://aka.ms/MinecraftEULA")))return;
+  async fix(id,b){if(id=="eula"&&!await ask("EULA",_t("Accept the Minecraft EULA? Read it at https://aka.ms/MinecraftEULA"),_t("I accept the EULA"),{primary:true}))return;
     b.disabled=true;const j=await api("/api/health/fix",{id});toast(j.message,j.ok?"good":"bad");this.load()}};
 $("#health-list").onclick=e=>{const b=e.target.closest("[data-fix]");if(b&&!b.disabled)HL.fix(b.dataset.fix,b)};
 setInterval(()=>{if(CUR=="dash")HL.load()},30000);
