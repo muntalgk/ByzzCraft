@@ -40,6 +40,7 @@ DEFAULTS = {
     "ram": "",                    # RAM del server, es. "6G"; vuoto = automatica (meta' della macchina, da 1 a 4 GB)
     "java_args": "",              # flag Java in piu', dopo quelli standard
     "backup_on_start": True,      # backup del mondo prima di ogni avvio (solo senza start_script: uno script fa il suo)
+    "auto_restart": True,         # riavvia il server dopo un crash (al massimo 3 volte in 10 minuti)
     "listen": "127.0.0.1",
     "port": 8765,
     "auto_stop_minutes": 30,      # spegne il server se resta vuoto per N minuti (0 = mai)
@@ -523,6 +524,9 @@ class ServerControl:
         self.props_mtime_on = None  # data di server.properties quando il server e' risultato acceso
         self.start_error = None     # perche' l'ultimo avvio non e' riuscito (mostrato in dashboard)
         self.preparing = False      # "starting", ma ancora nel backup prima dell'avvio
+        self.stop_requested = False # spegnimento voluto (pannello, /stop, "Stopping the server" nel log): non e' un crash
+        self.on_since = 0
+        self.crashes = []           # quando e' crashato negli ultimi 10 minuti
 
     def port(self):
         return int(server_props().get("server-port", 25565))
@@ -567,14 +571,17 @@ class ServerControl:
             if self.proc is not None:
                 self.proc.poll()   # raccoglie lo script finito: niente processi zombie
             changed = prev != self.state
+            crashed = changed and self.state == "off" and prev in ("on", "stopping") and not self.stop_requested
             if changed and self.state == "on":
-                self.start_error = None
+                self.start_error, self.stop_requested, self.on_since = None, False, time.time()
                 try:
                     self.props_mtime_on = os.path.getmtime(props_path())
                 except OSError:
                     self.props_mtime_on = None
         if changed and self.state == "off":
             RCON.reset()
+        if crashed:
+            self.on_crash()
         if self.state == "off" and self.restart_pending:
             self.restart_pending = False
             ok, _ = self.start("panel (restart)")
@@ -653,6 +660,47 @@ class ServerControl:
             self.started_at = time.time()
         HUB.publish("status", self.snapshot())
 
+    def on_crash(self):
+        """Spento senza che nessuno l'abbia chiesto: motivo dal crash report, avviso e riavvio automatico."""
+        why = crash_reason(self.on_since)
+        msg = t("The server crashed: %s") % why if why else t("The server stopped without being asked: see the Console.")
+        log("panel: the server crashed (%s)" % (why or "no crash report"))
+        console_push([msg], "err")
+        HUB.publish("notice", {"ok": False, "message": msg})
+        now = time.time()
+        self.crashes = [c for c in self.crashes if now - c < 600] + [now]
+        if CFG.get("auto_restart", True) and len(self.crashes) <= 3:
+            self.start("panel (after a crash)")
+        else:
+            self.start_error = msg + (" " + t("Not restarted: it crashed 3 times in 10 minutes.") if CFG.get("auto_restart", True) else "")
+
+    def kill(self, who):
+        """Forza arresto: per un server bloccato che non risponde a RCON o non finisce di spegnersi."""
+        with LOCK:
+            # last_pid solo se acceso: durante l'avvio e' quello della volta prima, e il PID potrebbe essere di un altro processo
+            java = self.last_pid if self.state in ("on", "stopping") and pid_alive(self.last_pid) else None
+            child = self.proc.pid if self.proc and self.proc.poll() is None else None   # java, o lo script con il suo java
+            if self.state == "off" or not (java or child):
+                return False, t("The server is not running.")
+            self.stop_requested, self.restart_pending = True, False
+            if self.state == "on":
+                self.state = "stopping"
+            for pid, group in ((java, False), (child, True)):
+                if not pid:
+                    continue
+                try:
+                    if os.name == "nt":
+                        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, timeout=20)
+                    elif group:
+                        os.killpg(pid, 9)   # sessione propria (start_new_session): script e java insieme
+                    else:
+                        os.kill(pid, 9)
+                except (OSError, subprocess.SubprocessError) as e:
+                    L.warning("force stop of %s: %s", pid, e)
+        log("%s force-stopped the server" % who)
+        HUB.publish("status", self.snapshot())
+        return True, t("Server force-stopped.")
+
     def stop(self, who, reason=None, restart=False):
         with LOCK:
             if self.state != "on":
@@ -661,12 +709,12 @@ class ServerControl:
             if busy and busy["op"] == "backup":   # lo spegnimento a meta' copia darebbe un backup incoerente
                 return False, t("Wait a few seconds: backup in progress.")
             self.state = "stopping"
-            self.restart_pending = restart
+            self.restart_pending, self.stop_requested = restart, True
         try:
             RCON.command("stop")
         except Exception as e:  # noqa: BLE001
             with LOCK:
-                self.state = "on"; self.restart_pending = False
+                self.state = "on"; self.restart_pending = self.stop_requested = False
             log("%s: stop failed (%s)" % (who, e))
             return False, t("Could not stop the server: %s") % e
         log("%s %s the server%s" % (who, "restarted" if restart else "stopped", " (%s)" % reason if reason else ""))
@@ -708,6 +756,19 @@ START_HINTS = (   # (testo nell'output dello script, spiegazione per l'utente)
     (r"Unable to access jarfile|Invalid or corrupt jarfile", "The server jar is missing or damaged: check server_jar in panel-config.json."),
     (r"Could not reserve enough space|Invalid maximum heap size|insufficient memory", "Not enough memory for the RAM set in the start script."),
 )
+
+
+def crash_reason(since):
+    """'Description:' del crash report piu' recente, se e' stato scritto dopo l'accensione."""
+    d = os.path.join(CFG["server_dir"], "crash-reports")
+    try:
+        f = max((os.path.join(d, n) for n in os.listdir(d) if n.endswith(".txt")), key=os.path.getmtime)
+        if os.path.getmtime(f) >= since:
+            with open(f, encoding="utf-8", errors="replace") as fh:
+                return next((l[13:].strip() for l in fh if l.startswith("Description: ")), None)
+    except (OSError, ValueError):
+        pass
+    return None
 
 
 def start_failure(exited, code=None):
@@ -968,6 +1029,8 @@ def tailers():
     while True:
         try:
             lines = logs.read()
+            if tl_ready and any("Stopping the server" in l or "Stopping server" in l for l in lines):   # non le righe vecchie lette all'avvio
+                SRV.stop_requested = True   # /stop dal gioco o dalla console: non e' un crash
             console_push(lines)
             if lines or time.time() - last_tl > 5:
                 last_tl = time.time()
@@ -1314,7 +1377,7 @@ def panel_settings():
             "jar": server_jar(), "java": RT.java_for(need)[0], "java_need": need, "start_script": CFG.get("start_script") or ""}
 
 
-PANEL_KEYS = ("ram", "java_args", "backup_on_start", "auto_stop_minutes", "mc_address")
+PANEL_KEYS = ("ram", "java_args", "backup_on_start", "auto_stop_minutes", "mc_address", "auto_restart")
 
 
 def save_panel_settings(data, who):
@@ -1340,7 +1403,8 @@ def save_panel_settings(data, who):
     addr = str(data.get("mc_address", "")).strip()
     if len(addr) > 100 or re.search(r"[\s<>\"']", addr):
         raise ValueError(t("Invalid server address."))
-    new = {"ram": ram, "java_args": args, "backup_on_start": bool(data.get("backup_on_start")), "auto_stop_minutes": mins, "mc_address": addr}
+    new = {"ram": ram, "java_args": args, "backup_on_start": bool(data.get("backup_on_start")), "auto_stop_minutes": mins, "mc_address": addr,
+           "auto_restart": bool(data.get("auto_restart"))}
     changed = [k for k in PANEL_KEYS if CFG.get(k, DEFAULTS.get(k)) != new[k]]
     if changed:
         save_config(new)
@@ -1949,6 +2013,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(200, {"ok": ok, "message": msg})
         if not s["admin"]:
             return self.json(403, {"ok": False, "message": t("Admins only.")})
+        if self.path == "/api/kill":
+            ok, msg = SRV.kill(s["user"])
+            return self.json(200, {"ok": ok, "message": msg})
         if self.path == "/api/health/fix":
             ok = fix_health(str(data.get("id", "")), s["user"])
             HUB.publish("health", {})

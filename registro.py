@@ -37,6 +37,8 @@ _RULES = [
     (_WHO + r" (?P<v>stopped|restarted) the server(?: \((?P<r>.*)\))?$", "server", "info",
      lambda g: (t("%s the server" % g["v"]), _reason(g["r"]))),
     (_WHO + r": stop failed \((?P<e>.*)\)$", "server", "err", lambda g: (t("could not stop the server"), g["e"])),
+    (_WHO + r": the server crashed \((?P<e>.*)\)$", "server", "err", lambda g: (t("the server crashed"), g["e"])),
+    (_WHO + r" force-stopped the server$", "server", "warn", lambda g: (t("force-stopped the server"), "")),
     (r"panel started on (?P<u>.+)$", "sistema", "info", lambda g: (t("Panel started"), g["u"])),
     (_WHO + r" changed the panel settings: (?P<k>.*)$", "impostazioni", "info", lambda g: (t("changed the panel settings"), g["k"])),
     (_WHO + r": backup before start failed \((?P<e>.*)\)$", "backup", "err", lambda g: (t("backup before the start failed"), g["e"])),

@@ -446,6 +446,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
           <button class="btn primary" id="b-start">{{Start}}</button>
           <button class="btn" id="b-restart">{{Restart}}</button>
           <button class="btn danger" id="b-stop">{{Stop}}</button>
+          <button class="btn danger adm-only" id="b-kill" hidden>{{Force stop}}</button>
         </div>
       </div>
       <div class="card wc" id="world" hidden><div class="orb" id="w-orb"></div>
@@ -527,6 +528,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
           <div class="ps-wide"><label class="f" for="ps-args">{{Extra Java flags (optional)}}</label><input class="search" id="ps-args" maxlength="500" spellcheck="false" autocomplete="off"></div>
         </div>
         <div class="row"><label class="toggle"><input type="checkbox" id="ps-bk"> {{Back up the world before every start}}</label></div>
+        <div class="row"><label class="toggle"><input type="checkbox" id="ps-ar"> {{Restart the server by itself after a crash}}</label></div>
         <div class="row"><button class="btn primary" id="ps-save">{{Save}}</button></div></div></div>
       <div class="toolbar"><input class="search" id="p-filter" placeholder="{{Search settings...}}"><span class="lock" id="p-note">{{Changes apply at the next server restart. Every save backs up the file.}}</span></div>
       <div id="p-list"></div>
@@ -697,7 +699,7 @@ function renderStatus(){const s=S.status;if(BOOT.admin&&BK.st)BK.renderStatus();
     c.querySelector("button").onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(BOOT.address);toast(_t("Address copied"),"good")};pl.append(c)}
   (s.players||[]).forEach((n,i)=>{const c=document.createElement("span");c.className="chip";c.innerHTML="<span class=av style='background:"+AVC[[...n].reduce((a,ch)=>a+ch.charCodeAt(0),0)%AVC.length]+"'>"+esc(n[0].toUpperCase())+"</span>"+esc(n);pl.append(c)});
   const up=s.state=="on"||s.state=="stopping";$("#b-start").hidden=up;$("#b-stop").hidden=$("#b-restart").hidden=!up;
-  $("#b-start").disabled=s.state!="off";$("#b-stop").disabled=s.state!="on";$("#b-restart").disabled=s.state!="on";
+  $("#b-kill").hidden=!BOOT.admin||s.state=="off"||s.state=="starting"&&s.backup_progress!=null;$("#b-start").disabled=s.state!="off";$("#b-stop").disabled=s.state!="on";$("#b-restart").disabled=s.state!="on";
   $("#banner").classList.toggle("show",!!s.props_changed&&s.state=="on"&&BOOT.admin);
   document.title=(s.state=="on"?"● ":"")+BOOT.title;
   const pill=$("#srv-pill");pill.className="srv-pill "+s.state;pill.querySelector(".st").innerHTML="<b>"+(STATE[s.state]||s.state)+"</b>"+(s.state=="on"?" · "+s.online:"");pill.title=(s.state=="on"?_t("%s online",s.online)+" · ":"")+_t("click to copy the address");
@@ -765,6 +767,7 @@ setInterval(()=>{charts.forEach(c=>c.draw());if(S.status.state=="on")renderStatu
 async function act(path,confirmMsg){if(confirmMsg&&!confirm(confirmMsg))return;const j=await api(path);toast(j.message,j.ok?"good":"bad")}
 $("#b-start").onclick=()=>act("/api/start");
 $("#b-stop").onclick=()=>act("/api/stop",S.status.online?_t("%s players are online. Stop anyway?",S.status.online):_t("Stop the server?"));
+$("#b-kill").onclick=()=>act("/api/kill",_t("Force stop? Java is closed right away: the last minutes of play may be lost. Use it only if the server does not respond."));
 $("#b-restart").onclick=()=>act("/api/restart",S.status.online?_t("Players are online: they will be disconnected. Restart?"):_t("Restart the server?"));
 $("#b-banner").onclick=$("#b-restart").onclick;
 /* console input */
@@ -815,11 +818,11 @@ $("#p-filter").oninput=renderProps;$("#p-undo").onclick=()=>{S.edits={};renderPr
 async function saveProps(restart){const j=await api("/api/properties",{changes:S.edits,restart});toast(j.message,j.ok?"good":"bad");if(j.ok){await loadProps();if(restart)go("dash")}}
 const PS={async load(){if(!BOOT.admin)return;const r=await fetch("/api/panel-settings");if(r.ok)this.render(await r.json())},
   render(j){$("#ps-ram").value=j.ram;$("#ps-ram").placeholder=_t("automatic: %s",j.ram_auto);$("#ps-stop").value=j.auto_stop_minutes;
-    $("#ps-addr").value=j.mc_address;$("#ps-args").value=j.java_args;$("#ps-bk").checked=j.backup_on_start;
+    $("#ps-addr").value=j.mc_address;$("#ps-args").value=j.java_args;$("#ps-bk").checked=j.backup_on_start;$("#ps-ar").checked=j.auto_restart;
     ["#ps-ram","#ps-args","#ps-bk"].forEach(s=>$(s).disabled=!!j.start_script);
     $("#ps-info").textContent=j.start_script?_t("Started by your script %s: RAM, Java flags and the backup before the start are set there.",j.start_script)
       :_t("Server %s · Java %s · this machine has %s GB of RAM",j.jar||_t("not found"),j.java||_t("not found"),nf(j.ram_total/1024,1))},
-  async save(){const j=await api("/api/panel-settings",{ram:$("#ps-ram").value,java_args:$("#ps-args").value,backup_on_start:$("#ps-bk").checked,
+  async save(){const j=await api("/api/panel-settings",{ram:$("#ps-ram").value,java_args:$("#ps-args").value,backup_on_start:$("#ps-bk").checked,auto_restart:$("#ps-ar").checked,
     auto_stop_minutes:+$("#ps-stop").value||0,mc_address:$("#ps-addr").value});toast(j.message,j.ok?"good":"bad");
     if(j.ok){this.render(j.settings);BOOT.address=j.settings.mc_address;renderStatus()}}};
 $("#ps-save").onclick=()=>PS.save();
