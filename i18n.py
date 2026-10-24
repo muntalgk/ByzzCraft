@@ -1,4 +1,4 @@
-"""Traduzioni: i testi nel codice sono in inglese, i18n/<lingua>.json li mappa (se manca una voce resta l'inglese)."""
+"""Translations: the texts in the code are English, i18n/<language>.json maps them (a missing entry stays English)."""
 import json
 import os
 

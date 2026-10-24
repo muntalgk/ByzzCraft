@@ -1,0 +1,19 @@
+# docker compose up -d, then open the link that `docker compose logs` prints. The two volumes keep the panel's
+# data and the Minecraft server between updates (docker compose build --pull && docker compose up -d).
+services:
+  byzzcraft:
+    build: .
+    restart: unless-stopped
+    # host networking: the panel sees the real client addresses (proxy, Tailscale, login limits) and the setup
+    # choice "this machine only / home network" works as without Docker. Panel on 8765, Minecraft on 25565.
+    # On Docker Desktop (Windows/Mac) enable it in Settings > Resources > Network (Docker Desktop 4.34 or newer).
+    network_mode: host
+    # docker compose down / updates stop Minecraft first: the grace period gives it time to save the world
+    stop_grace_period: 2m
+    volumes:
+      - data:/data
+      - minecraft:/minecraft
+
+volumes:
+  data:
+  minecraft:

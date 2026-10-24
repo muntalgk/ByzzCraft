@@ -1,4 +1,4 @@
-"""Processo del server, CPU e RAM: API di Windows oppure /proc su Linux (solo libreria standard)."""
+"""Server process, CPU and RAM: Windows API or /proc on Linux (standard library only)."""
 import os
 import socket
 import struct
@@ -41,7 +41,7 @@ if sys.platform == "win32":
 
 
     def listening_pid(port):
-        """PID del processo in ascolto su una porta TCP (IPv4 o IPv6)."""
+        """PID of the process listening on a TCP port (IPv4 or IPv6)."""
         for af, rowsize in ((2, 24), (23, 56)):
             size = wintypes.DWORD(0)
             iphl.GetExtendedTcpTable(None, ctypes.byref(size), False, af, 3, 0)
@@ -68,7 +68,7 @@ if sys.platform == "win32":
             self.pid = None; self.last = None
 
         def sample(self, pid):
-            """(cpu % del PC, working set MB, privata MB, avviato_epoch) oppure None."""
+            """(cpu % of the PC, working set MB, private MB, started_epoch) or None."""
             if pid is None:
                 self.pid = None; self.last = None
                 return None
@@ -108,10 +108,10 @@ if sys.platform == "win32":
 
 
     def system_times():
-        """(inattivo, totale) in unita' da 100 ns di tutte le CPU: la CPU del PC e' 1 - d(inattivo)/d(totale)."""
+        """(idle, total) in 100 ns units of all CPUs: the PC CPU is 1 - d(idle)/d(total)."""
         idle, kern, user = FILETIME(), FILETIME(), FILETIME()
         k32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kern), ctypes.byref(user))
-        return idle.val(), kern.val() + user.val()   # il tempo kernel comprende gia' quello inattivo
+        return idle.val(), kern.val() + user.val()   # kernel time already includes idle time
 
 
     def system_memory():
@@ -130,12 +130,12 @@ else:
     _BOOT = _btime()
 
     def _stat(pid):
-        """Campi di /proc/<pid>/stat dopo il nome del processo (che puo' contenere spazi)."""
+        """Fields of /proc/<pid>/stat after the process name (which can contain spaces)."""
         with open("/proc/%d/stat" % pid) as f:
             return f.read().rsplit(")", 1)[1].split()
 
     def listening_pid(port):
-        """PID del processo in ascolto su una porta TCP (IPv4 o IPv6)."""
+        """PID of the process listening on a TCP port (IPv4 or IPv6)."""
         inodes = set()
         for name in ("/proc/net/tcp", "/proc/net/tcp6"):
             try:
@@ -153,7 +153,7 @@ else:
             try:
                 fds = os.listdir("/proc/%s/fd" % pid)
             except OSError:
-                continue   # processo di un altro utente o gia' finito
+                continue   # process of another user, or already gone
             for fd in fds:
                 try:
                     if os.readlink("/proc/%s/fd/%s" % (pid, fd)) in inodes:
@@ -167,7 +167,7 @@ else:
             self.pid = None; self.last = None
 
         def sample(self, pid):
-            """(cpu % del PC, RSS MB, memoria anonima MB, avviato_epoch) oppure None."""
+            """(cpu % of the PC, RSS MB, anonymous memory MB, started_epoch) or None."""
             if pid is None:
                 self.pid = None; self.last = None
                 return None
@@ -191,12 +191,12 @@ else:
         if not pid:
             return False
         try:
-            return _stat(pid)[0] != "Z"   # uno zombie ha gia' finito
+            return _stat(pid)[0] != "Z"   # a zombie has already finished
         except OSError:
             return False
 
     def system_times():
-        """(inattivo, totale) in tick di tutte le CPU: la CPU del PC e' 1 - d(inattivo)/d(totale)."""
+        """(idle, total) in ticks of all CPUs: the PC CPU is 1 - d(idle)/d(total)."""
         with open("/proc/stat") as f:
             v = [int(x) for x in f.readline().split()[1:9]]
         return v[3] + v[4], sum(v)   # idle + iowait

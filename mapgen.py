@@ -1,6 +1,6 @@
-"""Tile PNG viste dall'alto di un mondo Minecraft Java 26.x leggendo i file region (.mca).
+"""Top-down PNG tiles of a Minecraft Java world (1.18 and newer), read from the region files (.mca).
 
-Solo libreria standard. API usata dal pannello web:
+Standard library only. API used by the web panel:
     DIMS, list_regions, render_region, get_tile, bounds
 CLI:
     python -I mapgen.py <world_dir> <dim> <rx> <rz> <out.png>
@@ -9,16 +9,16 @@ CLI:
 import json, math, os, re, struct, sys, threading, time, zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from players import nbt_parse  # noqa: E402
+from players import ASSETS, dim_dir, nbt_parse  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIMS = ("overworld", "the_nether", "the_end")
 SIZE = 512
 
-# ------------------------------------------------------------------ colori blocchi
+# ------------------------------------------------------------------ block colours
 _TEX = None
 _GID_LOCK = threading.Lock()
-KIND, COL, TINT = [], [], []   # per gid: 0 salta, 1 solido, 2 acqua, 3 lava | rgb | 0 nessuna, 1 erba, 2 foglie
+KIND, COL, TINT = [], [], []   # per gid: 0 skip, 1 solid, 2 water, 3 lava | rgb | 0 none, 1 grass, 2 leaves
 _GID = {}
 NEUTRAL = (125, 125, 125)
 
@@ -44,7 +44,7 @@ def _tex():
     global _TEX
     if _TEX is None:
         try:
-            with open(os.path.join(HERE, "assets", "texcolors.json"), encoding="utf-8") as f:
+            with open(os.path.join(ASSETS, "texcolors.json"), encoding="utf-8") as f:
                 _TEX = json.load(f)
         except Exception:
             _TEX = {}
@@ -64,7 +64,7 @@ def _texcol(name):
 
 
 def _classify(name):
-    """name senza prefisso minecraft: -> (kind, rgb, tint)"""
+    """name without the minecraft: prefix -> (kind, rgb, tint)"""
     if name in _SKIP_EXACT or _SKIP_RE.search(name):
         return 0, NEUTRAL, 0
     if name in ("water", "bubble_column"):
@@ -107,7 +107,7 @@ def _palette_gids(pal):
     return out
 
 
-# ------------------------------------------------------------------ biomi
+# ------------------------------------------------------------------ biomes
 _W = (63, 118, 228)
 _BT = {
     "plains": ((145, 189, 89), (119, 171, 47), _W), "forest": ((121, 192, 90), (89, 174, 48), _W),
@@ -163,7 +163,7 @@ def _biome_idx(name):
     return i
 
 
-# ------------------------------------------------------------------ decodifica anvil
+# ------------------------------------------------------------------ anvil decoding
 _LOW = bytes(x & 15 for x in range(256))
 _HIGH = bytes(x >> 4 for x in range(256))
 _AIR_SEC = None
@@ -173,13 +173,13 @@ def _unpack(data, bits, n):
     vpl = 64 // bits
     mask = (1 << bits) - 1
     shifts = [bits * k for k in range(vpl)]
-    # i long con segno vanno bene: (L >> s) & mask e' corretto anche per negativi
+    # signed longs are fine: (L >> s) & mask is right for negative values too
     out = [(L >> s) & mask for L in data for s in shifts]
     return out[:n]
 
 
 def _decode_section(sec):
-    """-> (lp_gids, idx) ; idx None se uniforme; bytes/list di indici locali (ordine y,z,x)."""
+    """-> (lp_gids, idx) ; idx None if uniform; bytes/list of local indices (order y,z,x)."""
     bs = sec.get("block_states")
     if not bs:
         return ((_gid("air"),), None)
@@ -214,7 +214,7 @@ def _biome_cells(sec):
 
 
 def _read_chunks(path):
-    """Generatore di chunk NBT (dict) da un .mca; tollera chunk illeggibili."""
+    """Generator of NBT chunks (dict) from a .mca; tolerates unreadable chunks."""
     with open(path, "rb") as f:
         buf = f.read()
     if len(buf) < 8192:
@@ -397,7 +397,7 @@ def _png(img, w, h):
 
 
 def _region_path(world_dir, dim, rx, rz):
-    return os.path.join(world_dir, "dimensions", "minecraft", dim, "region", "r.%d.%d.mca" % (rx, rz))
+    return os.path.join(dim_dir(world_dir, dim), "region", "r.%d.%d.mca" % (rx, rz))
 
 
 def render_region(world_dir, dim, rx, rz):
@@ -434,9 +434,9 @@ def render_region(world_dir, dim, rx, rz):
     return _png(img, SIZE, SIZE)
 
 
-# ------------------------------------------------------------------ API pannello
+# ------------------------------------------------------------------ panel API
 def list_regions(world_dir, dim):
-    d = os.path.join(world_dir, "dimensions", "minecraft", dim, "region")
+    d = os.path.join(dim_dir(world_dir, dim), "region")
     out = []
     try:
         names = os.listdir(d)

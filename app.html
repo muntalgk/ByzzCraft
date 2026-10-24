@@ -77,6 +77,10 @@ main{padding:22px 28px 60px;min-width:0}
 .btn.danger{background:transparent;border-color:#5a2a28;color:#ff9b94}
 .btn.danger:hover:not(:disabled){background:#2a1514}
 .btn:disabled{opacity:.4;cursor:not-allowed}
+.health{border-color:#5b4a12}.health b{font-size:14px}
+.hc{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:10px 0 0;margin-top:10px;border-top:1px solid var(--line);font-size:14px;color:var(--text2)}
+.hc code{display:block;width:100%;font:12px/1.5 var(--mono);background:#0a0c0f;border:1px solid var(--line);padding:6px 9px;border-radius:8px;user-select:all;overflow-wrap:anywhere}
+.hc .btn{padding:6px 12px}.st-err{color:#ffb3ad}
 .banner{display:none;align-items:center;justify-content:space-between;gap:12px;border:1px solid #5b4a12;background:#221d0c;color:#f3d77a;border-radius:12px;padding:10px 14px;font-size:14px}
 .banner.show{display:flex}
 .banner .btn{padding:7px 12px}
@@ -239,7 +243,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 /* ---------- map ---------- */
 .wm{position:relative;overflow:hidden;background:#0b0d10;border-radius:12px;border:1px solid var(--line);touch-action:none;cursor:grab;user-select:none}
 .wm:active{cursor:grabbing}
-.wm-world{position:absolute;left:0;top:0;transform-origin:0 0}/* niente will-change: il browser ridisegnerebbe a una sola scala (tile mancanti, testo sfocato con lo zoom) */
+.wm-world{position:absolute;left:0;top:0;transform-origin:0 0}/* no will-change: the browser would paint at one scale only (missing tiles, blurry text when zoomed) */
 .wm-world img{position:absolute;width:512px;height:512px;image-rendering:auto}
 .wm.px .wm-world img{image-rendering:pixelated}
 .wm-mk{position:absolute;transform-origin:0 0;transform:scale(var(--inv,1)) translate(-50%,-50%);pointer-events:auto}
@@ -327,7 +331,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
 @media (max-width:1100px){.bk-top{grid-template-columns:1fr 1fr}.bk-now{grid-column:1/-1}.bk-wrap{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:520px){.bk-top{grid-template-columns:1fr}.bk .acts .ib{width:28px}}
-/* ---------- mondo: ora e meteo ---------- */
+/* ---------- world: time and weather ---------- */
 .wc{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:18px;align-items:center;overflow:hidden;position:relative;transition:background 2s}
 .wc.day{background:linear-gradient(120deg,#1b3550,#1a2433 55%,var(--card))}.wc.dusk{background:linear-gradient(120deg,#4a2738,#261d2e 55%,var(--card))}
 .wc.night{background:linear-gradient(120deg,#0e1430,#141a2b 55%,var(--card))}.wc.dawn{background:linear-gradient(120deg,#4d3a24,#2a2420 55%,var(--card))}
@@ -342,7 +346,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .wchip small{color:var(--mute);font-size:12px}
 .wchip.sleep{color:#b8f5c4;border-color:#2f6b3a}.wchip.warn{color:#ffd18a;border-color:#6b5222}
 @media (max-width:760px){.wc{grid-template-columns:auto minmax(0,1fr)}.wchips{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;align-items:center}}
-/* ---------- accessi ---------- */
+/* ---------- access ---------- */
 .ac-top{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
 .ac-top .search{flex:1;min-width:180px}
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:4px 10px;border-radius:999px;border:1px solid var(--line2);color:var(--text2)}
@@ -357,12 +361,18 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .tg{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:0 6px;border-radius:5px;border:1px solid}
 .tg.on{color:#8be29a;border-color:#2f6b3a}.tg.opx{color:#f0c75e;border-color:#5a4a1c}.tg.wl{color:#a9c8f5;border-color:#2e4466}.tg.ban{color:#ff9b94;border-color:#5a2a28}
 .acr .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.acc{display:grid;gap:16px;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.acc-wide{grid-column:1/-1}
+@media (max-width:900px){.acc{grid-template-columns:minmax(0,1fr)}}
+.ps{display:grid;gap:0 16px;grid-template-columns:repeat(3,minmax(0,1fr))}.ps-wide{grid-column:1/-1}.ps-info{font-size:12.5px;color:var(--mute);margin:0}
+@media (max-width:900px){.ps{grid-template-columns:minmax(0,1fr)}}.acc h3{font-size:15px;margin:0 0 6px}
+.acc label.f{display:block;font-size:12.5px;color:var(--text2);margin:12px 0 6px}.acc .search{width:100%;min-width:0}
+.acc .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}.acc .ac-list{margin-top:8px}
 .sb{background:var(--card2);border:1px solid var(--line2);color:var(--text2);border-radius:8px;padding:5px 10px;font-size:12.5px;cursor:pointer;white-space:nowrap;transition:all .15s}
 .sb:hover{color:var(--text);border-color:#4a505c}.sb.on{color:#8be29a;border-color:#2f6b3a;background:#132a17}.sb.gold.on{color:#f0c75e;border-color:#5a4a1c;background:#2a2412}
 .sb.red{color:#ff9b94;border-color:#5a2a28;background:transparent}.sb.red:hover{background:#2a1514}.sb.ask{color:#ffb4ae;background:#3a1715;border-color:#6b2a26}
 .sb:disabled{opacity:.4;cursor:default}
 @media (max-width:620px){.acr{flex-wrap:wrap}.acr .acts{width:100%;justify-content:flex-start}}
-/* ---------- registro ---------- */
+/* ---------- activity log ---------- */
 .rg-tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 .rg-tools .search{flex:1;min-width:180px}
 .rg .day{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:16px 0 6px}
@@ -416,6 +426,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
     <button class="tab adm" data-v="backups"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></svg>Backup<span class="cnt" id="cnt-bk"></span></button>
     <button class="tab adm" data-v="access"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>{{Access}}</button>
     <button class="tab adm" data-v="audit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>{{Log}}</button>
+    <button class="tab" data-v="account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.2 4.2-6.5 8-6.5s7 2.3 8 6.5"/></svg>{{Account}}</button>
     <div class="me"><div class="me-face" id="me-face"></div><div class="me-t"><b id="who"></b><span class="role" id="me-role"></span></div>
       <button id="logout" title="{{Log out}}" aria-label="{{Log out}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4"/></svg><span>{{Log out?}}</span></button></div>
   </nav>
@@ -435,11 +446,13 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
           <button class="btn primary" id="b-start">{{Start}}</button>
           <button class="btn" id="b-restart">{{Restart}}</button>
           <button class="btn danger" id="b-stop">{{Stop}}</button>
+          <button class="btn danger adm-only" id="b-kill" hidden>{{Force stop}}</button>
         </div>
       </div>
       <div class="card wc" id="world" hidden><div class="orb" id="w-orb"></div>
         <div><div class="clock" id="w-clock"></div><div class="ph" id="w-ph"></div><div class="cyc"><i id="w-mark"></i></div></div>
         <div class="wchips" id="w-chips"></div></div>
+      <div class="card health adm-only" id="health" hidden><b>{{To do before playing}}</b><div id="health-list"></div></div>
       <div class="banner" id="banner"><span>{{You changed the settings: they apply at the next restart.}}</span><button class="btn" id="b-banner">{{Restart now}}</button></div>
       <div class="online-strip" id="online-strip"></div>
       <div class="dash-row">
@@ -456,7 +469,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
       <div class="card adm-only"><div class="head" style="display:flex;justify-content:space-between;margin-bottom:10px"><b>Console</b><button class="btn" style="padding:5px 12px" data-go="console">{{Open console}}</button></div><div class="con" id="con-mini"></div></div>
     </section>
 
-    <!-- METRICHE -->
+    <!-- METRICS -->
     <section id="v-metrics" class="grid" hidden>
       <div class="grid k-grid">
         <div class="card kpi"><div class="lab"><i style="background:var(--s-pc)"></i>{{PC CPU}}</div><div class="val" id="k-pc">-</div><div class="hint" id="k-pc-h"> </div></div>
@@ -507,6 +520,16 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 
     <!-- PROPERTIES -->
     <section id="v-props" hidden>
+      <div class="acc" style="margin-bottom:20px"><div class="card acc-wide"><h3>{{Panel}}</h3><p class="ps-info" id="ps-info"></p>
+        <div class="ps">
+          <div><label class="f" for="ps-ram">{{Server RAM}}</label><input class="search" id="ps-ram" maxlength="7" spellcheck="false" autocomplete="off"></div>
+          <div><label class="f" for="ps-stop">{{Stop when empty for (minutes, 0 = never)}}</label><input class="search" type="number" min="0" max="1440" id="ps-stop"></div>
+          <div><label class="f" for="ps-addr">{{Server address for players (optional)}}</label><input class="search" id="ps-addr" maxlength="100" spellcheck="false" autocomplete="off" placeholder="{{e.g. play.example.com}}"></div>
+          <div class="ps-wide"><label class="f" for="ps-args">{{Extra Java flags (optional)}}</label><input class="search" id="ps-args" maxlength="500" spellcheck="false" autocomplete="off"></div>
+        </div>
+        <div class="row"><label class="toggle"><input type="checkbox" id="ps-bk"> {{Back up the world before every start}}</label></div>
+        <div class="row"><label class="toggle"><input type="checkbox" id="ps-ar"> {{Restart the server by itself after a crash}}</label></div>
+        <div class="row"><button class="btn primary" id="ps-save">{{Save}}</button></div></div></div>
       <div class="toolbar"><input class="search" id="p-filter" placeholder="{{Search settings...}}"><span class="lock" id="p-note">{{Changes apply at the next server restart. Every save backs up the file.}}</span></div>
       <div id="p-list"></div>
       <div class="savebar" id="savebar"><span id="p-count"></span><div class="actions"><button class="btn" id="p-undo">{{Cancel}}</button><button class="btn" id="p-save">{{Save}}</button><button class="btn primary" id="p-save-r">{{Save and restart}}</button></div></div>
@@ -532,7 +555,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
           <label class="f" for="bk-daily">{{Daily backup (even with the server off)}}</label>
           <div style="display:flex;gap:8px;align-items:center"><label class="toggle"><input type="checkbox" id="bk-daily-on">{{ at}}</label><input type="time" id="bk-daily" style="flex:1"></div>
           <label class="f">{{How many to keep (0 = all)}}</label>
-          <div class="keep"><div><small>{{Pre-start}}</small><input type="number" id="bk-k-avvio" min="0" max="200"></div><div><small>{{Scheduled}}</small><input type="number" id="bk-k-programmato" min="0" max="200"></div><div><small>{{Manual}}</small><input type="number" id="bk-k-manuale" min="0" max="200"></div></div>
+          <div class="keep"><div><small>{{Pre-start}}</small><input type="number" id="bk-k-startup" min="0" max="200"></div><div><small>{{Scheduled}}</small><input type="number" id="bk-k-scheduled" min="0" max="200"></div><div><small>{{Manual}}</small><input type="number" id="bk-k-manual" min="0" max="200"></div></div>
           <p class="note">{{Extra ones go to the trash, oldest first. Pinned backups (star) are never touched, nor are old worlds.}}</p>
           <button class="btn primary" id="bk-save" style="width:100%;justify-content:center;margin-top:6px">{{Save schedule}}</button>
         </div>
@@ -540,7 +563,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
     </section>
 
     <!-- AUDIT -->
-    <!-- ACCESSI -->
+    <!-- ACCESS -->
     <section id="v-access" hidden>
       <div class="ac-top"><input class="search" id="ac-name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="{{Minecraft name, e.g. NewFriend}}">
         <button class="btn primary" id="ac-add">{{Add to whitelist}}</button></div>
@@ -549,9 +572,30 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
       <div id="ac-ip"></div>
     </section>
 
-    <!-- REGISTRO -->
+    <!-- ACCOUNT -->
+    <section id="v-account" hidden>
+      <div class="acc">
+        <div class="card adm-only acc-wide"><h3>{{Panel users}}</h3><div class="ac-list" id="us-list"></div></div>
+        <div class="card"><h3>{{Change password}}</h3>
+          <label class="f" for="pw-cur">{{Current password}}</label><input class="search" type="password" id="pw-cur" autocomplete="current-password">
+          <label class="f" for="pw-new">{{New password (at least 10 characters)}}</label><input class="search" type="password" id="pw-new" autocomplete="new-password">
+          <label class="f" for="pw-new2">{{Repeat the new password}}</label><input class="search" type="password" id="pw-new2" autocomplete="new-password">
+          <div class="row"><button class="btn primary" id="pw-save">{{Change password}}</button></div></div>
+        <div class="card adm-only"><h3 id="us-title">{{Add a user}}</h3>
+          <label class="f" for="us-name">{{User name (lowercase)}}</label><input class="search" id="us-name" maxlength="32" autocomplete="off" spellcheck="false" placeholder="{{e.g. alex}}">
+          <label class="f" for="us-pw">{{Password (at least 10 characters)}}</label><input class="search" type="password" id="us-pw" autocomplete="new-password">
+          <label class="f" for="us-mc">{{Minecraft name (optional, for the face)}}</label><input class="search" id="us-mc" maxlength="16" autocomplete="off" spellcheck="false">
+          <div class="row"><label class="toggle"><input type="checkbox" id="us-admin"> {{Admin: can use console, settings, backups and access}}</label></div>
+          <div class="row"><button class="btn primary" id="us-save">{{Save user}}</button><button class="btn" id="us-cancel" hidden>{{Cancel}}</button></div></div>
+      </div>
+      <p class="note" id="version" style="margin-top:16px"></p>
+    </section>
+
+    <!-- ACTIVITY LOG -->
     <section id="v-audit" hidden>
-      <div class="rg-tools"><input class="search" id="rg-q" placeholder="{{Search the log...}}"><select class="search" id="rg-user" style="min-width:150px;flex:0"><option value="">{{All}}</option></select></div>
+      <div class="chips-f" id="rg-mode" style="margin-bottom:12px"><button data-m="" class="on">{{Activity}}</button><button data-m="panel">{{Technical log}}</button><button data-m="start">{{Server start output}}</button></div>
+      <div class="con" id="rg-sys" hidden style="height:calc(100vh - 230px);min-height:320px"></div>
+      <div class="rg-tools" id="rg-tools"><input class="search" id="rg-q" placeholder="{{Search the log...}}"><select class="search" id="rg-user" style="min-width:150px;flex:0"><option value="">{{All}}</option></select></div>
       <div class="chips-f" id="rg-cats" style="margin-bottom:14px"></div>
       <div class="rg" id="rg-feed"></div>
       <button class="btn" id="rg-more" style="margin-top:10px" hidden>{{Load more}}</button>
@@ -579,15 +623,15 @@ if(!BOOT.admin){$$(".adm,.adm-only").forEach(e=>e.hidden=true)}
 function renderMe(){const f=$("#me-face");const me=BOOT.mc&&(P.roster||[]).find(p=>p.name.toLowerCase()==BOOT.mc.toLowerCase());
   if(me){if(f.dataset.u!=me.uuid){f.dataset.u=me.uuid;f.className="me-face fc";f.style.cssText=faceStyle(me.uuid,32);f.textContent=""}}
   else if(!f.dataset.u)f.textContent=(BOOT.mc||BOOT.user).charAt(0).toUpperCase()}
-const TITLES={dash:"Dashboard",map:_t("Map"),players:_t("Players"),timeline:"Timeline",metrics:_t("Metrics"),console:"Console",props:_t("Server settings"),backups:"Backup",access:_t("Access"),audit:_t("Panel log")};
+const TITLES={dash:"Dashboard",map:_t("Map"),players:_t("Players"),timeline:"Timeline",metrics:_t("Metrics"),console:"Console",props:_t("Server settings"),backups:"Backup",access:_t("Access"),audit:_t("Panel log"),account:_t("Account")};
 const SUBS={dash:()=>_t("Live server and world status"),map:()=>_t("Top-down view · drag, zoom, right-click for a marker"),
   players:()=>{const r=P.roster||[],n=r.filter(p=>p.online).length;return _t("%s players recorded",r.length)+" · "+(n?_t("%s online",n):_t("nobody online"))},
-  timeline:()=>_t("Play sessions and events from the server logs"),metrics:()=>_t("PC and server · last 10 minutes, one point every 2 seconds"),console:()=>_t("Live log and RCON commands"),props:()=>_t("server.properties · every save backs up the file"),access:()=>_t("Whitelist, operators and bans"),audit:()=>_t("Who did what in the panel"),
+  timeline:()=>_t("Play sessions and events from the server logs"),metrics:()=>_t("PC and server · last 10 minutes, one point every 2 seconds"),console:()=>_t("Live log and RCON commands"),props:()=>_t("server.properties · every save backs up the file"),access:()=>_t("Whitelist, operators and bans"),audit:()=>_t("Who did what in the panel"),account:()=>BOOT.admin?_t("Your password and the panel users"):_t("Your password"),
   backups:()=>BK.items?_t("%s backups",BK.items.length)+" · "+gb(BK.items.reduce((a,e)=>a+e.size,0))+" · "+_t("%s free on disk",gb(BK.disk.free)):_t("World copies, schedule and restore")};
 let CUR="dash";function setSub(){$("#v-sub").textContent=SUBS[CUR]?SUBS[CUR]():""}
 function go(v){if(!TITLES[v])v="dash";CUR=v;$$(".tab").forEach(t=>{t.classList.toggle("on",t.dataset.v==v);if(t.dataset.v==v&&innerWidth<=760)t.scrollIntoView({inline:"nearest",block:"nearest"})});Object.keys(TITLES).forEach(x=>$("#v-"+x).hidden=x!=v);
-  $("#v-title").textContent=TITLES[v];setSub();if(v=="props")loadProps();if(v=="console"){renderConsole();setTimeout(()=>$("#cmd").focus(),50)}if(v=="metrics")charts.forEach(c=>c.draw());
-  if(v=="players")loadPlayers();if(v=="map")MAPF.show();if(v=="timeline")TLV.open();if(v=="dash")MAPM.show();if(v=="backups")BK.load();if(v=="access")ACV.load();if(v=="audit")RGV.load();location.hash=v}
+  $("#v-title").textContent=TITLES[v];setSub();if(v=="props"){loadProps();PS.load()}if(v=="console"){renderConsole();setTimeout(()=>$("#cmd").focus(),50)}if(v=="metrics")charts.forEach(c=>c.draw());
+  if(v=="players")loadPlayers();if(v=="map")MAPF.show();if(v=="timeline")TLV.open();if(v=="dash")MAPM.show();if(v=="backups")BK.load();if(v=="access")ACV.load();if(v=="audit")RGV.load();if(v=="account")ACC.load();location.hash=v}
 $$(".tab").forEach(t=>t.onclick=()=>go(t.dataset.v));$$("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
 $("#logout").onclick=async e=>{const b=e.currentTarget;
   if(!b.classList.contains("ask")){b.classList.add("ask");clearTimeout(b._t);b._t=setTimeout(()=>b.classList.remove("ask"),3000);return}
@@ -647,15 +691,15 @@ function dur(sec){const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60);return 
 function renderStatus(){const s=S.status;if(BOOT.admin&&BK.st)BK.renderStatus();const hero=$("#hero");hero.className="card hero "+s.state;$("#st-label").textContent=STATE[s.state]||s.state;
   let sub="";if(s.state=="on"){sub=_t("%s / %s players",s.online,s.max)+(s.since?" · "+_t("on for %s",dur(Date.now()/1000-s.since)):"");
     if(s.online==0&&s.auto_stop_minutes)sub+=" · "+_t("stops after %s min with nobody on",s.auto_stop_minutes)+(s.empty_minutes?" "+_t("(empty for %s min)",s.empty_minutes):"")}
-  else if(s.state=="starting")sub=_t("World backup and loading: usually under a minute.");
-  else if(s.state=="stopping")sub=_t("Saving the world...");else sub=_t("Press Start when you want to play.");
+  else if(s.state=="starting")sub=s.backup_progress!=null?_t("Backing up the world: %s%",s.backup_progress):_t("Loading the world: usually under a minute.");
+  else if(s.state=="stopping")sub=_t("Saving the world...");else sub=s.start_error||_t("Press Start when you want to play.");$("#st-sub").classList.toggle("st-err",s.state=="off"&&!!s.start_error);
   $("#st-sub").textContent=sub;
   const pl=$("#players");pl.innerHTML="";
   if(BOOT.address){const c=document.createElement("span");c.className="chip plain";c.innerHTML=_t("Address")+" <b style='font-family:var(--mono)'>"+esc(BOOT.address)+"</b> <button title='"+_t("Copy")+"'>"+_t("copy")+"</button>";
     c.querySelector("button").onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(BOOT.address);toast(_t("Address copied"),"good")};pl.append(c)}
   (s.players||[]).forEach((n,i)=>{const c=document.createElement("span");c.className="chip";c.innerHTML="<span class=av style='background:"+AVC[[...n].reduce((a,ch)=>a+ch.charCodeAt(0),0)%AVC.length]+"'>"+esc(n[0].toUpperCase())+"</span>"+esc(n);pl.append(c)});
   const up=s.state=="on"||s.state=="stopping";$("#b-start").hidden=up;$("#b-stop").hidden=$("#b-restart").hidden=!up;
-  $("#b-start").disabled=s.state!="off";$("#b-stop").disabled=s.state!="on";$("#b-restart").disabled=s.state!="on";
+  $("#b-kill").hidden=!BOOT.admin||s.state=="off"||s.state=="starting"&&s.backup_progress!=null;$("#b-start").disabled=s.state!="off";$("#b-stop").disabled=s.state!="on";$("#b-restart").disabled=s.state!="on";
   $("#banner").classList.toggle("show",!!s.props_changed&&s.state=="on"&&BOOT.admin);
   document.title=(s.state=="on"?"● ":"")+BOOT.title;
   const pill=$("#srv-pill");pill.className="srv-pill "+s.state;pill.querySelector(".st").innerHTML="<b>"+(STATE[s.state]||s.state)+"</b>"+(s.state=="on"?" · "+s.online:"");pill.title=(s.state=="on"?_t("%s online",s.online)+" · ":"")+_t("click to copy the address");
@@ -697,10 +741,12 @@ function appendConsole(items){S.console.push(...items);if(S.console.length>1500)
 let es,fails=0;
 function connect(){es=new EventSource("/api/events");
   es.addEventListener("init",e=>{const d=JSON.parse(e.data);S.status=d.status;S.metrics=d.metrics;S.heap=d.heap;S.audit=d.audit;S.console=d.console;S.timeline=d.timeline||[];fails=0;live(true);
-    renderStatus();renderMetrics();renderHeap();renderConsole();renderDashFeed();WV.set(d.world)});
+    renderStatus();renderMetrics();renderHeap();renderConsole();renderDashFeed();WV.set(d.world);HL.load()});
   es.addEventListener("timeline",e=>onTimeline(JSON.parse(e.data)));
   es.addEventListener("positions",e=>{const d=JSON.parse(e.data);P.positions=d.players;MAPF.setPlayers(d.players);MAPM.setPlayers(d.players);renderOnline()});
   es.addEventListener("backups",e=>BK.onStatus(JSON.parse(e.data)));
+  es.addEventListener("notice",e=>{const d=JSON.parse(e.data);toast(d.message,d.ok?"good":"bad");HL.load()});
+  es.addEventListener("health",()=>HL.load());
   es.addEventListener("backup_done",e=>{const d=JSON.parse(e.data);toast(d.message,d.ok?"good":"bad");BK.load()});
   es.addEventListener("markers",e=>{const d=JSON.parse(e.data);MAPF.reloadIf(d.dim);MAPM.reloadIf(d.dim)});
   es.addEventListener("status",e=>{S.status=JSON.parse(e.data);renderStatus()});
@@ -721,6 +767,7 @@ setInterval(()=>{charts.forEach(c=>c.draw());if(S.status.state=="on")renderStatu
 async function act(path,confirmMsg){if(confirmMsg&&!confirm(confirmMsg))return;const j=await api(path);toast(j.message,j.ok?"good":"bad")}
 $("#b-start").onclick=()=>act("/api/start");
 $("#b-stop").onclick=()=>act("/api/stop",S.status.online?_t("%s players are online. Stop anyway?",S.status.online):_t("Stop the server?"));
+$("#b-kill").onclick=()=>act("/api/kill",_t("Force stop? Java is closed right away: the last minutes of play may be lost. Use it only if the server does not respond."));
 $("#b-restart").onclick=()=>act("/api/restart",S.status.online?_t("Players are online: they will be disconnected. Restart?"):_t("Restart the server?"));
 $("#b-banner").onclick=$("#b-restart").onclick;
 /* console input */
@@ -769,6 +816,17 @@ function propRow(p,m){const v=p.key in S.edits?S.edits[p.key]:p.value;const dis=
 function savebar(){const n=Object.keys(S.edits).length;$("#savebar").classList.toggle("show",n>0);$("#p-count").textContent=(n==1?_t("%s unsaved change",n):_t("%s unsaved changes",n))}
 $("#p-filter").oninput=renderProps;$("#p-undo").onclick=()=>{S.edits={};renderProps()};
 async function saveProps(restart){const j=await api("/api/properties",{changes:S.edits,restart});toast(j.message,j.ok?"good":"bad");if(j.ok){await loadProps();if(restart)go("dash")}}
+const PS={async load(){if(!BOOT.admin)return;const r=await fetch("/api/panel-settings");if(r.ok)this.render(await r.json())},
+  render(j){$("#ps-ram").value=j.ram;$("#ps-ram").placeholder=_t("automatic: %s",j.ram_auto);$("#ps-stop").value=j.auto_stop_minutes;
+    $("#ps-addr").value=j.mc_address;$("#ps-args").value=j.java_args;$("#ps-bk").checked=j.backup_on_start;$("#ps-ar").checked=j.auto_restart;
+    ["#ps-ram","#ps-args","#ps-bk"].forEach(s=>$(s).disabled=!!j.start_script);
+    $("#ps-info").textContent=j.start_script?_t("Started by your script %s: RAM, Java flags and the backup before the start are set there.",j.start_script)
+      :_t("Server %s · %s · this machine has %s GB of RAM",j.jar||_t("not found"),
+        !j.java?_t("Java not found"):"Java "+(j.java_need||"")+" ("+(j.java_bundled?_t("downloaded by the panel"):_t("installed on the system"))+")",nf(j.ram_total/1024,1))},
+  async save(){const j=await api("/api/panel-settings",{ram:$("#ps-ram").value,java_args:$("#ps-args").value,backup_on_start:$("#ps-bk").checked,auto_restart:$("#ps-ar").checked,
+    auto_stop_minutes:+$("#ps-stop").value||0,mc_address:$("#ps-addr").value});toast(j.message,j.ok?"good":"bad");
+    if(j.ok){this.render(j.settings);BOOT.address=j.settings.mc_address;renderStatus()}}};
+$("#ps-save").onclick=()=>PS.save();
 $("#p-save").onclick=()=>saveProps(false);$("#p-save-r").onclick=()=>{if(S.status.state!="on"||confirm(_t("Save and restart the server now?")))saveProps(S.status.state=="on")};
 
 /* ---------------- players ---------------- */
@@ -791,7 +849,7 @@ function renderRoster(){const box=$("#pl-list");const keep=new Set();
   if(!P.roster.length)$("#pl-detail").innerHTML="<div class=card style='color:var(--mute)'>"+_t("No players recorded on this world yet.")+"</div>"}
 async function selectPlayer(uuid,quiet){P.sel=uuid;renderRoster();try{const r=await fetch("/api/player?uuid="+encodeURIComponent(uuid));if(!r.ok)return;
   const d=await r.json();if(P.sel!=uuid)return;const first=!P.cur||P.cur.uuid!=uuid;P.cur=d;P.hardcore=d.hardcore;renderPlayer(first)}catch(e){}}
-/* -- skin 3D in CSS: ogni parte e' una scatola con 6 facce che pescano dalla texture 64x64 -- */
+/* -- 3D skin in CSS: every part is a box with 6 faces taken from the 64x64 texture -- */
 const SS=7;
 function skinParts(slim){const aw=slim?3:4;return [
   ["head",[8,8,8],[0,-10,0],[0,0],[32,0],.5,null],["body",[8,12,4],[0,0,0],[16,16],[16,32],.25,null],
@@ -857,14 +915,14 @@ function renderPlayer(first){const d=P.cur;if(!d)return;const box=$("#pl-detail"
     .map(([v,l])=>"<div class=stat><div class=v>"+v+"</div><div class=l>"+l+"</div></div>").join("")+"</div><div class=tops>"+
     topList(_t("Most killed"),d.stats.killed.map(r=>[r[0],r[1],r[2]+"_spawn_egg"]))+topList(_t("Most mined"),d.stats.mined)+topList(_t("Killed by"),d.stats.killed_by.map(r=>[r[0],r[1],r[2]+"_spawn_egg"]))+"</div>"}
   if(P.skinFor!=d.uuid)buildSkin(d.uuid,d.slim)}
-/* tooltip stile Minecraft */
+/* Minecraft-style tooltip */
 const TIP=document.createElement("div");TIP.className="mctip";TIP.hidden=true;document.body.append(TIP);
 document.addEventListener("mousemove",e=>{const s=e.target.closest&&e.target.closest("[data-tip]");if(!s){TIP.hidden=true;return}
   const t=JSON.parse(decodeURIComponent(s.dataset.tip));TIP.innerHTML="<div class='n"+(t.g?" e":"")+"'>"+esc(t.n)+(t.c>1?" ×"+t.c:"")+"</div>"+t.e.map(x=>"<div class=e>"+esc(x[0])+" "+esc(x[1])+"</div>").join("")+
     (t.m?"<div class=d>"+_t("Durability: %s / %s",t.m-t.d,t.m)+"</div>":"")+"<div class=id>minecraft:"+esc(t.id)+"</div>";
   TIP.hidden=false;const w=TIP.offsetWidth,h=TIP.offsetHeight;TIP.style.left=Math.min(e.clientX+14,innerWidth-w-8)+"px";TIP.style.top=Math.max(8,e.clientY-h-10)+"px"});
 
-/* ---------------- volti, eventi, giocatori online ---------------- */
+/* ---------------- faces, events, players online ---------------- */
 function faceStyle(uuid,w){return "background-image:url(/skin/"+uuid+".png);background-size:"+w*8+"px "+w*8+"px;background-position:-"+w+"px -"+w+"px;--hat:-"+5*w+"px -"+w+"px"}
 function uuidOf(name){const r=(P.roster||[]).find(p=>p.name==name);return r?r.uuid:null}
 const EVI={death:"☠️",join:"➜",leave:"⟵",advancement:"🏆",chat:"💬",server_start:"⏻",server_ready:"✅",server_stop:"⏹",panel:"⚙️"};
@@ -888,7 +946,7 @@ function onTimeline(e){S.timeline=S.timeline||[];S.timeline.unshift(e);S.timelin
 async function loadRoster(){try{const r=await fetch("/api/players");if(!r.ok)return;const j=await r.json();P.roster=j.players;P.hardcore=j.hardcore;renderOnline();renderRoster();TLV.fillPlayers();MAPF.drawMarkers();MAPM.drawMarkers();renderDashFeed();
   if(TLV.opened){TLV.renderSessions();TLV.render()}}catch(e){}}
 
-/* ---------------- mappa ---------------- */
+/* ---------------- map ---------------- */
 const DIMNAMES={overworld:_t("Overworld"),the_nether:"Nether",the_end:"End"};
 const ICONS=[["pin",_t("Marker")],["home",_t("Home")],["portal",_t("Portal")],["star",_t("Important")],["danger",_t("Danger")]];
 class WorldMap{
@@ -903,11 +961,11 @@ class WorldMap{
   visible(){return this.el.offsetParent!==null&&this.el.clientWidth>0}
   async show(){if(!this.loaded)await this.load(this.dim);this.apply();if(!this.mini)this.legend()}
   async load(dim,keep){this.want=dim;const r=await fetch("/api/map?dim="+dim);if(!r.ok)return;const j=await r.json();
-    if(this.want!=dim)return;   // risposta vecchia arrivata dopo un cambio di dimensione
+    if(this.want!=dim)return;   // stale answer that arrived after a dimension change
     if(dim!=this.dim){this.tiles.innerHTML="";this.imgs.clear();this.dim=dim;this.centered=false;this.pl.forEach(x=>x.remove());this.pl.clear()}
     this.regions=new Map(j.regions.map(([rx,rz,mt])=>[rx+","+rz,mt]));this.spawn=j.spawn;this.markers=j.markers;this.loaded=true;
     for(const [k,img] of this.imgs){const mt=this.regions.get(k);
-      if(mt&&img.dataset.v!=mt){img.dataset.v=mt;img.src=this.url(k,mt)}else if(mt&&img.style.visibility=="hidden")img.src=this.url(k,mt)+"&r="+Date.now()}   // tile fallita: riprova a ogni aggiornamento
+      if(mt&&img.dataset.v!=mt){img.dataset.v=mt;img.src=this.url(k,mt)}else if(mt&&img.style.visibility=="hidden")img.src=this.url(k,mt)+"&r="+Date.now()}   // failed tile: retried at every update
     this.empty.textContent=this.regions.size?"":_t("No explored area in this dimension.");
     if(!this.mini){const sel=this.el.querySelector(".dimsel");if(sel)sel.value=this.dim}
     this.drawMarkers();this.setPlayers(P.positions||[]);if(!this.centered&&this.visible()){this.centered=true;this.home()}this.apply()}
@@ -1016,7 +1074,7 @@ $("#tl-clear").onclick=()=>{TLV.sess=null;$("#tl-clear").hidden=true;TLV.renderS
 $("#tl-more").onclick=()=>TLV.load(false);
 
 /* ---------------- backup ---------------- */
-const KIND={avvio:[_t("Pre-start"),"#3987e5"],programmato:[_t("Scheduled"),"#3fb950"],manuale:[_t("Manual"),"#d4a017"],mondo:[_t("Old world"),"#9a5cff"],altro:[_t("Other"),"#8b8f98"]};
+const KIND={startup:[_t("Pre-start"),"#3987e5"],scheduled:[_t("Scheduled"),"#3fb950"],manual:[_t("Manual"),"#d4a017"],world:[_t("Old world"),"#9a5cff"],other:[_t("Other"),"#8b8f98"]};
 const SV=p=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>';
 const BI={zip:SV('<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/>'),
   dir:SV('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
@@ -1038,7 +1096,7 @@ const BK={items:null,disk:null,st:null,f:"",dirty:false,
     $("#bk-filter").innerHTML=[["",_t("All"),it.length],...Object.keys(KIND).filter(k=>cnt[k]).map(k=>[k,KIND[k][0],cnt[k]])]
       .map(([k,l,n])=>"<button data-k='"+k+"' class='"+(this.f==k?"on":"")+"'>"+esc(l)+" <span style='opacity:.6'>"+n+"</span></button>").join("");
     const rows=it.filter(e=>!this.f||e.kind==this.f);const busy=!!(this.st&&this.st.busy);
-    $("#bk-list").innerHTML=rows.length?rows.map(e=>{const k=KIND[e.kind]||KIND.altro,id=esc(e.id),zip=e.folder=="backups";
+    $("#bk-list").innerHTML=rows.length?rows.map(e=>{const k=KIND[e.kind]||KIND.other,id=esc(e.id),zip=e.folder=="backups";
       return "<div class='bk"+(e.pinned?" pin":"")+"'><div class='ic' style='background:"+k[1]+"22;color:"+k[1]+"'>"+(zip?BI.zip:BI.dir)+"</div>"
         +"<div class='tx'><b title='"+esc(e.name)+"'>"+esc(e.note||e.name)+"</b><small><span class='kb' style='color:"+k[1]+";border-color:"+k[1]+"55'>"+k[0]+"</span>"
         +new Date(e.mtime*1000).toLocaleString(LOC,{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})+" · "+bkAgo(e.mtime)+" · "+gb(e.size)
@@ -1061,7 +1119,7 @@ const BK={items:null,disk:null,st:null,f:"",dirty:false,
     $("#bk-err").classList.toggle("on",!!st.last_error);$("#bk-err").textContent=st.last_error||"";
     const on=S.status.state=="on";$("#bk-now-hint").textContent=on?_t("The server stays on: saving pauses only for the few seconds of the copy."):_t("Server off: direct copy of the world.");
     const c=st.schedule,parts=[];if(c.every_hours)parts.push((c.every_hours==1?_t("every hour"):_t("every %s hours",c.every_hours))+" "+(c.only_when_online?_t("while playing"):_t("with the server on")));if(c.daily_at)parts.push(_t("every day at %s",c.daily_at));
-    // l'intervallo conta solo se il server è acceso (e, se richiesto, c'è qualcuno); il giornaliero gira sempre
+    // the interval counts only while the server is on (and, if asked, someone is playing); the daily one always runs
     const now=Date.now()/1000,active=c.every_hours&&S.status.state=="on"&&(S.status.online>0||!c.only_when_online);
     const iv=active?(st.last_scheduled?st.last_scheduled+c.every_hours*3600:st.next_scheduled):null;
     let dn=null;if(c.daily_at){const [h,m]=c.daily_at.split(":").map(Number),d=new Date();d.setHours(h,m,0,0);if(d/1000<=now)d.setDate(d.getDate()+1);dn=d/1000}
@@ -1070,7 +1128,7 @@ const BK={items:null,disk:null,st:null,f:"",dirty:false,
     $("#bk-next-h").textContent=(parts.length?parts.join(" · ").replace(/^./,x=>x.toUpperCase()):_t("Turn it on below"))+(st.last_scheduled?" · "+_t("last %s",bkAgo(st.last_scheduled)):"")},
   fillSched(){if(this.dirty||!this.st)return;const c=this.st.schedule;$("#bk-every").value=String(c.every_hours);if(!$("#bk-every").value){const o=document.createElement("option");o.value=o.textContent=c.every_hours;$("#bk-every").append(o);$("#bk-every").value=String(c.every_hours)}
     $("#bk-online").checked=c.only_when_online;$("#bk-daily-on").checked=!!c.daily_at;$("#bk-daily").value=c.daily_at||"04:00";$("#bk-daily").disabled=!c.daily_at;
-    ["avvio","programmato","manuale"].forEach(k=>$("#bk-k-"+k).value=c.keep[k])},
+    ["startup","scheduled","manual"].forEach(k=>$("#bk-k-"+k).value=c.keep[k])},
   async act(a,id,btn){const e=this.items.find(x=>x.id==id);if(!e)return;
     if(a=="pin"){const j=await api("/api/backups/pin",{id,pinned:!e.pinned});toast(j.message,j.ok?"good":"bad");this.load()}
     if(a=="del"){if(!btn.classList.contains("ask")){btn.classList.add("ask");btn.textContent=_t("Delete?");clearTimeout(btn._t);btn._t=setTimeout(()=>this.render(),3000);return}
@@ -1079,7 +1137,7 @@ const BK={items:null,disk:null,st:null,f:"",dirty:false,
   restoreDlg(e){if(S.status.state!="off"){toast(_t("Stop the server first: the world cannot be replaced while in use."),"bad");return}
     const bg=document.createElement("div");bg.className="modal-bg";bg.innerHTML="<div class='modal' role='dialog' aria-modal='true'><h3>"+_t("Restore this world?")+"</h3>"
       +"<p><b>"+esc(e.note||e.name)+"</b><br><span style='color:var(--mute);font-size:13px'>"+new Date(e.mtime*1000).toLocaleString(LOC)+" · "+gb(e.size)+"</span></p>"
-      +"<ul><li>"+_t("The current world is moved to <b>mondi-vecchi</b>, not deleted.")+"</li><li>"+_t("Everyone goes back to how they were at that moment: position, inventory, health. Whoever died after that comes back to life.")+"</li><li>"+_t("Afterwards you can start the server as usual.")+"</li></ul>"
+      +"<ul><li>"+_t("The current world is moved to <b>old-worlds</b>, not deleted.")+"</li><li>"+_t("Everyone goes back to how they were at that moment: position, inventory, health. Whoever died after that comes back to life.")+"</li><li>"+_t("Afterwards you can start the server as usual.")+"</li></ul>"
       +"<p style='font-size:13px'>"+_t("To confirm type %s","<b style='font-family:var(--mono)'>"+_t("RESTORE")+"</b>")+"</p><input autocomplete='off' spellcheck='false'>"
       +"<div class='row'><button class='btn' data-x>"+_t("Cancel")+"</button><button class='btn primary' data-ok disabled>"+_t("Restore")+"</button></div></div>";
     document.body.append(bg);const inp=bg.querySelector("input"),ok=bg.querySelector("[data-ok]"),close=()=>{bg.remove();document.removeEventListener("keydown",kd)};
@@ -1089,7 +1147,7 @@ const BK={items:null,disk:null,st:null,f:"",dirty:false,
     setTimeout(()=>inp.focus(),30)},
   async create(){const b=$("#bk-create");b.disabled=true;const j=await api("/api/backups/create",{note:$("#bk-note").value});toast(j.message,j.ok?"good":"bad");if(j.ok)$("#bk-note").value="";else b.disabled=false},
   async save(){const c={every_hours:+$("#bk-every").value,only_when_online:$("#bk-online").checked,daily_at:$("#bk-daily-on").checked?$("#bk-daily").value:"",
-    keep:{avvio:+$("#bk-k-avvio").value,programmato:+$("#bk-k-programmato").value,manuale:+$("#bk-k-manuale").value}};
+    keep:{startup:+$("#bk-k-startup").value,scheduled:+$("#bk-k-scheduled").value,manual:+$("#bk-k-manual").value}};
     const j=await api("/api/backups/schedule",{schedule:c});toast(j.message,j.ok?"good":"bad");if(j.ok){this.dirty=false;this.load()}}};
 $("#bk-filter").onclick=e=>{const b=e.target.closest("button");if(!b)return;BK.f=b.dataset.k;BK.render()};
 $("#bk-list").onclick=e=>{const b=e.target.closest("button[data-a]");if(b&&!b.disabled)BK.act(b.dataset.a,b.dataset.id,b)};
@@ -1097,16 +1155,16 @@ $("#bk-create").onclick=()=>BK.create();$("#bk-note").onkeydown=e=>{if(e.key=="E
 $(".sched").addEventListener("input",()=>{BK.dirty=true;$("#bk-daily").disabled=!$("#bk-daily-on").checked});
 if(BOOT.admin)BK.load();
 
-/* ---------------- mondo: ora del giorno, luna, meteo ---------------- */
+/* ---------------- world: time of day, moon, weather ---------------- */
 const MOONS=[["🌕",_t("Full moon"),_t("more slimes, better-equipped mobs")],["🌖",_t("Waning gibbous"),""],["🌗",_t("Last quarter"),""],["🌘",_t("Waning crescent"),""],
   ["🌑",_t("New moon"),_t("darkest night, no swamp slimes")],["🌒",_t("Waxing crescent"),""],["🌓",_t("First quarter"),""],["🌔",_t("Waxing gibbous"),_t("full moon tomorrow")]];
 const SUNSVG='<svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="10.5" fill="#ffd76a"/><g stroke="#ffd76a" stroke-width="3" stroke-linecap="round">'+
   [0,45,90,135,180,225,270,315].map(a=>{const r=a*Math.PI/180,c=Math.cos(r),s=Math.sin(r);return '<line x1="'+(26+c*16)+'" y1="'+(26+s*16)+'" x2="'+(26+c*21)+'" y2="'+(26+s*21)+'"/>'}).join("")+'</g></svg>';
 const MOONSVG='<svg viewBox="0 0 52 52"><path d="M31 8a18 18 0 1 0 13 28A15 15 0 0 1 31 8z" fill="#dfe6ff"/><circle cx="22" cy="30" r="2.5" fill="#c3cbe6"/><circle cx="17" cy="21" r="1.6" fill="#c3cbe6"/></svg>';
 const WV={w:null,
-  // rx: istante di arrivo misurato col nostro orologio (meno l'età della lettura), mai col timestamp del server
+  // rx: arrival time by our own clock (minus the age of the reading), never by the server timestamp
   set(w){this.w=w&&w.t?w:null;if(this.w)this.w.rx=performance.now()-(w.age||0);$("#world").hidden=!this.w;this.draw()},
-  // l'ora arriva ogni 15 s: in mezzo la si fa avanzare a 20 tick al secondo (se il mondo non è in pausa)
+  // the time arrives every 15 s: in between it advances at 20 ticks a second (unless the world is paused)
   ticks(){const w=this.w;return ((w.day+(w.running?(performance.now()-w.rx)/50:0))%24000+24000)%24000},
   draw(){const w=this.w;if(!w)return;const t=this.ticks();
     const h=Math.floor((t/1000+6)%24),m=Math.floor(t%1000*.06);$("#w-clock").textContent=String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
@@ -1122,7 +1180,7 @@ const WV={w:null,
       +(sleep?"<span class='wchip sleep'>🛏️ "+_t("You can sleep")+"</span>":"")}};
 setInterval(()=>{if(WV.w&&CUR=="dash")WV.draw()},1000);
 
-/* ---------------- accessi: whitelist, operatori, ban ---------------- */
+/* ---------------- access: whitelist, operators, bans ---------------- */
 const ACV={d:null,
   async load(){try{const r=await fetch("/api/access");if(!r.ok)return;this.d=await r.json();this.render()}catch(e){}},
   people(){const d=this.d,m=new Map(),get=(n,u)=>{const k=n.toLowerCase();if(!m.has(k))m.set(k,{name:n,uuid:u||null});const p=m.get(k);if(u&&!p.uuid)p.uuid=u;return p};
@@ -1158,14 +1216,14 @@ $("#ac-add").onclick=async()=>{const n=$("#ac-name").value.trim();if(!n)return;c
   b.disabled=false;toast(j.message,j.ok?"good":"bad");if(j.ok)$("#ac-name").value="";ACV.load()};
 $("#ac-name").onkeydown=e=>{if(e.key=="Enter")$("#ac-add").click()};
 
-/* ---------------- registro del pannello ---------------- */
+/* ---------------- panel activity log ---------------- */
 const RCAT={server:["Server","#3fb950",'<path d="M12 3v8M6.3 7.3a8 8 0 1 0 11.4 0"/>'],login:["Login","#3987e5",'<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/>'],
-  console:["Console","#9085e9",'<path d="M4 17l6-5-6-5M12 19h8"/>'],impostazioni:[_t("Settings"),"#d4a017",'<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>'],
-  giocatori:[_t("Players"),"#d55181",'<path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6z"/>'],backup:["Backup","#199e70",'<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/>'],
-  mappa:[_t("Map"),"#c98500",'<path d="M12 21s-6-5.7-6-11a6 6 0 0 1 12 0c0 5.3-6 11-6 11z"/><circle cx="12" cy="10" r="2"/>'],sistema:[_t("System"),"#8b8f98",'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>']};
+  console:["Console","#9085e9",'<path d="M4 17l6-5-6-5M12 19h8"/>'],settings:[_t("Settings"),"#d4a017",'<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>'],
+  players:[_t("Players"),"#d55181",'<path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6z"/>'],backup:["Backup","#199e70",'<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/>'],
+  map:[_t("Map"),"#c98500",'<path d="M12 21s-6-5.7-6-11a6 6 0 0 1 12 0c0 5.3-6 11-6 11z"/><circle cx="12" cy="10" r="2"/>'],system:[_t("System"),"#8b8f98",'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>']};
 const RGV={items:[],total:0,counts:{},cat:"",user:"",q:"",loaded:false,mc:{},
   async load(more){const p=new URLSearchParams({limit:100,offset:more?this.items.length:0});if(this.cat)p.set("cat",this.cat);if(this.user)p.set("user",this.user);if(this.q)p.set("q",this.q);
-    const req=this.req=(this.req||0)+1;   // vale solo la risposta all'ultima richiesta (ricerca mentre si scrive)
+    const req=this.req=(this.req||0)+1;   // only the answer to the latest request counts (search while typing)
     try{const r=await fetch("/api/audit?"+p);if(!r.ok)return;const j=await r.json();if(req!=this.req)return;
       const key=x=>x.i!=null?"i"+x.i:x.t+x.raw,seen=new Set(this.items.map(key));this.items=more?this.items.concat(j.entries.filter(x=>!seen.has(key(x)))):j.entries;this.total=j.total;this.counts=j.counts;this.mc=j.mc||{};
       if(!this.loaded){$("#rg-user").innerHTML="<option value=''>"+_t("All")+"</option>"+j.users.map(u=>"<option>"+esc(u)+"</option>").join("")}this.loaded=true;this.render()}catch(e){}},
@@ -1177,18 +1235,56 @@ const RGV={items:[],total:0,counts:{},cat:"",user:"",q:"",loaded:false,mc:{},
     $("#rg-cats").innerHTML="<button data-c='' class='"+(this.cat?"":"on")+"'>"+_t("Everything")+" <span style='opacity:.6'>"+all+"</span></button>"+Object.keys(RCAT).filter(k=>this.counts[k]).map(k=>
       "<button data-c='"+k+"' class='"+(this.cat==k?"on":"")+"'>"+RCAT[k][0]+" <span style='opacity:.6'>"+this.counts[k]+"</span></button>").join("");
     let last="",h="";for(const e of this.items){const dl=dayLabel(e.t);if(dl!=last){h+="<div class='day'>"+esc(dl)+"</div>";last=dl}
-      const c=RCAT[e.cat]||RCAT.sistema,d=e.detail;let det="";
+      const c=RCAT[e.cat]||RCAT.system,d=e.detail;let det="";
       if(d&&typeof d=="object"&&d.key)det="<div class='diff'><code>"+esc(d.key)+"</code><span class='old'>"+esc(d.old)+"</span>→<code>"+esc(d.new)+"</code></div>";
       else if(d&&typeof d=="object"&&d.cmd!=null)det="<div class='diff'><code>/"+esc(d.cmd)+"</code></div>";else if(d)det="<small>"+esc(d)+"</small>";
       h+="<div class='re "+(e.level||"")+"'><div class='ic' style='background:"+c[1]+"22;color:"+c[1]+"' title='"+c[0]+"'>"+SV(c[2])+"</div>"
-        +(e.user&&e.user!="panel"&&e.user!="pannello"?this.who(e.user):"")+"<div class='tx'>"+(e.user?"<b>"+esc(e.user)+"</b> ":"")+esc(e.text)+det+"</div><time>"+hhmmss(e.t)+"</time></div>"}
+        +(e.user&&e.user!="panel"&&e.user!="pannello"?this.who(e.user):"")+"<div class='tx'>"+(e.user?"<b>"+esc(e.user=="panel"?_t("panel"):e.user)+"</b> ":"")+esc(e.text)+det+"</div><time>"+hhmmss(e.t)+"</time></div>"}
     $("#rg-feed").innerHTML=h||"<div class='card' style='color:var(--mute)'>"+_t("No entries.")+"</div>";$("#rg-more").hidden=this.items.length>=this.total}};
 $("#rg-cats").onclick=e=>{const b=e.target.closest("button");if(!b)return;RGV.cat=b.dataset.c;RGV.load()};
 $("#rg-user").onchange=e=>{RGV.user=e.target.value;RGV.load()};
 $("#rg-q").oninput=e=>{clearTimeout(RGV._t);RGV._t=setTimeout(()=>{RGV.q=e.target.value.trim();RGV.load()},250)};
 $("#rg-more").onclick=()=>RGV.load(true);
 
-connect();loadRoster();
+/* ---------------- account: password and panel users ---------------- */
+$("#pw-save").onclick=async()=>{const a=$("#pw-new").value;if(a!=$("#pw-new2").value)return toast(_t("The new passwords do not match."),"bad");
+  const j=await api("/api/account/password",{current:$("#pw-cur").value,new:a});toast(j.message,j.ok?"good":"bad");if(j.ok)["#pw-cur","#pw-new","#pw-new2"].forEach(x=>$(x).value="")};
+const ACC={users:[],editing:null,
+  async load(){if(!BOOT.admin)return;try{const r=await fetch("/api/users");if(!r.ok)return;this.users=(await r.json()).users;this.render()}catch(e){}},
+  render(){$("#us-list").innerHTML=this.users.map(u=>{const p=u.mc&&(P.roster||[]).find(x=>x.name.toLowerCase()==u.mc.toLowerCase());
+    return "<div class='acr'>"+(p?"<div class='fc' style='"+faceStyle(p.uuid,36)+"'></div>":"<div class='ini'>"+esc(u.name[0].toUpperCase())+"</div>")
+      +"<div class='tx'><b>"+esc(u.name)+"</b><span class='tags'>"+(u.admin?"<span class='tg opx'>Admin</span>":"<span class='tg wl'>"+_t("Player")+"</span>")+(u.me?"<span class='tg on'>"+_t("you")+"</span>":"")+"</span>"
+      +"<small>"+(u.mc?"Minecraft: "+esc(u.mc):_t("no Minecraft name"))+"</small></div><div class='acts'><button class='sb' data-a='edit' data-n='"+esc(u.name)+"'>"+_t("Edit")+"</button>"
+      +(u.me?"":"<button class='sb red' data-a='del' data-n='"+esc(u.name)+"'>"+_t("Delete")+"</button>")+"</div></div>"}).join("")},
+  edit(n){const u=this.users.find(x=>x.name==n);if(!u)return;this.editing=n;$("#us-title").textContent=_t("Edit %s",n);$("#us-name").value=n;$("#us-name").disabled=true;
+    $("#us-pw").value="";$("#us-pw").placeholder=_t("empty = unchanged");$("#us-mc").value=u.mc||"";$("#us-admin").checked=u.admin;$("#us-cancel").hidden=false;$("#us-pw").focus()},
+  reset(){this.editing=null;$("#us-title").textContent=_t("Add a user");["#us-name","#us-pw","#us-mc"].forEach(x=>$(x).value="");$("#us-name").disabled=false;
+    $("#us-pw").placeholder="";$("#us-admin").checked=false;$("#us-cancel").hidden=true},
+  async save(){const j=await api("/api/users/save",{name:this.editing||$("#us-name").value.trim().toLowerCase(),password:$("#us-pw").value,mc:$("#us-mc").value.trim(),
+    admin:$("#us-admin").checked,new:!this.editing});toast(j.message,j.ok?"good":"bad");if(j.ok){this.reset();this.load()}},
+  async del(n,btn){if(!btn.classList.contains("ask")){btn.classList.add("ask");btn.textContent=_t("Delete?");clearTimeout(btn._t);btn._t=setTimeout(()=>this.render(),3000);return}
+    btn.disabled=true;const j=await api("/api/users/delete",{name:n});toast(j.message,j.ok?"good":"bad");if(this.editing==n)this.reset();this.load()}};
+$("#us-list").onclick=e=>{const b=e.target.closest("button[data-a]");if(!b||b.disabled)return;if(b.dataset.a=="edit")ACC.edit(b.dataset.n);else ACC.del(b.dataset.n,b)};
+$("#us-save").onclick=()=>ACC.save();
+$("#version").innerHTML="ByzzCraft "+esc(BOOT.version)+" · "+(BOOT.latest?"<b>"+esc(_t("Version %s is available",BOOT.latest))+"</b> · ":"")
+  +"<a href='https://github.com/"+esc(BOOT.repo)+"' target=_blank rel=noopener>GitHub</a>";$("#us-cancel").onclick=()=>ACC.reset();
+
+/* ---------------- health checks (dashboard) and technical log (activity log) ---------------- */
+const HL={
+  async load(){if(!BOOT.admin)return;try{const r=await fetch("/api/health");if(!r.ok)return;const c=(await r.json()).checks;$("#health").hidden=!c.length;
+    $("#health-list").innerHTML=c.map(x=>"<div class='hc'><span>"+esc(x.text)+"</span>"+(x.fix?"<button class='btn' data-fix='"+esc(x.id)+"'>"+esc(HL.label(x.id))+"</button>":"")
+      +(x.cmd?"<code>"+esc(x.cmd)+"</code>":"")+"</div>").join("")}catch(e){}},
+  label(id){return {java:_t("Download Java"),eula:_t("I accept the EULA"),rcon:_t("Turn on RCON"),script:_t("Copy the start script"),assets:_t("Download")}[id]||_t("Fix")},
+  async fix(id,b){if(id=="eula"&&!confirm(_t("Accept the Minecraft EULA? Read it at https://aka.ms/MinecraftEULA")))return;
+    b.disabled=true;const j=await api("/api/health/fix",{id});toast(j.message,j.ok?"good":"bad");this.load()}};
+$("#health-list").onclick=e=>{const b=e.target.closest("[data-fix]");if(b&&!b.disabled)HL.fix(b.dataset.fix,b)};
+setInterval(()=>{if(CUR=="dash")HL.load()},30000);
+$("#rg-mode").onclick=async e=>{const b=e.target.closest("button");if(!b)return;$$("#rg-mode button").forEach(x=>x.classList.toggle("on",x==b));const m=b.dataset.m;
+  ["#rg-tools","#rg-cats","#rg-feed"].forEach(x=>$(x).hidden=!!m);$("#rg-more").hidden=!!m||RGV.items.length>=RGV.total;$("#rg-sys").hidden=!m;
+  if(!m)return;const r=await fetch("/api/syslog?file="+m);if(!r.ok)return;const box=$("#rg-sys"),ls=(await r.json()).lines;
+  box.innerHTML=ls.length?ls.map(l=>"<div class='l"+(/ ERROR | WARNING |Exception|Error:/.test(l)?" err":"")+"'><span class=m>"+esc(l)+"</span></div>").join(""):esc(_t("Empty."));box.scrollTop=box.scrollHeight};
+
+connect();loadRoster();HL.load();
 function fromHash(){const h=location.hash.slice(1);const v=h in TITLES&&(BOOT.admin||!["console","props","backups","access","audit"].includes(h))?h:"dash";if($("#v-"+v).hidden||!h||!fromHash.done){fromHash.done=true;go(v)}}
 window.addEventListener("hashchange",fromHash);fromHash();
 </script>

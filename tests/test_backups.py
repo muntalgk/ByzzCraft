@@ -1,7 +1,7 @@
-import ctypes, os, shutil, sys, tempfile, time, zipfile, traceback
+import ctypes, json, os, shutil, sys, tempfile, time, zipfile, traceback
 from datetime import datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # cartella pannello
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # panel folder
 import backups as B
 
 OK = FAIL = 0
@@ -20,9 +20,9 @@ def raises(name, exc, fn, *a, **k):
         check(name, True)
         return str(e)
     except Exception as e:
-        check(name, False, "eccezione diversa: %r" % e)
+        check(name, False, "different exception: %r" % e)
         return ""
-    check(name, False, "nessuna eccezione")
+    check(name, False, "no exception")
     return ""
 
 if os.name == "nt":
@@ -33,11 +33,11 @@ if os.name == "nt":
                                 wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
     def lock_exclusive(path):
         h = k32.CreateFileW(path, 0x80000000 | 0x40000000, 0, None, 3, 0x80, None)  # share=0, OPEN_EXISTING
-        assert h not in (None, wintypes.HANDLE(-1).value), "lock fallito"
+        assert h not in (None, wintypes.HANDLE(-1).value), "lock failed"
         return h
     unlock = k32.CloseHandle
 else:
-    # Linux non blocca i file aperti: un file illeggibile simula lo stesso caso (non vale da root)
+    # Linux does not lock open files: an unreadable file simulates the same case (not as root)
     def lock_exclusive(path):
         os.chmod(path, 0)
         return path
@@ -62,7 +62,7 @@ class Rcon:
     def __call__(self, cmd):
         self.calls.append(cmd)
         if cmd == self.fail_on:
-            raise RuntimeError("rcon giù")
+            raise RuntimeError("rcon down")
         return "ok"
 
 def fresh():
@@ -97,104 +97,104 @@ def run():
     b = mk(s, st)
     l = b.list()
     kinds = {e["name"]: e["kind"] for e in l}
-    check("list kinds", kinds == {"world_2026-10-19_14-39-35.zip": "avvio", "auto_2026-10-19_15-00-00.zip": "programmato",
-          "manuale_2026-10-19_16-00-00.zip": "manuale", "prima-di-survival_x.zip": "altro", "world_old": "mondo"}, kinds)
-    check("list ignora .part", not any(e["name"].endswith(".part") for e in l))
-    check("list ordine", l[0]["mtime"] >= l[-1]["mtime"])
-    old = [e for e in l if e["kind"] == "mondo"][0]
-    check("size cartella", old["size"] == 13 and old["id"] == "mondi-vecchi/world_old", old)
+    check("list kinds", kinds == {"world_2026-10-19_14-39-35.zip": "startup", "auto_2026-10-19_15-00-00.zip": "scheduled",
+          "manuale_2026-10-19_16-00-00.zip": "manual", "prima-di-survival_x.zip": "other", "world_old": "world"}, kinds)
+    check("list ignores .part", not any(e["name"].endswith(".part") for e in l))
+    check("list order", l[0]["mtime"] >= l[-1]["mtime"])
+    old = [e for e in l if e["kind"] == "world"][0]
+    check("folder size", old["size"] == 13 and old["id"] == "mondi-vecchi/world_old", old)
     d = b.disk(); check("disk", d["free"] > 0 and d["total"] >= d["free"])
     check("status base", b.status()["busy"] is None and b.status()["schedule"]["every_hours"] == 2)
 
-    # ---------- id malevoli
+    # ---------- malicious ids
     for bad in ["../x", "C:\\x", "backups/../world", "backups/..", "/etc/passwd", "backups\\x.zip",
                 "backups/nonesiste.zip", "backups/a/b.zip", "", None, "world"]:
-        raises("id malevolo %r" % (bad,), ValueError, b.path, bad)
-        raises("id malevolo delete %r" % (bad,), ValueError, b.delete, bad)
-        raises("id malevolo restore %r" % (bad,), ValueError, b.restore, bad, False)
-    raises("path cartella", ValueError, b.path, "mondi-vecchi/world_old")
+        raises("malicious id %r" % (bad,), ValueError, b.path, bad)
+        raises("malicious id delete %r" % (bad,), ValueError, b.delete, bad)
+        raises("malicious id restore %r" % (bad,), ValueError, b.restore, bad, False)
+    raises("path folder", ValueError, b.path, "mondi-vecchi/world_old")
     check("path zip", b.path("backups/auto_2026-10-19_15-00-00.zip").endswith("auto_2026-10-19_15-00-00.zip"))
 
-    # ---------- create server spento (con file bloccato)
+    # ---------- create with the server off (with a locked file)
     hl = lock_exclusive(os.path.join(s, "world", "locked.dat"))
     hs = lock_exclusive(os.path.join(s, "world", "session.lock"))
     try:
-        # un file illeggibile (diverso da session.lock) fa fallire il backup, non lo salta
-        raises("create con file bloccato fallisce", OSError, b.create, "manuale", False)
-        check("errore nomina il file", "locked.dat" in (b.status()["last_error"] or ""), b.status()["last_error"])
-        check("niente zip parziale", not [x for x in os.listdir(os.path.join(s, "backups")) if x.endswith(".part") or x.startswith(".tmp")])
+        # an unreadable file (other than session.lock) makes the backup fail, it is not skipped
+        raises("create with locked file fails", OSError, b.create, "manual", False)
+        check("error names the file", "locked.dat" in (b.status()["last_error"] or ""), b.status()["last_error"])
+        check("no partial zip", not [x for x in os.listdir(os.path.join(s, "backups")) if x.endswith(".part") or x.startswith(".tmp")])
         r = Rcon(); time.sleep(1.1)
-        raises("create on con file bloccato fallisce", OSError, b.create, "manuale", True, r)
-        check("save-on anche se la copia fallisce", r.calls[-1] == "save-on", r.calls)
+        raises("create on with locked file fails", OSError, b.create, "manual", True, r)
+        check("save-on even if the copy fails", r.calls[-1] == "save-on", r.calls)
         unlock(hl); hl = None
         time.sleep(1.1)
-        e = b.create("manuale", server_on=False, note="nota prova")
-        check("create off nome", e["name"].startswith("manuale_") and e["kind"] == "manuale" and e["note"] == "nota prova", e)
+        e = b.create("manual", server_on=False, note="nota prova")
+        check("create off name", e["name"].startswith("manual_") and e["kind"] == "manual" and e["note"] == "nota prova", e)
         with zipfile.ZipFile(b.path(e["id"])) as z:
             n = z.namelist()
         check("zip ha world/level.dat", "world/level.dat" in n, n)
-        check("zip senza session.lock", not any("session.lock" in x for x in n), n)
-        check("zip con locked.dat (ora leggibile)", "world/locked.dat" in n, n)
-        check("zip ha regione", "world/dimensions/minecraft/overworld/region/r.0.0.mca" in n)
-        check("on_change chiamata", len(changes) >= 2)
-        check("nessun .part/.tmp", not [x for x in os.listdir(os.path.join(s, "backups")) if x.endswith(".part") or x.startswith(".tmp")])
+        check("zip without session.lock", not any("session.lock" in x for x in n), n)
+        check("zip with locked.dat (readable now)", "world/locked.dat" in n, n)
+        check("zip has region", "world/dimensions/minecraft/overworld/region/r.0.0.mca" in n)
+        check("on_change called", len(changes) >= 2)
+        check("no .part/.tmp", not [x for x in os.listdir(os.path.join(s, "backups")) if x.endswith(".part") or x.startswith(".tmp")])
 
-        # ---------- create server acceso
+        # ---------- create with the server on
         r = Rcon()
         time.sleep(1.1)
-        e2 = b.create("programmato", server_on=True, rcon=r)
-        check("rcon ordine", r.calls == ["save-off", "save-all flush", "save-on"], r.calls)
-        check("nome auto_", e2["name"].startswith("auto_") and e2["kind"] == "programmato", e2)
+        e2 = b.create("scheduled", server_on=True, rcon=r)
+        check("rcon order", r.calls == ["save-off", "save-all flush", "save-on"], r.calls)
+        check("auto_ name", e2["name"].startswith("auto_") and e2["kind"] == "scheduled", e2)
         with zipfile.ZipFile(b.path(e2["id"])) as z:
             n2 = z.namelist()
         check("zip on: world/level.dat", "world/level.dat" in n2)
-        check("zip on: senza lock", not any("session.lock" in x for x in n2), n2)
-        check("tmp rimosso", not [x for x in os.listdir(os.path.join(s, "backups")) if x.startswith(".tmp")])
+        check("zip on: without lock", not any("session.lock" in x for x in n2), n2)
+        check("tmp removed", not [x for x in os.listdir(os.path.join(s, "backups")) if x.startswith(".tmp")])
 
-        # zip che fallisce: save-on comunque, pulizia
+        # zip that fails: save-on anyway, cleanup
         r = Rcon(); b._zip_world = lambda *a, **k: (_ for _ in ()).throw(OSError("zip rotto"))
         time.sleep(1.1)
-        raises("create zip fallito", OSError, b.create, "manuale", True, r)
-        check("save-on dopo zip fallito", r.calls == ["save-off", "save-all flush", "save-on"], r.calls)
+        raises("create zip failed", OSError, b.create, "manual", True, r)
+        check("save-on after failed zip", r.calls == ["save-off", "save-all flush", "save-on"], r.calls)
         check("last_error", "zip rotto" in (b.status()["last_error"] or ""))
-        check("busy rilasciato", b.status()["busy"] is None)
-        check("pulizia dopo errore", not [x for x in os.listdir(os.path.join(s, "backups")) if x.endswith(".part") or x.startswith(".tmp")])
+        check("busy released", b.status()["busy"] is None)
+        check("cleanup after error", not [x for x in os.listdir(os.path.join(s, "backups")) if x.endswith(".part") or x.startswith(".tmp")])
         del b._zip_world
-        # flush fallisce -> save-on lo stesso
+        # flush fails -> save-on anyway
         r = Rcon(); r.fail_on = "save-all flush"
-        raises("flush fallito", RuntimeError, b.create, "manuale", True, r)
-        check("save-on dopo flush fallito", r.calls == ["save-off", "save-all flush", "save-on"], r.calls)
-        # save-off fallisce -> save-on lo stesso
+        raises("flush failed", RuntimeError, b.create, "manual", True, r)
+        check("save-on after failed flush", r.calls == ["save-off", "save-all flush", "save-on"], r.calls)
+        # save-off fails -> save-on anyway
         r = Rcon(); r.fail_on = "save-off"
-        raises("save-off fallito", RuntimeError, b.create, "manuale", True, r)
-        check("save-on dopo save-off fallito", r.calls[-1] == "save-on", r.calls)
+        raises("save-off failed", RuntimeError, b.create, "manual", True, r)
+        check("save-on after failed save-off", r.calls[-1] == "save-on", r.calls)
     finally:
         if hl:
             unlock(hl)
         unlock(hs)
 
-    # occupato
+    # busy
     import threading
     b._op_lock.acquire()
-    raises("occupato", ValueError, b.create)
-    raises("occupato delete", ValueError, b.delete, "backups/auto_2026-10-19_15-00-00.zip")
-    raises("occupato restore", ValueError, b.restore, "backups/auto_2026-10-19_15-00-00.zip", False)
+    raises("busy", ValueError, b.create)
+    raises("busy delete", ValueError, b.delete, "backups/auto_2026-10-19_15-00-00.zip")
+    raises("busy restore", ValueError, b.restore, "backups/auto_2026-10-19_15-00-00.zip", False)
     b._op_lock.release()
-    raises("tipo non valido", ValueError, b.create, "boh")
+    raises("invalid kind", ValueError, b.create, "boh")
 
-    # ---------- pin / delete / cestino
+    # ---------- pin / delete / trash
     ide = "backups/prima-di-survival_x.zip"
     b.pin(ide, True)
     check("pin", [e for e in b.list() if e["id"] == ide][0]["pinned"])
-    check("pin persistito", B.Backups(s, st).list() and ide in B.Backups(s, st)._state["pinned"])
-    msg = raises("delete fissato", ValueError, b.delete, ide)
-    check("msg fissato", msg == "Unpin it first", msg)
+    check("pin saved", B.Backups(s, st).list() and ide in B.Backups(s, st)._state["pinned"])
+    msg = raises("delete pinned", ValueError, b.delete, ide)
+    check("pinned msg", msg == "Unpin it first", msg)
     b.pin(ide, False)
     b.delete(ide)
-    check("delete: sparito dal disco", not os.path.exists(os.path.join(s, "backups", "prima-di-survival_x.zip")))
-    check("delete: sparito da list", ide not in [e["id"] for e in b.list()])
+    check("delete: gone from disk", not os.path.exists(os.path.join(s, "backups", "prima-di-survival_x.zip")))
+    check("delete: gone from list", ide not in [e["id"] for e in b.list()])
     b.delete("mondi-vecchi/world_old")
-    check("delete cartella", not os.path.exists(os.path.join(s, "mondi-vecchi", "world_old")))
+    check("delete folder", not os.path.exists(os.path.join(s, "mondi-vecchi", "world_old")))
 
     # ---------- prune
     root, s, st = fresh(); b = mk(s, st)
@@ -205,33 +205,52 @@ def run():
         mkzip(os.path.join(s, "backups", "manuale_%s.zip" % ts), ["world/level.dat"], base + i * 100)
     mkzip(os.path.join(s, "backups", "altro1.zip"), ["world/level.dat"], base)
     write(os.path.join(s, "mondi-vecchi", "w1", "level.dat"))
-    names = sorted(e["name"] for e in b.list() if e["kind"] == "avvio")
-    b.pin("backups/" + names[0], True); b.pin("backups/" + names[1], True)  # i 2 piu vecchi fissati
-    cfg = b.set_schedule({"keep": {"avvio": 2, "programmato": 0, "manuale": 0}})
-    check("set_schedule keep", cfg["keep"]["avvio"] == 2 and cfg["every_hours"] == 2)
+    names = sorted(e["name"] for e in b.list() if e["kind"] == "startup")
+    b.pin("backups/" + names[0], True); b.pin("backups/" + names[1], True)  # the 2 oldest pinned
+    cfg = b.set_schedule({"keep": {"startup": 2, "scheduled": 0, "manual": 0}})
+    check("set_schedule keep", cfg["keep"]["startup"] == 2 and cfg["every_hours"] == 2)
     rem = b.prune()
-    left = sorted(e["name"] for e in b.list() if e["kind"] == "avvio")
-    check("prune: rimossi 2 (6-2 fissati-2 tenuti)", len(rem) == 2, rem)
-    check("prune: tiene fissati + 2 recenti", left == names[:2] + names[-2:], (left, names))
-    check("prune: manuali intatti", len([e for e in b.list() if e["kind"] == "manuale"]) == 6)
-    check("prune: altro/mondo intatti", any(e["kind"] == "altro" for e in b.list()) and any(e["kind"] == "mondo" for e in b.list()))
+    left = sorted(e["name"] for e in b.list() if e["kind"] == "startup")
+    check("prune: 2 removed (6-2 pinned-2 kept)", len(rem) == 2, rem)
+    check("prune: keeps pinned + 2 newest", left == names[:2] + names[-2:], (left, names))
+    check("prune: manual ones untouched", len([e for e in b.list() if e["kind"] == "manual"]) == 6)
+    check("prune: other/world untouched", any(e["kind"] == "other" for e in b.list()) and any(e["kind"] == "world" for e in b.list()))
     check("prune: disco", all(not os.path.exists(os.path.join(s, "backups", os.path.basename(r))) for r in rem))
-    b.set_schedule({"keep": {"manuale": 3}})
-    rem = b.prune(); check("prune manuale 3", len(rem) == 3 and len([e for e in b.list() if e["kind"] == "manuale"]) == 3, rem)
-    check("prune idempotente", b.prune() == [])
+    b.set_schedule({"keep": {"manual": 3}})
+    rem = b.prune(); check("prune manual 3", len(rem) == 3 and len([e for e in b.list() if e["kind"] == "manual"]) == 3, rem)
+    check("prune idempotent", b.prune() == [])
 
-    # ---------- validazione schedule
+    # Windows: a Recycle Bin that refuses (tiny limit) must not stop automatic cleanup, only that
+    if os.name == "nt":
+        real_limit = B._recycle_limit
+        B._recycle_limit = lambda path: (1, False)
+        try:
+            root, s, st = fresh(); b = mk(s, st)
+            for i in range(3):
+                ts = datetime.fromtimestamp(base + i * 100).strftime(B.TS_FMT)
+                mkzip(os.path.join(s, "backups", "world_%s.zip" % ts), ["world/level.dat"], base + i * 100)
+                mkzip(os.path.join(s, "backups", "manuale_%s.zip" % ts), ["world/level.dat"], base + i * 100)
+            b.set_schedule({"keep": {"startup": 1, "scheduled": 0, "manual": 0}})
+            rem = b.prune()
+            check("prune: bin refuses, automatic zips still removed", len(rem) == 2, rem)
+            man = next(e for e in b.list() if e["kind"] == "manual")
+            raises("manual delete still refused by the bin", OSError, b.delete, man["id"])
+            check("manual zip still on disk", os.path.exists(os.path.join(s, "backups", man["name"])))
+        finally:
+            B._recycle_limit = real_limit
+
+    # ---------- schedule validation
     for bad in [{"every_hours": 49}, {"every_hours": -1}, {"every_hours": "x"}, {"daily_at": "25:00"}, {"daily_at": "4pm"},
-                {"keep": {"avvio": 201}}, {"keep": {"avvio": -1}}, "no", {"every_hours": True}]:
-        raises("schedule invalido %r" % (bad,), ValueError, b.set_schedule, bad)
+                {"keep": {"startup": 201}}, {"keep": {"startup": -1}}, "no", {"every_hours": True}]:
+        raises("invalid schedule %r" % (bad,), ValueError, b.set_schedule, bad)
     c = b.set_schedule({"every_hours": 0, "daily_at": "", "only_when_online": False})
-    check("schedule normalizzato", c["every_hours"] == 0 and c["daily_at"] == "" and c["only_when_online"] is False)
-    check("schedule persistito", B.Backups(s, st).status()["schedule"] == c)
-    # stato corrotto
+    check("schedule normalised", c["every_hours"] == 0 and c["daily_at"] == "" and c["only_when_online"] is False)
+    check("schedule saved", B.Backups(s, st).status()["schedule"] == c)
+    # corrupt state
     with open(st, "w") as f: f.write("{non json")
-    check("stato corrotto -> default", B.Backups(s, st).status()["schedule"]["every_hours"] == 2)
+    check("corrupt state -> default", B.Backups(s, st).status()["schedule"]["every_hours"] == 2)
 
-    # ---------- tick intervallo
+    # ---------- interval tick
     root, s, st = fresh(); b = mk(s, st); r = Rcon()
     T = 1_800_000_000.0
     b.set_schedule({"every_hours": 2, "daily_at": "", "only_when_online": True})
@@ -239,100 +258,100 @@ def run():
         th = b._sched_thread
         if th: th.join(20)
     b.tick(T, True, 1, r); wait()
-    check("tick: primo tick non esegue", not [e for e in b.list() if e["kind"] == "programmato"])
+    check("tick: first tick does not run", not [e for e in b.list() if e["kind"] == "scheduled"])
     b.tick(T + 3600, True, 1, r); wait()
-    check("tick: dopo 1h no", not [e for e in b.list() if e["kind"] == "programmato"])
+    check("tick: not after 1h", not [e for e in b.list() if e["kind"] == "scheduled"])
     b.tick(T + 7300, True, 0, r); wait()
-    check("tick: senza giocatori no", not [e for e in b.list() if e["kind"] == "programmato"])
+    check("tick: not without players", not [e for e in b.list() if e["kind"] == "scheduled"])
     b.tick(T + 7300, False, 1, r); wait()
-    check("tick: server spento no (intervallo)", not [e for e in b.list() if e["kind"] == "programmato"])
+    check("tick: not with server off (interval)", not [e for e in b.list() if e["kind"] == "scheduled"])
     b.tick(T + 7300, True, 1, r); wait()
-    check("tick: dopo 2h con giocatori esegue", len([e for e in b.list() if e["kind"] == "programmato"]) == 1)
-    check("tick: rcon usato", r.calls == ["save-off", "save-all flush", "save-on"], r.calls)
+    check("tick: runs after 2h with players", len([e for e in b.list() if e["kind"] == "scheduled"]) == 1)
+    check("tick: rcon used", r.calls == ["save-off", "save-all flush", "save-on"], r.calls)
     check("tick: last_scheduled", b.status()["last_scheduled"] == T + 7300)
     time.sleep(1.1)
     b.tick(T + 7300 + 3600, True, 1, r); wait()
-    check("tick: subito dopo no", len([e for e in b.list() if e["kind"] == "programmato"]) == 1)
+    check("tick: not right after", len([e for e in b.list() if e["kind"] == "scheduled"]) == 1)
     check("next_scheduled", abs(b.status()["next_scheduled"] - (T + 7300 + 7200)) < 1)
     b.set_schedule({"only_when_online": False})
     time.sleep(1.1)
     b.tick(T + 7300 + 7300, True, 0, r); wait()
-    check("tick: only_when_online off", len([e for e in b.list() if e["kind"] == "programmato"]) == 2)
-    # keep nel tick
-    b.set_schedule({"keep": {"programmato": 1}})
+    check("tick: only_when_online off", len([e for e in b.list() if e["kind"] == "scheduled"]) == 2)
+    # keep in the tick
+    b.set_schedule({"keep": {"scheduled": 1}})
     time.sleep(1.1)
     b.tick(T + 40000, True, 0, r); wait()
-    check("tick: prune tiene 1 programmato", len([e for e in b.list() if e["kind"] == "programmato"]) == 1,
+    check("tick: prune keeps 1 scheduled", len([e for e in b.list() if e["kind"] == "scheduled"]) == 1,
           [e["name"] for e in b.list()])
 
-    # ---------- tick giornaliero
+    # ---------- daily tick
     root, s, st = fresh(); b = mk(s, st); r = Rcon()
     b.set_schedule({"every_hours": 0, "daily_at": "04:00"})
     d1 = datetime(2026, 10, 21, 3, 0).timestamp()
     b.tick(d1, False, 0, None); wait()
-    check("daily: prima dell'orario no", not b.list())
+    check("daily: not before the time", not b.list())
     b.tick(datetime(2026, 10, 21, 4, 30).timestamp(), False, 0, None); wait()
-    check("daily: dopo l'orario a server spento", len(b.list()) == 1 and b.list()[0]["kind"] == "programmato")
+    check("daily: after the time with server off", len(b.list()) == 1 and b.list()[0]["kind"] == "scheduled")
     time.sleep(1.1)
     b.tick(datetime(2026, 10, 21, 5, 0).timestamp(), False, 0, None); wait()
-    check("daily: non due volte nello stesso giorno", len(b.list()) == 1)
+    check("daily: not twice on the same day", len(b.list()) == 1)
     b.tick(datetime(2026, 10, 22, 4, 5).timestamp(), False, 0, None); wait()
-    check("daily: giorno dopo", len(b.list()) == 2)
+    check("daily: next day", len(b.list()) == 2)
     b2 = B.Backups(s, st)
-    check("daily: persistito", b2._state["last_daily"] == "2026-10-22")
+    check("daily: saved", b2._state["last_daily"] == "2026-10-22")
 
-    # ---------- restore da zip
+    # ---------- restore from zip
     root, s, st = fresh(); b = mk(s, st)
     mkzip(os.path.join(s, "backups", "world_2026-10-19_14-39-35.zip"),
           ["world/", "world/level.dat", "world/sub/f.txt", "world/session.lock"])
     zid = "backups/world_2026-10-19_14-39-35.zip"
-    raises("restore server acceso", ValueError, b.restore, zid, True)
+    raises("restore with server on", ValueError, b.restore, zid, True)
     res = b.restore(zid, False)
-    check("restore moved_to", res["moved_to"].endswith("_prima-del-ripristino") and os.path.isdir(os.path.join(s, "mondi-vecchi", res["moved_to"])), res)
-    check("restore: mondo nuovo", open(os.path.join(s, "world", "level.dat"), "rb").read() == b"data-world/level.dat")
-    check("restore: vecchio salvato", open(os.path.join(s, "mondi-vecchi", res["moved_to"], "level.dat"), "rb").read() == b"LEVEL-ORIG")
+    check("restore moved_to", res["moved_to"].endswith("_before-restore") and os.path.isdir(os.path.join(s, "old-worlds", res["moved_to"])), res)
+    check("restore: new world", open(os.path.join(s, "world", "level.dat"), "rb").read() == b"data-world/level.dat")
+    check("restore: old one saved", open(os.path.join(s, "old-worlds", res["moved_to"], "level.dat"), "rb").read() == b"LEVEL-ORIG")
     check("restore: sub", os.path.isfile(os.path.join(s, "world", "sub", "f.txt")))
-    check("restore: no tmp", not os.path.exists(os.path.join(s, "world.ripristino-tmp")))
+    check("restore: no tmp", not os.path.exists(os.path.join(s, "world.restore-tmp")))
 
-    # restore da cartella (sorgente resta)
+    # restore from folder (the source stays)
     time.sleep(1.1)
-    old_id = "mondi-vecchi/" + res["moved_to"]
+    old_id = "old-worlds/" + res["moved_to"]
     res2 = b.restore(old_id, False)
-    check("restore cartella", open(os.path.join(s, "world", "level.dat"), "rb").read() == b"LEVEL-ORIG")
-    check("restore cartella: sorgente resta", os.path.isdir(os.path.join(s, "mondi-vecchi", res["moved_to"])))
+    check("restore folder", open(os.path.join(s, "world", "level.dat"), "rb").read() == b"LEVEL-ORIG")
+    check("restore folder: source stays", os.path.isdir(os.path.join(s, "old-worlds", res["moved_to"])))
 
-    # struttura alternativa: unica cartella di primo livello con level.dat
+    # other layout: a single top-level folder with level.dat
     mkzip(os.path.join(s, "backups", "alt.zip"), ["mondo-x/level.dat", "mondo-x/z/y.txt"])
     time.sleep(1.1)
     b.restore("backups/alt.zip", False)
-    check("restore struttura alternativa", os.path.isfile(os.path.join(s, "world", "z", "y.txt")))
-    # struttura sconosciuta
+    check("restore other layout", os.path.isfile(os.path.join(s, "world", "z", "y.txt")))
+    # unknown layout
     mkzip(os.path.join(s, "backups", "boh.zip"), ["a/x.txt", "b/y.txt"])
     cur = open(os.path.join(s, "world", "level.dat"), "rb").read()
-    nold = len(os.listdir(os.path.join(s, "mondi-vecchi")))
-    raises("zip senza level.dat", ValueError, b.restore, "backups/boh.zip", False)
-    check("fallito: mondo intatto", open(os.path.join(s, "world", "level.dat"), "rb").read() == cur)
-    check("fallito: nulla spostato", len(os.listdir(os.path.join(s, "mondi-vecchi"))) == nold)
+    nold = len(os.listdir(os.path.join(s, "old-worlds")))
+    raises("zip without level.dat", ValueError, b.restore, "backups/boh.zip", False)
+    check("failed: world untouched", open(os.path.join(s, "world", "level.dat"), "rb").read() == cur)
+    check("failed: nothing moved", len(os.listdir(os.path.join(s, "old-worlds"))) == nold)
 
-    # zip malevoli
+    # malicious zips
     for evil in ["world/../../evil", "world/..\\..\\evil2", "world/C:/evil", "/abs/evil"]:
         mkzip(os.path.join(s, "backups", "evil.zip"), ["world/level.dat", evil])
         time.sleep(0.05)
-        raises("zip malevolo %r" % evil, ValueError, b.restore, "backups/evil.zip", False)
-        check("evil: mondo intatto %r" % evil, open(os.path.join(s, "world", "level.dat"), "rb").read() == cur)
-        check("evil: niente file fuori", not os.path.exists(os.path.join(s, "evil")) and not os.path.exists(os.path.join(os.path.dirname(s), "evil")))
-        check("evil: no tmp", not os.path.exists(os.path.join(s, "world.ripristino-tmp")))
+        raises("malicious zip %r" % evil, ValueError, b.restore, "backups/evil.zip", False)
+        check("evil: world untouched %r" % evil, open(os.path.join(s, "world", "level.dat"), "rb").read() == cur)
+        check("evil: no file outside", not os.path.exists(os.path.join(s, "evil")) and not os.path.exists(os.path.join(os.path.dirname(s), "evil")))
+        check("evil: no tmp", not os.path.exists(os.path.join(s, "world.restore-tmp")))
         os.remove(os.path.join(s, "backups", "evil.zip"))
-    # zip corrotto
+    # corrupt zip
     write(os.path.join(s, "backups", "rotto.zip"), b"non e uno zip")
-    raises("zip corrotto", Exception, b.restore, "backups/rotto.zip", False)
-    check("corrotto: mondo intatto", open(os.path.join(s, "world", "level.dat"), "rb").read() == cur)
+    raises("corrupt zip", Exception, b.restore, "backups/rotto.zip", False)
+    check("corrupt: world untouched", open(os.path.join(s, "world", "level.dat"), "rb").read() == cur)
 
-    # rollback: errore durante il rename finale
+    # rollback: error during the final rename
     mkzip(os.path.join(s, "backups", "ok.zip"), ["world/level.dat"])
     real_replace = os.replace
     def bad_replace(a, c, *x, **k):
-        if str(a).endswith("ripristino-tmp"):
+        if str(a).endswith("restore-tmp"):
             raise OSError("rename simulato fallito")
         return real_replace(a, c, *x, **k)
     os.replace = bad_replace
@@ -340,19 +359,72 @@ def run():
         raises("rollback rename", OSError, b.restore, "backups/ok.zip", False)
     finally:
         os.replace = real_replace
-    check("rollback: mondo originale rimesso", open(os.path.join(s, "world", "level.dat"), "rb").read() == cur)
-    check("rollback: tmp rimosso", not os.path.exists(os.path.join(s, "world.ripristino-tmp")))
-    check("rollback: busy libero", b.status()["busy"] is None and "Restore failed" in b.status()["last_error"])
-    # mondo assente: restore funziona, moved_to vuoto
+    check("rollback: original world back", open(os.path.join(s, "world", "level.dat"), "rb").read() == cur)
+    check("rollback: tmp removed", not os.path.exists(os.path.join(s, "world.restore-tmp")))
+    check("rollback: busy free", b.status()["busy"] is None and "Restore failed" in b.status()["last_error"])
+    # no world: restore works, moved_to empty
     shutil.rmtree(os.path.join(s, "world"))
     r3 = b.restore("backups/ok.zip", False)
-    check("restore senza mondo", r3["moved_to"] == "" and os.path.isfile(os.path.join(s, "world", "level.dat")))
+    check("restore without world", r3["moved_to"] == "" and os.path.isfile(os.path.join(s, "world", "level.dat")))
 
-    # ---------- dir vera, sola lettura
+    # ---------- disk space: stop before writing, with a message
+    root, s, st = fresh(); b = mk(s, st)
+    mkzip(os.path.join(s, "backups", "x.zip"), ["world/level.dat"])
+    real_du = B.shutil.disk_usage
+    B.shutil.disk_usage = lambda p: real_du(p)._replace(free=100 * 1024 * 1024)   # 100 MB free
+    try:
+        msg = raises("backup without space", ValueError, b.create, "manual", False)
+        check("space message", "disk space" in msg, msg)
+        check("no half-written zip", not [x for x in os.listdir(os.path.join(s, "backups")) if x.endswith(".part")])
+        raises("restore without space", ValueError, b.restore, "backups/x.zip", False)
+        check("world untouched", open(os.path.join(s, "world", "level.dat"), "rb").read() == b"LEVEL-ORIG")
+    finally:
+        B.shutil.disk_usage = real_du
+    check("with space the backup works", b.create("manual", False)["kind"] == "manual")
+
+    # ---------- Paper: Nether and End next to the world (world_nether, world_the_end)
+    root, s, st = fresh(); b = mk(s, st)
+    write(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), b"NETHER")
+    write(os.path.join(s, "world_the_end", "DIM1", "region", "r.0.0.mca"), b"END")
+    for on in (False, True):   # with the server off and on (temporary copy)
+        e = b.create("manual", on, Rcon() if on else None)
+        names = zipfile.ZipFile(os.path.join(s, "backups", e["name"])).namelist()
+        check("paper: zip with three folders (on=%s)" % on, "world_nether/DIM-1/region/r.0.0.mca" in names
+              and "world_the_end/DIM1/region/r.0.0.mca" in names and "world/level.dat" in names, names)
+    write(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), b"NETHER-NUOVO")
+    r = b.restore("backups/" + e["name"], False)
+    check("paper: nether restored", open(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), "rb").read() == b"NETHER")
+    old = os.path.join(s, "old-worlds", r["moved_to"])
+    check("paper: old nether next to the old world", open(old + "_nether/DIM-1/region/r.0.0.mca", "rb").read() == b"NETHER-NUOVO")
+    l = [x for x in b.list() if x["folder"] == "old-worlds"]
+    check("paper: one old world in the list", [x["name"] for x in l] == [r["moved_to"]], l)
+    write(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), b"ALTRO")
+    b.restore(l[0]["id"], False)   # from the old world folder: its nether comes back too
+    check("paper: restore from folder", open(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), "rb").read() == b"NETHER-NUOVO")
+    # a backup without Paper's folders leaves the current ones alone
+    mkzip(os.path.join(s, "backups", "vanilla.zip"), ["world/level.dat"])
+    b.restore("backups/vanilla.zip", False)
+    check("paper: current nether untouched", open(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), "rb").read() == b"NETHER-NUOVO")
+
+    # ---------- state file from before 1.0: Italian kind names in the retention rules
+    with open(st, "w", encoding="utf-8") as f:
+        json.dump({"schedule": {"keep": {"avvio": 3, "programmato": 4, "manuale": 5}}}, f)
+    check("old retention keys", mk(s, st).status()["schedule"]["keep"] == {"startup": 3, "scheduled": 4, "manual": 5})
+
+    # ---------- operation running: Busy, not an error that waits 15 minutes
+    b._op_lock.acquire()
+    try:
+        raises("busy", B.Busy, b.create, "manual", False)
+        b._run_scheduled("interval", time.time(), False, None)
+        check("busy: retried next round", b._retry_at is None)
+    finally:
+        b._op_lock.release()
+
+    # ---------- real folder, read only
     if not os.environ.get("BYZZ_REAL_SERVER"):
         return
     real = B.Backups(os.environ["BYZZ_REAL_SERVER"], os.path.join(tempfile.gettempdir(), "bk_real_state_unused.json"))
-    print("--- DIR VERA ---")
+    print("--- REAL FOLDER ---")
     for e in real.list():
         print("%-14s %-8s %10.1f MB  %s" % (e["kind"], e["folder"], e["size"] / 1e6, e["name"]))
     dk = real.disk(); print("disk free %.1f GB / %.1f GB" % (dk["free"] / 1e9, dk["total"] / 1e9))
@@ -367,3 +439,4 @@ print("PASS %d  FAIL %d" % (OK, FAIL))
 for d in os.listdir(tempfile.gettempdir()):
     if d.startswith("bk_test_"):
         shutil.rmtree(os.path.join(tempfile.gettempdir(), d), ignore_errors=True)
+sys.exit(1 if FAIL else 0)

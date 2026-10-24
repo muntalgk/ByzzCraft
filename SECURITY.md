@@ -1,0 +1,24 @@
+# Security
+
+ByzzCraft controls a game server and the machine it runs on (the console runs any server command, admins can
+restore worlds). Please report vulnerabilities privately, not in a public issue:
+use [GitHub's private vulnerability reporting](https://github.com/muntalgk/byzzcraft/security/advisories/new).
+
+Please include what an attacker needs (network access, a player account, an admin account), the steps and the
+version (bottom of the **Account** page). You will get an answer within a week; fixes go into a new release and
+the advisory credits you unless you prefer otherwise.
+
+## What the panel already does
+
+- Passwords: PBKDF2-SHA256, 240,000 rounds, per-user salt. Sessions: random tokens, only their hash on disk,
+  `HttpOnly` and `SameSite=Strict` cookies, CSRF token on every change.
+- Logins: 5 wrong attempts lock the user and the address for 15 minutes.
+- First setup: only from the machine itself or with the one-time code printed at start-up.
+- Proxy headers (`X-Forwarded-For`, Tailscale) are trusted only from 127.0.0.1.
+
+## What it does not do
+
+- HTTPS: use Tailscale, nginx or Caddy (see the README). "My home network" is plain HTTP, and so is the first
+  setup from another PC: on a network you do not trust, set up from the machine itself or with
+  `panel.py setup` over SSH.
+- Two-factor login.

@@ -1,6 +1,6 @@
-"""Scarica dal sito di Mojang le texture e le traduzioni mostrate dal pannello (non si possono ridistribuire).
+"""Downloads from Mojang the textures and translations the panel shows (they cannot be redistributed).
 
-Uso:  python panel.py assets [VERSIONE]     (senza versione la legge da server.jar)
+Usage:  python panel.py assets [VERSION]     (without a version it is read from the server jar)
 """
 import hashlib
 import io
@@ -12,23 +12,78 @@ import urllib.request
 import zipfile
 import zlib
 
+from mapgen import _png
+
 HERE = os.path.dirname(os.path.abspath(__file__))
-ASSETS = os.path.join(HERE, "assets")
+from paths import ASSETS, DATA  # noqa: E402
 MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
 TEX = "assets/minecraft/textures/"
-# cartella nel jar -> cartella in assets/ (le sottocartelle diventano prefisso: hud/heart/full.png -> hud/heart_full.png)
+# folder in the jar -> folder in assets/ (subfolders become a prefix: hud/heart/full.png -> hud/heart_full.png)
 DIRS = {TEX + "block/": "block", TEX + "item/": "item", TEX + "gui/sprites/hud/": "hud", TEX + "entity/player/": "skin"}
 HUD_PREFIX = ("heart", "food_", "armor_", "experience_bar_")
-SLOTS = {"boots", "chestplate", "helmet", "leggings", "shield"}   # icone degli slot armatura vuoti nell'inventario
+SLOTS = {"boots", "chestplate", "helmet", "leggings", "shield"}   # icons of the empty armour slots in the inventory
 
 
 def present():
     return all(os.path.exists(os.path.join(ASSETS, p)) for p in ("block", "item", "hud", "skin", "lang.json", "texcolors.json"))
 
 
-def server_version(server_dir):
-    with zipfile.ZipFile(os.path.join(server_dir, "server.jar")) as z:
-        return json.loads(z.read("version.json"))["id"]
+# known names, in order: the Fabric/Quilt launchers and forks like Paper come with the vanilla server.jar too
+JAR_PREFIXES = ("fabric-server-launch", "fabric-server", "quilt-server", "paper", "purpur", "folia", "pufferfish", "server")
+
+
+def find_jar(server_dir, configured=None):
+    """Name of the jar to start: the one set in the config, otherwise the first one recognised; None if there is none."""
+    if configured:
+        return configured if os.path.isfile(os.path.join(server_dir, configured)) else None
+    try:
+        jars = sorted(n for n in os.listdir(server_dir) if n.lower().endswith(".jar") and "installer" not in n.lower())
+    except OSError:
+        return None
+    for pre in JAR_PREFIXES:
+        hit = next((n for n in jars if n.lower().startswith(pre)), None)
+        if hit:
+            return hit
+    return jars[0] if len(jars) == 1 else None
+
+
+_JAVA = {}   # Minecraft version -> required Java (from Mojang's manifest, once per process)
+
+
+def jar_info(server_dir, jar=None):
+    """(Minecraft version, required Java) from the server jar; None where it cannot be told."""
+    ver = java = None
+    for name in (jar, "server.jar"):
+        if not name:
+            continue
+        try:
+            with zipfile.ZipFile(os.path.join(server_dir, name)) as z:
+                names = set(z.namelist())
+                if "version.json" in names:   # vanilla, Paper and forks
+                    v = json.loads(z.read("version.json"))
+                    ver, java = ver or v.get("id"), v.get("java_version")
+                    break
+                if "install.properties" in names:   # Fabric launcher: downloads the vanilla jar on its first start
+                    props = dict(x.split("=", 1) for x in z.read("install.properties").decode("utf-8", "replace").splitlines() if "=" in x)
+                    ver = ver or props.get("game-version")
+        except (OSError, ValueError, KeyError, zipfile.BadZipFile):
+            pass
+    if ver and not java:
+        if ver not in _JAVA:
+            try:
+                v = next(x for x in json.loads(_get(MANIFEST))["versions"] if x["id"] == ver)
+                _JAVA[ver] = json.loads(_get(v["url"], v.get("sha1")))["javaVersion"]["majorVersion"]
+            except Exception:  # noqa: BLE001  (offline or unknown version: retried at the next start)
+                _JAVA[ver] = None
+        java = _JAVA[ver]
+    return ver, (int(java) if java else None)
+
+
+def server_version(server_dir, jar=None):
+    ver = jar_info(server_dir, jar or find_jar(server_dir))[0]
+    if not ver:
+        raise ValueError("cannot tell the Minecraft version of the server: pass it, e.g.  panel.py assets 26.3")
+    return ver
 
 
 def _get(url, sha1=None):
@@ -39,17 +94,32 @@ def _get(url, sha1=None):
     return data
 
 
-def client_jar(version):
-    versions = json.loads(_get(MANIFEST))["versions"]
-    v = next((x for x in versions if x["id"] == version), None)
+def mojang_jar(version, kind="client"):
+    """Official client.jar or server.jar of a version (None = latest release), SHA1 checked."""
+    manifest = json.loads(_get(MANIFEST))
+    version = version or manifest["latest"]["release"]
+    v = next((x for x in manifest["versions"] if x["id"] == version), None)
     if v is None:
         raise ValueError("Mojang does not know version %s" % version)
-    c = json.loads(_get(v["url"], v.get("sha1")))["downloads"]["client"]
-    return _get(c["url"], c["sha1"])
+    c = json.loads(_get(v["url"], v.get("sha1")))["downloads"][kind]
+    return version, _get(c["url"], c["sha1"])
+
+
+def download_server(server_dir, version=None, log=print):
+    """New server: Mojang's server.jar into the folder (created if missing). Returns the version."""
+    log("Downloading the Minecraft server%s from Mojang..." % (" " + version if version else ""))
+    version, jar = mojang_jar(version, "server")
+    os.makedirs(server_dir, exist_ok=True)
+    tmp = os.path.join(server_dir, "server.jar.part")
+    with open(tmp, "wb") as f:
+        f.write(jar)
+    os.replace(tmp, os.path.join(server_dir, "server.jar"))
+    log("Minecraft server %s saved in %s" % (version, server_dir))
+    return version
 
 
 def png_rgba(data):
-    """PNG non interlacciato con profondita' 1-8 bit -> (larghezza, altezza, [(r, g, b, a), ...])."""
+    """Non-interlaced PNG with 1-8 bit depth -> (width, height, [(r, g, b, a), ...])."""
     pos, idat, plte, trns = 8, b"", b"", b""
     while pos < len(data):
         n, typ = struct.unpack(">I4s", data[pos:pos + 8])
@@ -109,7 +179,7 @@ def png_rgba(data):
 
 
 def tex_color(data):
-    """[r, g, b, alfa media] del primo frame (le animate sono strisce verticali); None se tutta trasparente."""
+    """[r, g, b, mean alpha] of the first frame (animated ones are vertical strips); None if fully transparent."""
     w, h, px = png_rgba(data)
     px = px[:w * min(w, h)]
     ws = sum(p[3] for p in px)
@@ -119,8 +189,44 @@ def tex_color(data):
     return [round(sum(p[i] * p[3] for p in px) / ws) for i in range(3)] + [int(a) if a == int(a) else a]
 
 
+# items the game draws as a 3D model, with no item texture: the icon is cut out of the entity texture
+CHESTS = {"chest": "normal", "trapped_chest": "trapped", "ender_chest": "ender", "copper_chest": "copper",
+          "exposed_copper_chest": "copper_exposed", "weathered_copper_chest": "copper_weathered",
+          "oxidized_copper_chest": "copper_oxidized"}
+
+
+def _blit(out, src, w, sx, sy, dx, dy, cw, ch):
+    for y in range(ch):
+        for x in range(cw):
+            out[(dy + y) * 16 + dx + x] = src[(sy + y) * w + sx + x]
+
+
+def entity_icons(z):
+    """{name: 16x16 png} for chests and the shield; skips those this version does not have (e.g. copper before 1.21.9)."""
+    out = {}
+    for name, src in CHESTS.items():
+        try:
+            w, _, e = png_rgba(z.read(TEX + "entity/chest/%s.png" % src))
+        except KeyError:
+            continue
+        px = [(0, 0, 0, 0)] * 256
+        _blit(px, e, w, 14, 14, 1, 1, 14, 5)    # lid
+        _blit(px, e, w, 14, 33, 1, 6, 14, 10)   # body
+        _blit(px, e, w, 1, 1, 7, 4, 2, 4)       # latch
+        out[name] = _png(bytearray(c for p in px for c in p), 16, 16)
+    try:
+        w, _, e = png_rgba(z.read(TEX + "entity/shield/shield_base_nopattern.png"))
+    except KeyError:
+        return out
+    px = [(0, 0, 0, 0)] * 256
+    for i in range(16):   # 10x20 front face scaled to 16 rows
+        _blit(px, e, w, 2, 2 + int((i + 0.5) * 20 / 16), 3, i, 10, 1)
+    out["shield"] = _png(bytearray(c for p in px for c in p), 16, 16)
+    return out
+
+
 def extract(jar, dest):
-    """Estrae dal client jar in dest/ (cartella temporanea, poi rinominata dal chiamante)."""
+    """Extracts from the client jar into dest/ (a temporary folder, renamed by the caller)."""
     colors = {}
     with zipfile.ZipFile(io.BytesIO(jar)) as z:
         for n in z.namelist():
@@ -151,20 +257,24 @@ def extract(jar, dest):
                 c = tex_color(data)
                 if c:
                     colors[os.path.basename(out)[:-4]] = c
+        os.makedirs(os.path.join(dest, "item"), exist_ok=True)
+        for name, data in entity_icons(z).items():
+            with open(os.path.join(dest, "item", name + ".png"), "wb") as f:
+                f.write(data)
     with open(os.path.join(dest, "texcolors.json"), "w", encoding="utf-8") as f:
         json.dump(colors, f, separators=(",", ":"))
 
 
-def install(server_dir, version=None, log=print):
-    version = version or server_version(server_dir)
+def install(server_dir, version=None, log=print, jar=None):
+    version = version or server_version(server_dir, jar)
     log("Downloading the Minecraft %s client from Mojang..." % version)
-    jar = client_jar(version)
-    tmp = os.path.join(HERE, "assets.download-tmp")
+    _, jar = mojang_jar(version, "client")
+    tmp = os.path.join(DATA, "assets.download-tmp")
     shutil.rmtree(tmp, ignore_errors=True)
     os.makedirs(tmp)
     extract(jar, tmp)
     os.makedirs(ASSETS, exist_ok=True)
-    # sovrascrive file per file, senza cancellare: icone aggiunte a mano e logo restano
+    # overwrites file by file, deleting nothing: icons added by hand and the logo stay
     shutil.copytree(tmp, ASSETS, dirs_exist_ok=True)
     shutil.rmtree(tmp, ignore_errors=True)
     log("Minecraft %s assets installed in %s" % (version, ASSETS))
