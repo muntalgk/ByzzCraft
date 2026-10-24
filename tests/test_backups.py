@@ -104,7 +104,7 @@ def run():
     old = [e for e in l if e["kind"] == "world"][0]
     check("folder size", old["size"] == 13 and old["id"] == "mondi-vecchi/world_old", old)
     d = b.disk(); check("disk", d["free"] > 0 and d["total"] >= d["free"])
-    check("status base", b.status()["busy"] is None and b.status()["schedule"]["every_hours"] == 2)
+    check("status base", b.status()["busy"] is None and b.status()["schedule"]["every_minutes"] == 120)
 
     # ---------- malicious ids
     for bad in ["../x", "C:\\x", "backups/../world", "backups/..", "/etc/passwd", "backups\\x.zip",
@@ -208,7 +208,7 @@ def run():
     names = sorted(e["name"] for e in b.list() if e["kind"] == "startup")
     b.pin("backups/" + names[0], True); b.pin("backups/" + names[1], True)  # the 2 oldest pinned
     cfg = b.set_schedule({"keep": {"startup": 2, "scheduled": 0, "manual": 0}})
-    check("set_schedule keep", cfg["keep"]["startup"] == 2 and cfg["every_hours"] == 2)
+    check("set_schedule keep", cfg["keep"]["startup"] == 2 and cfg["every_minutes"] == 120)
     rem = b.prune()
     left = sorted(e["name"] for e in b.list() if e["kind"] == "startup")
     check("prune: 2 removed (6-2 pinned-2 kept)", len(rem) == 2, rem)
@@ -244,11 +244,11 @@ def run():
                 {"keep": {"startup": 201}}, {"keep": {"startup": -1}}, "no", {"every_hours": True}]:
         raises("invalid schedule %r" % (bad,), ValueError, b.set_schedule, bad)
     c = b.set_schedule({"every_hours": 0, "daily_at": "", "only_when_online": False})
-    check("schedule normalised", c["every_hours"] == 0 and c["daily_at"] == "" and c["only_when_online"] is False)
+    check("schedule normalised", c["every_minutes"] == 0 and c["daily_at"] == [] and c["only_when_online"] is False)
     check("schedule saved", B.Backups(s, st).status()["schedule"] == c)
     # corrupt state
     with open(st, "w") as f: f.write("{non json")
-    check("corrupt state -> default", B.Backups(s, st).status()["schedule"]["every_hours"] == 2)
+    check("corrupt state -> default", B.Backups(s, st).status()["schedule"]["every_minutes"] == 120)
 
     # ---------- interval tick
     root, s, st = fresh(); b = mk(s, st); r = Rcon()
@@ -298,7 +298,7 @@ def run():
     b.tick(datetime(2026, 10, 22, 4, 5).timestamp(), False, 0, None); wait()
     check("daily: next day", len(b.list()) == 2)
     b2 = B.Backups(s, st)
-    check("daily: saved", b2._state["last_daily"] == "2026-10-22")
+    check("daily: saved", b2._state["last_daily"] == "2026-10-22 04:00")
 
     # ---------- restore from zip
     root, s, st = fresh(); b = mk(s, st)
@@ -410,6 +410,148 @@ def run():
     with open(st, "w", encoding="utf-8") as f:
         json.dump({"schedule": {"keep": {"avvio": 3, "programmato": 4, "manuale": 5}}}, f)
     check("old retention keys", mk(s, st).status()["schedule"]["keep"] == {"startup": 3, "scheduled": 4, "manual": 5})
+
+    # ---------- finer control: world tag, per-world retention, size cap, preview
+    root, s, st = fresh(); b = mk(s, st)
+    now = time.time(); day = 86400
+    def zp(name, age_days, size=10):
+        p = os.path.join(s, "backups", name)
+        mkzip(p, ["world/level.dat"], now - age_days * day)
+        with open(p, "ab") as f: f.write(b"0" * size)
+        os.utime(p, (now - age_days * day,) * 2)
+        return "backups/" + name
+    a1, a2, a3 = zp("world_a1.zip", 3), zp("world_a2.zip", 2), zp("world_a3.zip", 1)
+    b1, b2_ = zp("world_b1.zip", 3), zp("world_b2.zip", 1)
+    m1 = zp("manual_1.zip", 30)
+    with open(st, "w", encoding="utf-8") as f:
+        json.dump({"world": {b1: "other", b2_: "other"}}, f)
+    b = mk(s, st)
+    wl = {e["id"]: e["world"] for e in b.list()}
+    check("world: untagged = current, tagged kept", wl[a1] == "world" and wl[b1] == "other", wl)
+    b.set_schedule({"keep": {"startup": 1, "scheduled": 0, "manual": 0}})
+    check("keep is per world", sorted(b.preview({})["ids"]) == sorted([a1, a2, b1]), b.preview({}))
+    b.pin(a1, True)
+    check("preview skips pinned", sorted(b.preview({})["ids"]) == sorted([a2, b1]), b.preview({}))
+    st_before = open(st, "rb").read()
+    pv = b.preview({"keep": {"startup": 0}, "max_days": {"startup": 2}})
+    check("preview age", set(pv["ids"]) == {a2, b1}, pv)   # a1 is pinned; a3 and b2 are 1 day old
+    check("preview bytes", pv["bytes"] == sum(e["size"] for e in b.list() if e["id"] in pv["ids"]))
+    check("preview saves nothing", open(st, "rb").read() == st_before and b.status()["schedule"]["keep"]["startup"] == 1)
+    raises("preview validates", ValueError, b.preview, {"every_minutes": 5})
+    b.set_schedule({"keep": {"startup": 0}, "max_days": {"manual": 10}})
+    check("age keeps the newest of a world and kind", b.preview({})["ids"] == [], b.preview({}))
+    b.set_schedule({"max_days": {"manual": 0}})
+    b._state["schedule"]["max_gb"] = 1e-7   # the API rounds to 0.1 GB, too coarse for test files
+    pl = b.preview({})
+    check("size: automatic only, oldest first, pinned, manual and the newest per world never",
+          set(pl["ids"]) == {a2, b1} and pl["ids"][0] in (b1, a2), pl)
+    rem = b.prune()
+    check("preview == prune", rem == pl["ids"], (rem, pl))
+    check("prune keeps manual and pinned", os.path.exists(os.path.join(s, "backups", "manual_1.zip")) and os.path.exists(os.path.join(s, "backups", "world_a1.zip")))
+    check("recycle drops the world tag", b1 not in b._state["world"])
+    check("max_gb round", b.set_schedule({"max_gb": "1.26"})["max_gb"] == 1.3 and b.set_schedule({"max_gb": 2})["max_gb"] == 2)
+    # cap that is reachable: only enough automatic zips go
+    root, s, st = fresh(); b = mk(s, st)
+    ids = [zp("world_%d.zip" % i, 5 - i, 0) for i in range(4)]
+    one = {e["id"]: e["size"] for e in b.list()}[ids[0]]
+    sch = dict(b.status()["schedule"], max_gb=2.5 * one / 1073741824)
+    plan = B._prune_plan(b.list(), sch)
+    check("size: oldest first until under", [e["id"] for e, w in plan] == ids[:2] and all(w == "size" for _e, w in plan), plan)
+
+    # ---------- bulk operations, note
+    root, s, st = fresh(); b = mk(s, st)
+    ids = []
+    for i in range(4):
+        mkzip(os.path.join(s, "backups", "manual_%d.zip" % i), ["world/level.dat"], time.time() - i * 10)
+        ids.append("backups/manual_%d.zip" % i)
+    b.pin_many(ids[:1], True)
+    check("pin_many", [e["id"] for e in b.list() if e["pinned"]] == ids[:1])
+    r = b.delete_many(ids + [ids[1]])
+    check("delete_many: skips pinned, dedups", sorted(r["deleted"]) == sorted(ids[1:]) and r["skipped"] == 1 and r["errors"] == [], r)
+    raises("delete_many: ids must be strings", ValueError, b.delete_many, [[1]])
+    raises("every_minutes inf", ValueError, b.set_schedule, {"every_minutes": float("inf")})
+    b.set_note(ids[0], None)
+    check("note None clears", not any(e["note"] for e in b.list()))
+    check("delete_many: left only the pinned", [e["id"] for e in b.list()] == ids[:1] and b.status()["busy"] is None)
+    check("delete_many: only pinned = nothing", b.delete_many(ids[:1]) == {"deleted": [], "skipped": 1, "errors": []})
+    raises("delete_many: bad id", ValueError, b.delete_many, ["backups/nope.zip"])
+    raises("delete_many: not a list", ValueError, b.delete_many, "backups/x.zip")
+    raises("delete_many: too many", ValueError, b.delete_many, ["backups/x%d.zip" % i for i in range(501)])
+    b.set_note(ids[0], "  before the Wither  ")
+    check("set_note", b.list()[0]["note"] == "before the Wither")
+    b.set_note(ids[0], "x" * 200); check("set_note: 80 chars", len(b.list()[0]["note"]) == 80)
+    b.set_note(ids[0], "  "); check("set_note: empty clears", b.list()[0]["note"] == "" and ids[0] not in b._state["note"])
+    b.world_dir = os.path.join(s, "world")
+    e = b.create("manual", False)
+    check("create tags the world", e["world"] == "world" and mk(s, st)._state["world"][e["id"]] == "world")
+
+    # ---------- schedule: legacy values and validation
+    root, s, st = fresh()
+    with open(st, "w", encoding="utf-8") as f:
+        json.dump({"schedule": {"every_hours": 3, "daily_at": "05:30", "keep": {"manual": 2}}, "last_daily": "2026-10-20"}, f)
+    b = mk(s, st); sc = b.status()["schedule"]
+    check("legacy schedule", sc["every_minutes"] == 180 and sc["daily_at"] == ["05:30"] and sc["days"] == list(range(7))
+          and "every_hours" not in sc and sc["window"] is None and sc["keep"]["manual"] == 2 and sc["max_gb"] == 0, sc)
+    check("legacy last_daily", b._state["last_daily"] == "2026-10-20 23:59")
+    check("legacy api keys", b.set_schedule({"every_hours": 1, "daily_at": ""})["every_minutes"] == 60 and b.status()["schedule"]["daily_at"] == [])
+    c = b.set_schedule({"every_minutes": 15, "window": {"from": "22:00", "to": "06:00"}, "daily_at": ["18:00", "04:00", "18:00"], "days": [4, 0, 0]})
+    check("normalised new keys", c["window"] == {"from": "22:00", "to": "06:00"} and c["daily_at"] == ["04:00", "18:00"] and c["days"] == [0, 4], c)
+    check("window off", b.set_schedule({"window": None})["window"] is None)
+    for bad in [{"window": {"from": "10:00", "to": "10:00"}}, {"window": {"from": "10:00"}}, {"window": "x"},
+                {"daily_at": ["01:00", "02:00", "03:00", "04:00", "05:00", "06:00", "07:00"]}, {"daily_at": ["25:00"]}, {"daily_at": 5},
+                {"days": []}, {"days": [7]}, {"days": "1"}, {"every_minutes": 5}, {"every_minutes": 2881},
+                {"max_days": {"manual": 3651}}, {"max_gb": -1}, {"max_gb": "x"}, {"max_gb": True}, {"max_gb": float("nan")}]:
+        raises("invalid schedule %r" % (bad,), ValueError, b.set_schedule, bad)
+    check("rejected values changed nothing", b.status()["schedule"]["daily_at"] == ["04:00", "18:00"] and b.status()["schedule"]["days"] == [0, 4])
+    check("days empty is fine without daily times", b.set_schedule({"daily_at": [], "days": []})["days"] == [])
+    raises("daily times with no day", ValueError, b.set_schedule, {"daily_at": ["04:00"]})
+
+    # ---------- window across midnight
+    W = {"from": "22:00", "to": "06:00"}
+    check("window crossing midnight", all(B._in_window(W, datetime(2026, 10, 21, h, m)) == ok for h, m, ok in
+          [(22, 0, True), (23, 59, True), (0, 0, True), (5, 59, True), (6, 0, False), (12, 0, False), (21, 59, False)]))
+    check("window same day", B._in_window({"from": "09:00", "to": "17:00"}, datetime(2026, 10, 21, 9, 0)) and not B._in_window({"from": "09:00", "to": "17:00"}, datetime(2026, 10, 21, 17, 0)))
+
+    # ---------- interval tick honours the window
+    root, s, st = fresh(); b = mk(s, st); r = Rcon()
+    b.set_schedule({"every_minutes": 30, "daily_at": [], "only_when_online": False, "window": {"from": "22:00", "to": "06:00"}})
+    T0 = datetime(2026, 10, 21, 12, 0).timestamp()
+    b.tick(T0, True, 1, r); wait()
+    b.tick(T0 + 3600, True, 1, r); wait()
+    check("tick: due but outside the window", not b.list())
+    check("next_scheduled moves to the window start", abs(b.status()["next_scheduled"] - datetime(2026, 10, 21, 22, 0).timestamp()) < 1, b.status()["next_scheduled"])
+    b.tick(datetime(2026, 10, 21, 23, 0).timestamp(), True, 1, r); wait()
+    check("tick: inside the window", len(b.list()) == 1)
+
+    # ---------- daily slots: two times, weekday filter
+    root, s, st = fresh(); b = mk(s, st)
+    # 2026-10-21 is a Wednesday (2)
+    b.set_schedule({"every_minutes": 0, "daily_at": ["04:00", "16:00"], "days": [2]})
+    def n(): return len(b.list())
+    def at(d, h, m=0): return datetime(2026, 10, d, h, m).timestamp()
+    b.tick(at(21, 3), False, 0, None); wait(); check("slots: before the first", n() == 0)
+    b.tick(at(21, 4, 10), False, 0, None); wait(); check("slots: first due", n() == 1)
+    check("slots: last_daily = first slot", b._state["last_daily"] == "2026-10-21 04:00")
+    time.sleep(1.1); b.tick(at(21, 10), False, 0, None); wait(); check("slots: not twice", n() == 1)
+    time.sleep(1.1); b.tick(at(21, 16, 5), False, 0, None); wait(); check("slots: second due", n() == 2)
+    check("slots: last_daily = second slot", b._state["last_daily"] == "2026-10-21 16:00")
+    time.sleep(1.1); b.tick(at(22, 5), False, 0, None); wait(); check("slots: wrong weekday", n() == 2)
+    time.sleep(1.1); b.tick(at(28, 4, 30), False, 0, None); wait(); check("slots: next Wednesday", n() == 3)
+    # one interval run after both slots covers both
+    root, s, st = fresh(); b = mk(s, st); r = Rcon()
+    b.set_schedule({"every_minutes": 30, "only_when_online": False, "daily_at": ["04:00", "16:00"], "days": [2]})
+    b.tick(at(21, 1), True, 1, r); wait()
+    b.tick(at(21, 17), True, 1, r); wait()
+    check("interval run covers both slots", n() == 1 and b._state["last_daily"] == "2026-10-21 16:00", (n(), b._state["last_daily"]))
+    time.sleep(1.1); b.tick(at(21, 17, 5), False, 0, None); wait()
+    check("no extra daily after the interval run", n() == 1)
+    # next_scheduled with days
+    wd = (datetime.now().weekday() + 3) % 7
+    b.set_schedule({"every_minutes": 0, "daily_at": ["04:00"], "days": [wd]})
+    nx = datetime.fromtimestamp(b.status()["next_scheduled"])
+    check("next_scheduled honours days", nx.weekday() == wd and (nx.hour, nx.minute) == (4, 0), nx)
+    b.set_schedule({"every_minutes": 0, "daily_at": []})
+    check("next_scheduled: nothing on", b.status()["next_scheduled"] is None)
 
     # ---------- operation running: Busy, not an error that waits 15 minutes
     b._op_lock.acquire()

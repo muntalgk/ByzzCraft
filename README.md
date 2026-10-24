@@ -55,7 +55,8 @@ Python standard library only: no dependencies, no database. It reads the server'
 - **Timeline**: play sessions, deaths, advancements and chat, rebuilt from the server logs.
 - **Console**: live log and RCON commands.
 - **Settings**: `server.properties` editor that backs up the file on every save.
-- **Backups**: manual and scheduled world backups, retention, download, restore.
+- **Backups**: manual and scheduled world backups (interval, time window, daily times and weekdays), retention per world
+  by count, age and size with a preview, multi-select delete and pin, download, restore.
 - **Access**: whitelist, operators, bans and kicks, even with the server off.
 - **Accounts**: friends get their own login; admins see everything, players can start the server and look around.
 - English and Italian interface, Windows and Linux.

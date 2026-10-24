@@ -1965,7 +1965,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(200, {"entries": items, "total": total, "counts": counts,   # users from the log: deleted ones too
                                    "users": sorted({e["user"] for e in entries if e["user"]}), "mc": mc_names()})
         if path == "/api/backups":
-            return self.json(200, {"items": BACKUPS.list(), "disk": BACKUPS.disk(), "status": BACKUPS.status()})
+            BACKUPS.world_dir = world_dir()   # untagged backups count as the current world
+            return self.json(200, {"items": BACKUPS.list(), "disk": BACKUPS.disk(), "status": BACKUPS.status(),
+                                   "doomed": BACKUPS.preview({})["ids"], "world": os.path.basename(world_dir())})
         if path == "/api/backups/download":
             try:
                 p = BACKUPS.path(q.get("id", [""])[0])
@@ -2185,6 +2187,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
     def backup_post(self, op, data, who):
+        BACKUPS.world_dir = world_dir()
         bid = str(data.get("id", ""))
         busy = backup_busy()
         try:
@@ -2224,6 +2227,25 @@ class Handler(BaseHTTPRequestHandler):
                 BACKUPS.delete(bid)
                 log("%s moved backup %s to the trash" % (who, name))
                 return self.json(200, {"ok": True, "message": t("Moved to the trash.")})
+            if op == "delete_many":
+                with LOCK:
+                    if busy or OP_PENDING.is_set():
+                        return self.json(200, {"ok": False, "message": t("Wait: %s in progress.") % (busy or t("operation")).lower()})
+                r = BACKUPS.delete_many(data.get("ids"))
+                if r["deleted"]:
+                    log("%s moved %d backups to the trash" % (who, len(r["deleted"])))
+                if r["errors"]:
+                    return self.json(200, {"ok": False, "message": r["errors"][0], **r})
+                msg = t("Moved %d to the trash.") % len(r["deleted"]) + (" " + t("%d pinned skipped.") % r["skipped"] if r["skipped"] else "")
+                return self.json(200, {"ok": True, "message": msg, **r})
+            if op == "pin_many":
+                BACKUPS.pin_many(data.get("ids"), bool(data.get("pinned")))
+                return self.json(200, {"ok": True, "message": t("Pinned: it will never be deleted automatically.") if data.get("pinned") else t("Unpinned.")})
+            if op == "note":
+                BACKUPS.set_note(bid, data.get("note", ""))
+                return self.json(200, {"ok": True, "message": t("Note saved.")})
+            if op == "preview":
+                return self.json(200, {"ok": True, **BACKUPS.preview(data.get("schedule") if isinstance(data.get("schedule"), dict) else {})})
             if op == "pin":
                 BACKUPS.pin(bid, bool(data.get("pinned")))
                 return self.json(200, {"ok": True, "message": t("Pinned: it will never be deleted automatically.") if data.get("pinned") else t("Unpinned.")})
