@@ -462,6 +462,7 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
   .prop:has(.sw){grid-template-columns:minmax(0,1fr) auto;align-items:center}   /* on/off settings: the switch next to its name, half the height */
   #ps-save,#pw-save,#us-save{width:100%;justify-content:center}   /* form saves across the card, like Back up and Save schedule */
   .toolbar{flex-wrap:wrap}.toolbar .search{flex:1 1 100%;min-width:0}
+  .v-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}   /* one line under the title */
   .card{padding:16px}.grid{gap:12px}.top{margin-bottom:16px}.top h1{font-size:22px}.chips-f button{padding:5px 11px;font-size:12.5px}}
 /* hero on phones: the address on its own row with copy at the end, player chips the same height below */
 @media (max-width:520px){#players .chip{min-height:40px}#players .chip.addr{flex-basis:100%;padding:4px 6px 4px 14px}#players .chip.addr button{margin-left:auto}#players .chip .av{width:28px;height:28px;font-size:12px}}
@@ -700,10 +701,10 @@ function renderMe(){const f=$("#me-face");const me=BOOT.mc&&(P.roster||[]).find(
   if(me){if(f.dataset.u!=me.uuid){f.dataset.u=me.uuid;f.className="me-face fc";f.style.cssText=faceStyle(me.uuid,32);f.textContent=""}}
   else if(!f.dataset.u)f.textContent=(BOOT.mc||BOOT.user).charAt(0).toUpperCase()}
 const TITLES={dash:"Dashboard",map:_t("Map"),players:_t("Players"),timeline:"Timeline",metrics:_t("Metrics"),console:"Console",props:_t("Server settings"),backups:"Backup",access:_t("Access"),audit:_t("Panel log"),account:_t("Account")};
-const SUBS={dash:()=>_t("Live server and world status"),map:()=>matchMedia("(pointer:coarse)").matches?_t("Top-down view · drag, pinch to zoom"):_t("Top-down view · drag, zoom, right-click for a marker"),
-  players:()=>{const r=P.roster||[],n=r.filter(p=>p.online).length;return _t("%s players recorded",r.length)+" · "+(n?_t("%s online",n):_t("nobody online"))},
-  timeline:()=>_t("Play sessions and events from the server logs"),metrics:()=>_t("PC and server · last 10 minutes, one point every 2 seconds"),console:()=>_t("Live log and RCON commands"),props:()=>_t("server.properties · every save backs up the file"),access:()=>_t("Whitelist, operators and bans"),audit:()=>_t("Who did what in the panel"),account:()=>BOOT.admin?_t("Your password and the panel users"):_t("Your password"),
-  backups:()=>BK.items?_t("%s backups",BK.items.length)+" · "+gb(BK.items.reduce((a,e)=>a+e.size,0))+" · "+_t("%s free on disk",gb(BK.disk.free)):_t("World copies, schedule and restore")};
+const SUBS={dash:()=>_t("Server and world"),map:()=>matchMedia("(pointer:coarse)").matches?_t("Drag and pinch"):_t("Right-click to add a marker"),
+  players:()=>{const r=P.roster||[],n=r.filter(p=>p.online).length;return _t("%s players",r.length)+" · "+(n?_t("%s online",n):_t("nobody online"))},
+  timeline:()=>_t("Sessions and events"),metrics:()=>_t("Last 10 minutes"),console:()=>_t("Log and commands"),props:()=>"server.properties",access:()=>_t("Whitelist, OP and bans"),audit:()=>_t("Who did what"),account:()=>BOOT.admin?_t("Password and users"):_t("Your password"),
+  backups:()=>BK.items?_t("%s backups",BK.items.length)+" · "+gb(BK.items.reduce((a,e)=>a+e.size,0))+" · "+_t("%s free",gb(BK.disk.free)):_t("World backups")};
 let CUR="dash";function setSub(){$("#v-sub").textContent=SUBS[CUR]?SUBS[CUR]():""}
 function go(v){if(!TITLES[v])v="dash";CUR=v;document.body.dataset.v=v;$$(".tab").forEach(t=>{t.classList.toggle("on",t.dataset.v==v);});$("#more").classList.toggle("on",!!$(".tab.on:not(.nb)"));navMore(0);Object.keys(TITLES).forEach(x=>$("#v-"+x).hidden=x!=v);
   $("#v-title").textContent=TITLES[v];setSub();if(v=="props"){loadProps();PS.load()}if(v=="console"){renderConsole();setTimeout(()=>$("#cmd").focus(),50)}if(v=="metrics")charts.forEach(c=>c.draw());
