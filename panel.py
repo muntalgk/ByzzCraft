@@ -1291,10 +1291,16 @@ with open(os.path.join(HERE, "assets", "logo.svg"), encoding="utf-8") as _f:
     LOGO_SVG = _f.read().strip()
 # PNG, not SVG: Safari (also on the iPhone Home screen) does not use SVG icons
 # manifest and meta: from the phone's Home screen it opens like an app, without the browser bar
-LOGO_ICON = ("<link rel=icon type=image/png href=/favicon.ico><link rel=apple-touch-icon href=/apple-touch-icon.png>"
-             "<link rel=manifest href=/manifest.webmanifest><meta name=theme-color content='#0d0f13'>"
-             "<meta name=apple-mobile-web-app-capable content=yes><meta name=mobile-web-app-capable content=yes>")
 ICONS = {"/favicon.ico": "icon-32.png", "/apple-touch-icon.png": "icon-180.png"}
+# ?v= changes with the files: the icons are cached for a day, a new logo must not wait for it
+_v = hashlib.sha256()
+for _f in ICONS.values():
+    with open(os.path.join(HERE, "assets", _f), "rb") as _fh:
+        _v.update(_fh.read())
+ICON_V = _v.hexdigest()[:8]
+LOGO_ICON = ("<link rel=icon type=image/png href=/favicon.ico?v=%s><link rel=apple-touch-icon href=/apple-touch-icon.png?v=%s>"
+             "<link rel=manifest href=/manifest.webmanifest><meta name=theme-color content='#0d0f13'>"
+             "<meta name=apple-mobile-web-app-capable content=yes><meta name=mobile-web-app-capable content=yes>") % (ICON_V, ICON_V)
 
 
 def login_page(error=""):
@@ -1854,7 +1860,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/manifest.webmanifest":
             return self.send(200, json.dumps({"name": CFG["title"], "short_name": CFG["title"], "start_url": "/", "display": "standalone",
                                               "background_color": "#0d0f13", "theme_color": "#0d0f13",
-                                              "icons": [{"src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png"}]}).encode(),
+                                              "icons": [{"src": "/apple-touch-icon.png?v=" + ICON_V, "sizes": "180x180", "type": "image/png"}]}).encode(),
                              "application/manifest+json")
         _, s = self.session()
         if not s:
