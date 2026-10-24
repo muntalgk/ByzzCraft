@@ -435,6 +435,8 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
   .quick button{min-height:36px}.chip button{min-height:32px;padding:0 8px}.wm-ui button,.wm-ui select{min-width:36px;min-height:36px}
 }
 @media (max-width:360px){.pl-list{grid-template-columns:1fr}}
+/* server buttons on phones: Restart and Stop side by side, Start and Force stop on their own row */
+@media (max-width:520px){.srv-acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%}.srv-acts .btn{width:100%;justify-content:center}.srv-acts #b-start,.srv-acts #b-kill{grid-column:1/-1}.srv-acts #b-kill{padding:9px;font-size:13px;border-color:#3a2423}}
 </style>
 </head>
 <body>
@@ -472,7 +474,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
           <div class="sub" id="st-sub"></div>
           <div class="chips" id="players"></div>
         </div>
-        <div class="actions">
+        <div class="actions srv-acts">
           <button class="btn primary" id="b-start">{{Start}}</button>
           <button class="btn" id="b-restart">{{Restart}}</button>
           <button class="btn danger" id="b-stop">{{Stop}}</button>
