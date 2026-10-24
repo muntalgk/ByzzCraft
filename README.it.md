@@ -106,7 +106,7 @@ impostazioni, backup e accessi. Per farli entrare in gioco apri la porta di Mine
 
 Il pannello avvia Java da solo, con i [flag di Aikar](https://docs.papermc.io/paper/aikars-flags), e fa il backup
 del mondo prima di ogni avvio (`backups/world_*.zip`, dopo aver controllato lo spazio libero). RAM (automatica:
-metà della macchina, da 1 a 4 GB), flag Java in più, backup prima dell'avvio, spegnimento automatico e indirizzo
+metà della macchina, da 1 a 4 GB, mai più di quella libera), flag Java in più, backup prima dell'avvio, spegnimento automatico e indirizzo
 per i giocatori stanno in **Impostazioni → Pannello**: si cambiano dal browser, senza SSH.
 
 Ti serve qualcosa che il pannello non fa? Metti un tuo script nella cartella del server e imposta

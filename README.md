@@ -107,7 +107,7 @@ settings, backups and access lists. For them to join the game, open the Minecraf
 
 The panel starts Java by itself, with [Aikar's flags](https://docs.papermc.io/paper/aikars-flags), and backs up
 the world before each start (`backups/world_*.zip`, after checking the free disk space). RAM (automatic: half
-of the machine, 1 to 4 GB), extra Java flags, the backup before the start, the auto stop and the address
+of the machine, 1 to 4 GB, never more than what is free), extra Java flags, the backup before the start, the auto stop and the address
 shown to players are in **Settings → Panel**, so you change them from the browser, without SSH.
 
 Need something the panel does not do? Put your own script in the server folder and set `start_script` in

@@ -737,8 +737,10 @@ RAM_RE = re.compile(r"^(\d{3,6})M$|^(\d{1,3})G$")
 
 
 def auto_ram():
-    """Meta' della RAM della macchina, da 1 a 4 GB: di piu' e il sistema puo' uccidere il server mentre parte."""
-    return "%dM" % max(1024, min(4096, int(system_memory()[1] / 2)))
+    """Meta' della RAM della macchina, da 1 a 4 GB, e non oltre l'80% di quella libera adesso: con -Xms = -Xmx e
+    AlwaysPreTouch Java la occupa tutta subito, e se non c'e' il sistema uccide il server mentre parte."""
+    free, total = system_memory()
+    return "%dM" % max(1024, min(4096, int(total / 2), int(free * 0.8)))
 
 
 def ram_mb(ram):
