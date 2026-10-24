@@ -1,10 +1,21 @@
 # ByzzCraft
 
-Pannello web self-hosted per un server Minecraft Java vanilla. Accendi il server dal telefono, guarda chi è
-online e dove si trova, controlla l'inventario, fai il backup del mondo. Un solo file Python, nessuna
-dipendenza, nessun database: legge i file del server e gli parla via RCON.
+[![tests](https://github.com/muntalgk/byzzcraft/actions/workflows/tests.yml/badge.svg)](https://github.com/muntalgk/byzzcraft/actions/workflows/tests.yml)
+
+Pannello web self-hosted per un server Minecraft Java (vanilla, Paper o Fabric). Accendi il server dal
+telefono, guarda chi è online e dove si trova, controlla l'inventario, fai il backup del mondo. Solo la
+libreria standard di Python: nessuna dipendenza, nessun database. Legge i file del server e gli parla via RCON.
 
 [Read me in English](README.md)
+
+<p align="center">
+  <img src="docs/screenshots/dashboard.jpg" alt="Dashboard" width="49%">
+  <img src="docs/screenshots/map.jpg" alt="Map" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/settings.jpg" alt="Settings" width="49%">
+  <img src="docs/screenshots/phone.jpg" alt="Dashboard on a phone" width="22%">
+</p>
 
 ## Cosa fa
 
@@ -43,7 +54,7 @@ Il pannello stampa un link con un codice di configurazione monouso:
 
 ```
 ByzzCraft is not set up yet.
-  From your computer open:  http://192.168.1.64:8765/?setup=Xy3...
+  From your computer open:  http://192.168.1.20:8765/?setup=Xy3...
 ```
 
 Aprilo nel browser **del tuo computer**. La pagina chiede la cartella del server (o ne crea uno nuovo lì),
@@ -189,10 +200,25 @@ sono descritte nel [README inglese](README.md#configuration).
 La Dashboard elenca cosa manca e, quando il server non parte, dice perché. Se non basta,
 `data/logs/server-start.log` ha l'output completo.
 
-- **Il login non resta su `http://192.168…`**: aggiorna il pannello; le versioni vecchie volevano HTTPS per il cookie.
 - **"RCON non disponibile"**: riavvia una volta il server Minecraft dopo la configurazione, così legge RCON.
 - **Porta 8765 occupata**: c'è già un pannello acceso, oppure cambia `port` in `data/panel-config.json`.
 - **Non avviarlo da root**: i file del server diventerebbero di root. Il pannello lo segnala nel log.
+
+## Rete e privacy
+
+Il pannello parla solo con questi servizi, e solo per scaricare; non invia dati su di te o sul tuo server:
+
+| Servizio | Quando | A cosa serve |
+|---|---|---|
+| Mojang (`piston-meta`, `piston-data`) | setup, `panel.py assets`, server nuovo | jar del server, elenco versioni, texture e nomi |
+| Mojang (`sessionserver`, `textures.minecraft.net`, `api.mojang.com`) | apri la pagina di un giocatore, whitelist a server spento | skin e UUID (skin in cache per 6 ore) |
+| Adoptium (`api.adoptium.net`, files on GitHub) | manca Java | download di Java |
+| GitHub (`api.github.com`) | una volta al giorno | c'è una release nuova? (`update_check: false` lo spegne) |
+
+## Contribuire
+
+I test girano con `for t in tests/test_*.py; do python3 "$t"; done` e su GitHub Actions (Ubuntu e Windows).
+Prima di una pull request leggi [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Licenza
 

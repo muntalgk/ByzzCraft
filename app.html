@@ -821,7 +821,8 @@ const PS={async load(){if(!BOOT.admin)return;const r=await fetch("/api/panel-set
     $("#ps-addr").value=j.mc_address;$("#ps-args").value=j.java_args;$("#ps-bk").checked=j.backup_on_start;$("#ps-ar").checked=j.auto_restart;
     ["#ps-ram","#ps-args","#ps-bk"].forEach(s=>$(s).disabled=!!j.start_script);
     $("#ps-info").textContent=j.start_script?_t("Started by your script %s: RAM, Java flags and the backup before the start are set there.",j.start_script)
-      :_t("Server %s · Java %s · this machine has %s GB of RAM",j.jar||_t("not found"),j.java||_t("not found"),nf(j.ram_total/1024,1))},
+      :_t("Server %s · %s · this machine has %s GB of RAM",j.jar||_t("not found"),
+        !j.java?_t("Java not found"):"Java "+(j.java_need||"")+" ("+(j.java_bundled?_t("downloaded by the panel"):_t("installed on the system"))+")",nf(j.ram_total/1024,1))},
   async save(){const j=await api("/api/panel-settings",{ram:$("#ps-ram").value,java_args:$("#ps-args").value,backup_on_start:$("#ps-bk").checked,auto_restart:$("#ps-ar").checked,
     auto_stop_minutes:+$("#ps-stop").value||0,mc_address:$("#ps-addr").value});toast(j.message,j.ok?"good":"bad");
     if(j.ok){this.render(j.settings);BOOT.address=j.settings.mc_address;renderStatus()}}};

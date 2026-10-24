@@ -1,10 +1,21 @@
 # ByzzCraft
 
-A self-hosted web panel for a vanilla Minecraft Java server. Start the server from your phone, see who is
-online and where, check their inventory, back up the world. One Python file, no dependencies, no database:
-it reads the server's own files and talks to it over RCON.
+[![tests](https://github.com/muntalgk/byzzcraft/actions/workflows/tests.yml/badge.svg)](https://github.com/muntalgk/byzzcraft/actions/workflows/tests.yml)
+
+A self-hosted web panel for a Minecraft Java server (vanilla, Paper or Fabric). Start the server from your
+phone, see who is online and where, check their inventory, back up the world. Python standard library only:
+no dependencies, no database. It reads the server's own files and talks to it over RCON.
 
 [Leggimi in italiano](README.it.md)
+
+<p align="center">
+  <img src="docs/screenshots/dashboard.jpg" alt="Dashboard" width="49%">
+  <img src="docs/screenshots/map.jpg" alt="Map" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/settings.jpg" alt="Settings" width="49%">
+  <img src="docs/screenshots/phone.jpg" alt="Dashboard on a phone" width="22%">
+</p>
 
 ## What it does
 
@@ -43,7 +54,7 @@ The panel prints a link with a one-time setup code:
 
 ```
 ByzzCraft is not set up yet.
-  From your computer open:  http://192.168.1.64:8765/?setup=Xy3...
+  From your computer open:  http://192.168.1.20:8765/?setup=Xy3...
 ```
 
 Open it in the browser of **your computer**. The setup page asks for the server folder (or creates a new
@@ -205,21 +216,33 @@ Dashboard warns when less than three backups would fit.
 The Dashboard lists what is missing, and when the server does not start it says why. If that is not enough,
 `data/logs/server-start.log` has the full output.
 
-- **Login does not stick on `http://192.168…`**: update the panel; older versions marked the cookie HTTPS-only.
 - **"RCON unavailable"**: restart the Minecraft server once after setup, so it reads the new RCON settings.
 - **Port 8765 in use**: another panel is running, or change `port` in `data/panel-config.json`.
 - **Do not run it as root**: the server files would belong to root. The panel warns about it in the log.
+
+## Network and privacy
+
+The panel talks only to these services, and only to fetch things; it sends no data about you or your server:
+
+| Service | When | What for |
+|---|---|---|
+| Mojang (`piston-meta`, `piston-data`) | setup, `panel.py assets`, new server | server jar, version list, textures and names |
+| Mojang (`sessionserver`, `textures.minecraft.net`, `api.mojang.com`) | a player page opens, a whitelist change with the server off | skins and UUIDs (skins are cached for 6 hours) |
+| Adoptium (`api.adoptium.net`, files on GitHub) | Java is missing | Java download |
+| GitHub (`api.github.com`) | once a day | is there a new release (`update_check: false` turns it off) |
 
 ## Translations
 
 Texts in the code are English. `i18n/it.json` maps them to Italian; a new language is a new
 `i18n/<code>.json` with the same keys (missing entries fall back to English).
 
-## Tests
+## Tests and contributing
 
 ```bash
 for t in tests/test_*.py; do python3 "$t"; done
 ```
+
+GitHub Actions runs them on Ubuntu and Windows. See [CONTRIBUTING.md](CONTRIBUTING.md) before a pull request.
 
 ## License
 

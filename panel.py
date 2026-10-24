@@ -1384,7 +1384,8 @@ def save_config(changes):
 def panel_settings():
     need = RT.required(CFG["server_dir"], server_jar())
     return {**{k: CFG.get(k, DEFAULTS.get(k)) for k in PANEL_KEYS}, "ram_auto": auto_ram(), "ram_total": round(system_memory()[1]),
-            "jar": server_jar(), "java": RT.java_for(need)[0], "java_need": need, "start_script": CFG.get("start_script") or ""}
+            "jar": server_jar(), "java": RT.java_for(need)[0], "java_need": need, "start_script": CFG.get("start_script") or "",
+            "java_bundled": bool(RT.java_for(need)[0] and RT.java_for(need)[0].startswith(RT.RUNTIME))}
 
 
 PANEL_KEYS = ("ram", "java_args", "backup_on_start", "auto_stop_minutes", "mc_address", "auto_restart")
