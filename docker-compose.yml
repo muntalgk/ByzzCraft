@@ -4,9 +4,12 @@ services:
   byzzcraft:
     build: .
     restart: unless-stopped
-    ports:
-      - "8765:8765"     # the panel: put HTTPS in front of it (Tailscale, nginx, Caddy) before opening it to the internet
-      - "25565:25565"   # Minecraft
+    # host networking: the panel sees the real client addresses (proxy, Tailscale, login limits) and the setup
+    # choice "this machine only / home network" works as without Docker. Panel on 8765, Minecraft on 25565.
+    # On Docker Desktop (Windows/Mac) enable it in Settings > Resources > Network (Docker Desktop 4.34 or newer).
+    network_mode: host
+    # docker compose down / updates stop Minecraft first: the grace period gives it time to save the world
+    stop_grace_period: 2m
     volumes:
       - data:/data
       - minecraft:/minecraft

@@ -220,6 +220,25 @@ def run():
     rem = b.prune(); check("prune manual 3", len(rem) == 3 and len([e for e in b.list() if e["kind"] == "manual"]) == 3, rem)
     check("prune idempotent", b.prune() == [])
 
+    # Windows: a Recycle Bin that refuses (tiny limit) must not stop automatic cleanup, only that
+    if os.name == "nt":
+        real_limit = B._recycle_limit
+        B._recycle_limit = lambda path: (1, False)
+        try:
+            root, s, st = fresh(); b = mk(s, st)
+            for i in range(3):
+                ts = datetime.fromtimestamp(base + i * 100).strftime(B.TS_FMT)
+                mkzip(os.path.join(s, "backups", "world_%s.zip" % ts), ["world/level.dat"], base + i * 100)
+                mkzip(os.path.join(s, "backups", "manuale_%s.zip" % ts), ["world/level.dat"], base + i * 100)
+            b.set_schedule({"keep": {"startup": 1, "scheduled": 0, "manual": 0}})
+            rem = b.prune()
+            check("prune: bin refuses, automatic zips still removed", len(rem) == 2, rem)
+            man = next(e for e in b.list() if e["kind"] == "manual")
+            raises("manual delete still refused by the bin", OSError, b.delete, man["id"])
+            check("manual zip still on disk", os.path.exists(os.path.join(s, "backups", man["name"])))
+        finally:
+            B._recycle_limit = real_limit
+
     # ---------- schedule validation
     for bad in [{"every_hours": 49}, {"every_hours": -1}, {"every_hours": "x"}, {"daily_at": "25:00"}, {"daily_at": "4pm"},
                 {"keep": {"startup": 201}}, {"keep": {"startup": -1}}, "no", {"every_hours": True}]:

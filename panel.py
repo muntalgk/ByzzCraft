@@ -10,7 +10,7 @@ Users:            python panel.py adduser NAME [--admin]
                   python panel.py users
 Assets:           python panel.py assets [VERSION]   (textures and translations downloaded from Mojang)
 """
-import base64, getpass, hashlib, hmac, html, json, logging, logging.handlers, os, queue, re, secrets, shlex, shutil, socket, struct, subprocess, sys, threading, time, urllib.request
+import base64, getpass, hashlib, hmac, html, json, logging, logging.handlers, os, queue, re, secrets, shlex, shutil, signal, socket, struct, subprocess, sys, threading, time, urllib.request
 from collections import deque
 from datetime import datetime
 from http.cookies import SimpleCookie
@@ -38,7 +38,7 @@ DEFAULTS = {
     "server_dir": os.path.dirname(HERE),
     "start_script": "",           # empty = the panel starts Java itself; otherwise a script in the server folder
     "server_jar": "",             # jar to start; empty = found by itself (Fabric, Paper, vanilla server.jar)
-    "ram": "",                    # server RAM, e.g. "6G"; empty = automatic (half of the machine, 1 to 4 GB)
+    "ram": "",                    # server RAM, e.g. "6G"; empty = automatic (half of the machine, 512 MB to 4 GB)
     "java_args": "",              # extra Java flags, after the standard ones
     "backup_on_start": True,      # world backup before each start (only without start_script: a script does its own)
     "auto_restart": True,         # restart the server after a crash (at most 3 times in 10 minutes)
@@ -60,7 +60,7 @@ PBKDF2_ROUNDS = 240_000
 MAX_FAILS, FAIL_WINDOW, LOCK_SECONDS = 5, 600, 900
 SAMPLE_SECONDS = 2
 HISTORY_POINTS = 300          # 10 minutes at 2 s
-LOCKED_KEYS = {"server-port", "enable-rcon", "rcon.port", "rcon.password", "management-server-secret",
+LOCKED_KEYS = {"server-port", "server-ip", "enable-rcon", "rcon.port", "rcon.password", "management-server-secret",
                "management-server-tls-keystore-password"}
 SECRET_KEYS = {"rcon.password", "management-server-secret", "management-server-tls-keystore-password"}
 
@@ -328,11 +328,17 @@ def _read_varint(sock):
         shift += 7
 
 
+def mc_host():
+    """Where Minecraft listens: server-ip, or loopback when it is empty or a wildcard (connecting to 0.0.0.0 fails on Windows)."""
+    ip = server_props().get("server-ip", "").strip()
+    return "127.0.0.1" if ip in ("", "0.0.0.0", "::") else ip
+
+
 def ping(port):
     """Server List Ping: None if off, otherwise (online, max, [names])."""
     try:
-        with socket.create_connection(("127.0.0.1", port), timeout=3) as s:
-            host = b"127.0.0.1"
+        with socket.create_connection((mc_host(), port), timeout=3) as s:
+            host = mc_host().encode()
             hs = _varint(0) + _varint(777) + _varint(len(host)) + host + struct.pack(">H", port) + _varint(1)
             s.sendall(_varint(len(hs)) + hs + _varint(1) + _varint(0))
             _read_varint(s); _read_varint(s)
@@ -424,7 +430,7 @@ class Rcon:
         p = server_props()
         if p.get("enable-rcon") != "true" or not p.get("rcon.password"):
             raise RuntimeError(t("RCON is not enabled in server.properties"))
-        self.sock = socket.create_connection(("127.0.0.1", int(p.get("rcon.port", 25575))), timeout=5)
+        self.sock = socket.create_connection((mc_host(), int(p.get("rcon.port", 25575))), timeout=5)
         self._send(1, 3, p["rcon.password"])
         rid, _ = self._recv()
         if rid == -1:
@@ -575,7 +581,8 @@ class ServerControl:
             if self.proc is not None:
                 self.proc.poll()   # reaps the finished script: no zombie processes
             changed = prev != self.state
-            crashed = changed and self.state == "off" and prev in ("on", "stopping") and not self.stop_requested
+            crashed = changed and self.state == "off" and prev in ("on", "stopping") \
+                      and (not self.stop_requested or bool(crash_reason(self.on_since)))   # a crash also logs "Stopping server"
             if changed and self.state == "on":
                 self.start_error, self.stop_requested, self.on_since = None, False, time.time()
                 try:
@@ -598,7 +605,7 @@ class ServerControl:
         with LOCK:
             if self.state in ("starting", "on", "stopping"):
                 return False, t("The server is already on or starting.")
-            if pid_alive(self.last_pid):
+            if pid_alive(self.last_pid) or SHUTTING_DOWN.is_set():
                 return False, t("The server is still shutting down: try again in a few seconds.")
             busy = backup_busy()
             if busy or OP_PENDING.is_set():
@@ -637,7 +644,7 @@ class ServerControl:
             if java:
                 env["JAVA"] = java   # the example scripts use it; a custom script may ignore it
             if script:
-                cmd = ["cmd.exe", "/c", script] if os.name == "nt" else ["sh", script]
+                cmd = ["cmd.exe", "/c", script] if os.name == "nt" else ([script] if has_shebang(script) else ["sh", script])
             else:
                 cmd = launch_cmd(jar, java)
                 os.makedirs(os.path.join(CFG["server_dir"], "logs"), exist_ok=True)
@@ -720,7 +727,7 @@ class ServerControl:
             with LOCK:
                 self.state = "on"; self.restart_pending = self.stop_requested = False
             log("%s: stop failed (%s)" % (who, e))
-            return False, t("Could not stop the server: %s") % e
+            return False, t("Could not stop the server (%s): if RCON was turned on while it was running, type stop once in its own console.") % e
         log("%s %s the server%s" % (who, "restarted" if restart else "stopped", " (%s)" % reason if reason else ""))
         HUB.publish("status", self.snapshot())
         return True, t("Restarting.") if restart else t("Stopping.")
@@ -737,10 +744,19 @@ RAM_RE = re.compile(r"^(\d{3,6})M$|^(\d{1,3})G$")
 
 
 def auto_ram():
-    """Half of the machine's RAM, 1 to 4 GB, and never above 80% of what is free now: with -Xms = -Xmx and
+    """Half of the machine's RAM, 512 MB to 4 GB, and never above 80% of what is free now: with -Xms = -Xmx and
     AlwaysPreTouch Java takes all of it at once, and if it is not there the system kills the server while starting."""
     free, total = system_memory()
-    return "%dM" % max(1024, min(4096, int(total / 2), int(free * 0.8)))
+    return "%dM" % max(512, min(4096, int(total / 2), int(free * 0.8)))
+
+
+def has_shebang(script):
+    """Executable and starting with #!: run it directly (a bash script breaks under dash); otherwise with sh."""
+    try:
+        with open(script, "rb") as f:
+            return os.access(script, os.X_OK) and f.read(2) == b"#!"
+    except OSError:
+        return False
 
 
 def ram_mb(ram):
@@ -760,7 +776,7 @@ START_HINTS = (   # (text in the start output, explanation for the user)
     (r"agree to the EULA", "You have not accepted the Minecraft EULA: accept it from the Dashboard checks."),
     (r"FAILED TO BIND|Address already in use|BindException", "The Minecraft port is already in use: is another server running?"),
     (r"Unable to access jarfile|Invalid or corrupt jarfile", "The server jar is missing or damaged: check server_jar in panel-config.json."),
-    (r"Could not reserve enough space|Invalid maximum heap size|insufficient memory", "Not enough memory for the RAM set in the start script."),
+    (r"Could not reserve enough space|Invalid maximum heap size|insufficient memory", "Not enough memory for this RAM: lower it in Settings > Panel (or in the start script)."),
 )
 
 
@@ -783,7 +799,7 @@ def start_failure(exited, code=None):
     text = "\n".join(lines)
     hint = next((h for rx, h in START_HINTS if re.search(rx, text, re.I)), None)
     if not hint and code in (-9, 137):   # SIGKILL without a message: almost always the kernel, out of memory
-        hint = "The system killed the server, probably out of memory: lower RAM in the start script."
+        hint = "The system killed the server, probably out of memory: lower RAM in Settings > Panel (or in the start script)."
     msg = t(hint) if hint else (t("The server stopped while starting: see logs/server-start.log.") if exited
                                 else t("The server did not answer in time: see logs/server-start.log."))
     L.error("start failed (exit code %s): %s\n%s", code, hint or ("exited" if exited else "timeout"), "\n".join(lines[-15:]))
@@ -862,6 +878,7 @@ MAP_SEM = threading.BoundedSemaphore(2)     # at most 2 tiles rendered at once: 
 MARKERS_FILE = os.path.join(DATA, "markers.json")
 WORLD_BUSY = threading.Event()              # restore running: no reads of the world (map)
 OP_PENDING = threading.Event()              # backup/restore asked from the web, thread not started yet: no starts
+SHUTTING_DOWN = threading.Event()           # the container is stopping: no starts, not even after a "crash"
 BACKUPS = BK.Backups(CFG["server_dir"], os.path.join(CACHE, "backups-state.json"),
                      on_change=lambda: HUB.publish("backups", BACKUPS.status(), admin_only=True))
 
@@ -920,7 +937,8 @@ def access_action(who, action, name, reason):
         msg = t(AC.DONE[action]) % name + "."
     else:
         try:
-            prof = AC.resolve(CFG["server_dir"], action, name, known={p["uuid"]: p["name"] for p in roster()})
+            prof = AC.resolve(CFG["server_dir"], action, name, known={p["uuid"]: p["name"] for p in roster()},
+                             offline=server_props().get("online-mode") == "false")
             with LOCK:   # start() takes the same LOCK: the server cannot start while we write the files
                 if SRV.state != "off" or pid_alive(SRV.last_pid):
                     return False, t("The server has just started: try again, the change now goes through the server.")
@@ -1348,7 +1366,7 @@ def setup_page(error="", form=None, token="", remote=False):
 <label class=chk><input type=checkbox name=eula value=1> %s <a href="https://aka.ms/MinecraftEULA" target=_blank rel=noopener>EULA</a></label>
 <button type=submit>%s</button><p class=note>%s</p>%s</form></main>""" % (
         LOGO_SVG, e(t("Welcome to ByzzCraft")), e(t("First setup of the panel.")), e(token),
-        e(t("Minecraft server folder")), e(sd), chk(f.get("new_server") == "1" or not has_jar),
+        e(t("Minecraft server folder")), e(sd), chk(f.get("new_server") == "1" or not has_jar and not os.path.exists(os.path.join(sd, "server.properties"))),
         e(t("No server yet: download the latest Minecraft server into this folder")),
         e(t("Language")), opts, e(t("Admin user")), e(f.get("user", "")), e(t("Password (at least 10 characters)")), e(t("Repeat the password")),
         e(t("Who can open the panel")), chk(not network), e(t("Only this machine (then Tailscale, nginx or an SSH tunnel)")),
@@ -1383,9 +1401,10 @@ def save_config(changes):
 
 def panel_settings():
     need = RT.required(CFG["server_dir"], server_jar())
+    java = RT.java_for(need)[0]
     return {**{k: CFG.get(k, DEFAULTS.get(k)) for k in PANEL_KEYS}, "ram_auto": auto_ram(), "ram_total": round(system_memory()[1]),
-            "jar": server_jar(), "java": RT.java_for(need)[0], "java_need": need, "start_script": CFG.get("start_script") or "",
-            "java_bundled": bool(RT.java_for(need)[0] and RT.java_for(need)[0].startswith(RT.RUNTIME))}
+            "jar": server_jar(), "java": java, "java_need": need, "start_script": CFG.get("start_script") or "",
+            "java_bundled": bool(java and java.startswith(RT.RUNTIME))}
 
 
 PANEL_KEYS = ("ram", "java_args", "backup_on_start", "auto_stop_minutes", "mc_address", "auto_restart")
@@ -1396,7 +1415,7 @@ def save_panel_settings(data, who):
     ram = str(data.get("ram", "")).strip().upper()
     if ram and not RAM_RE.match(ram):
         raise ValueError(t("RAM: write it like 4G or 3072M, or leave it empty for automatic."))
-    if ram and ram_mb(ram) > system_memory()[1] - 512:
+    if ram and ram_mb(ram) > system_memory()[1] - 256:
         raise ValueError(t("RAM: this machine has %s MB in all, leave some to the system.") % round(system_memory()[1]))
     args = str(data.get("java_args", "")).strip()
     if len(args) > 500 or "\n" in args or "\r" in args or re.search(r"(^|\s)-(jar|Xmx|Xms)", args):
@@ -1434,6 +1453,8 @@ def do_setup(f):
     if not AS.find_jar(sd):
         if f.get("new_server") != "1":
             return t("No Minecraft server (.jar) in %s.") % sd
+        if os.path.isdir(sd) and any(os.path.isfile(os.path.join(sd, d, "level.dat")) for d in os.listdir(sd)):
+            return t("%s already has a world but no server jar the panel recognises: set server_jar in panel-config.json.") % sd
         try:
             AS.download_server(sd, log=L.info)
         except Exception as e:  # noqa: BLE001
@@ -1515,6 +1536,10 @@ def download_assets():
     def run():
         AS.install(CFG["server_dir"], log=L.info, jar=server_jar())
         log("panel downloaded the Minecraft assets")
+        shutil.rmtree(os.path.join(CACHE, "map"), ignore_errors=True)
+        while SRV.state in ("starting", "stopping") or backup_busy() or OP_PENDING.is_set() or JOBS.get("java") == "running":
+            time.sleep(5)   # a restart now would lose a start, a backup or a restore in progress
+        restart_soon()   # colours, item names and death phrases are read once per process: the stale ones must go
     job("assets", run)
 
 
@@ -1533,9 +1558,9 @@ def download_java():
 
 
 STARTUP_CMD = os.path.join(os.environ.get("APPDATA", ""), "Microsoft", "Windows", "Start Menu", "Programs", "Startup", "ByzzCraft.cmd")
-SERVICE_HINT = ('"%s" panel.py service' % sys.executable if os.name == "nt" else
+SERVICE_HINT = ('"%s" "%s" service' % (sys.executable, os.path.join(HERE, "panel.py")) if os.name == "nt" else
                 "cd %s && %s panel.py service | sudo tee /etc/systemd/system/byzzcraft.service"
-                " && sudo systemctl daemon-reload && sudo systemctl enable --now byzzcraft" % (HERE, sys.executable))
+                " && sudo systemctl daemon-reload && sudo systemctl enable --now byzzcraft" % (shlex.quote(HERE), sys.executable))
 
 
 def service():
@@ -1547,6 +1572,8 @@ def service():
             f.write('@start "" "%s" "%s"\r\n' % (pyw if os.path.exists(pyw) else sys.executable, panel))
         print("ByzzCraft will start at every login: %s" % STARTUP_CMD)
         return
+    if os.geteuid() == 0:
+        sys.exit("run `panel.py service` as the user that will run the panel, not as root (the unit runs as that user)")
     import pwd
     sys.stdout.write("""[Unit]
 Description=ByzzCraft Minecraft panel
@@ -1556,7 +1583,7 @@ Wants=network-online.target
 [Service]
 User=%s
 WorkingDirectory=%s
-ExecStart=%s %s
+ExecStart="%s" "%s"
 Restart=on-failure
 # Minecraft runs in its own session: it keeps running when the panel restarts
 KillMode=process
@@ -1585,6 +1612,7 @@ def health():
         # a custom script picks its own Java (e.g. the launcher's): checked only for the built-in start and the examples
         ("java", bool(java) or not need or CFG.get("start_script") not in ("", "start.sh", "start.bat"),
          t("Java %s is not installed (found: %s).") % (need, found or t("none")), "java"),
+        ("root", os.name == "nt" or os.geteuid() != 0, t("The panel runs as root: the server files will belong to root. Run it as a normal user."), None),
         ("eula", eula, t("The Minecraft EULA is not accepted yet: the server will not start."), "eula"),
         ("rcon", p.get("enable-rcon") == "true" and bool(p.get("rcon.password")), t("RCON is off: the panel cannot talk to the server."), "rcon"),
         ("script", not script or os.path.exists(script), t("Start script %s not found.") % script,
@@ -1613,8 +1641,10 @@ def health():
 
 
 UPDATE = {}   # latest release on GitHub: {"latest": "1.1.0", "newer": True}
-UPDATE_HINT = (("cd %s && git pull && " % HERE + ("sudo systemctl restart byzzcraft" if os.environ.get("INVOCATION_ID") else "restart the panel"))
-               if os.path.isdir(os.path.join(HERE, ".git")) else "https://github.com/%s/releases/latest" % REPO)
+UPDATE_HINT = ("git pull && docker compose build --pull && docker compose up -d   (in the folder with docker-compose.yml)" if os.path.exists("/.dockerenv") else
+               "https://github.com/%s/releases/latest" % REPO if not os.path.isdir(os.path.join(HERE, ".git")) else
+               'git -C "%s" pull, then restart the panel' % HERE if os.name == "nt" else
+               "cd %s && git pull && " % shlex.quote(HERE) + ("sudo systemctl restart byzzcraft" if os.environ.get("INVOCATION_ID") else "restart the panel"))
 
 
 def _vtuple(v):
@@ -1936,8 +1966,7 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(("retry: 3000\nevent: init\ndata: %s\n\n" % json.dumps(init, separators=(",", ":"))).encode())
             self.wfile.flush()
             # if the user is deleted or changes role it closes: the browser reconnects with the new permissions
-            while s["exp"] > time.time() and tok in SESSIONS and bool((load_users().get(s["user"]) or {"admin": None}).get("admin")) == admin0 \
-                    and s["user"] in load_users():
+            while s["exp"] > time.time() and tok in SESSIONS and (u := load_users().get(s["user"])) and bool(u.get("admin")) == admin0:
                 try:
                     msg = q.get(timeout=15)
                 except queue.Empty:
@@ -1955,7 +1984,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.first_setup()
         if self.path == "/login":
             f = {k: v[0] for k, v in parse_qs(self.body()).items()}
-            user = f.get("user", "").strip().lower(); keys = ["u:" + user, "c:" + client_id(self)]
+            user = f.get("user", "").strip().lower(); keys = ["c:" + client_id(self)]   # not by name: anyone could lock out "admin"
             if locked(keys):
                 return self.send(429, login_page(t("Too many attempts: try again in 15 minutes.")))
             u = check_pw(user, f.get("password", ""))
@@ -2352,7 +2381,23 @@ def main():
               "The firewall may block the port: sudo ufw allow %d/tcp" % port)
         L.info("ByzzCraft is not set up yet.\n  From your computer open:  http://%s:%d/?setup=%s\n  On this machine:          http://127.0.0.1:%d\n"
                "  Page does not open? %s (a Tailscale IP of this machine works the same way)",
-               "IP-OF-THE-DOCKER-HOST" if os.path.exists("/.dockerenv") else lan_ip(), port, setup_token(), port, fw)
+               lan_ip(), port, setup_token(), port, fw)
+    if os.getpid() == 1:   # Docker: PID 1 ignores SIGTERM without a handler, so docker stop would SIGKILL Java after 10 s
+        def on_term(signum, frame):
+            SHUTTING_DOWN.set()
+            SRV.restart_pending = False
+            pid = SRV.last_pid if pid_alive(SRV.last_pid) else SRV.proc.pid if SRV.proc and SRV.proc.poll() is None else None
+            if pid:
+                end = time.time() + 100
+                while backup_busy() and time.time() < end - 40:   # stopping halfway through a backup would spoil it
+                    time.sleep(1)
+                if not SRV.stop("panel", "container stop")[0]:
+                    SRV.stop_requested = True   # wanted: not a crash
+                    os.kill(pid, signal.SIGTERM)   # Minecraft's shutdown hook saves the world
+                while pid_alive(pid) and time.time() < end:
+                    time.sleep(0.5)
+            sys.exit(0)
+        signal.signal(signal.SIGTERM, on_term)
     srv.serve_forever()
 
 

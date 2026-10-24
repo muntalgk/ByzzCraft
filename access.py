@@ -3,6 +3,7 @@
 With the server on, changes go through RCON (the server updates its own files); with the server off they are
 written straight to whitelist.json / ops.json / banned-players.json, with the UUID asked to Mojang.
 """
+import hashlib
 import json
 import os
 import re
@@ -77,7 +78,7 @@ def lookup(name):
     return str(_uuid.UUID(d["id"])), d["name"]
 
 
-def _profile(server_dir, name, known):
+def _profile(server_dir, name, known, offline=False):
     """UUID from the server files or from players already seen, otherwise from Mojang."""
     for key in ("whitelist", "ops", "bans"):
         e = _find(_read(server_dir, key), name)
@@ -86,6 +87,8 @@ def _profile(server_dir, name, known):
     for u, n in (known or {}).items():
         if n.lower() == name.lower():
             return u, n
+    if offline:  # online-mode=false: the server uses UUID.nameUUIDFromBytes("OfflinePlayer:" + name)
+        return str(_uuid.UUID(bytes=hashlib.md5(("OfflinePlayer:" + name).encode("utf-8")).digest(), version=3)), name
     try:
         p = lookup(name)
     except (OSError, ValueError, KeyError) as ex:
@@ -104,9 +107,9 @@ def command(action, name, reason=""):
     return base + (" " + reason if reason and action in ("ban", "kick") else "")
 
 
-def resolve(server_dir, action, name, known=None):
+def resolve(server_dir, action, name, known=None, offline=False):
     """UUID and exact name for the actions that add someone (outside any lock: Mojang can take seconds)."""
-    return _profile(server_dir, name, known) if action in ("wl_add", "op", "ban") else None
+    return _profile(server_dir, name, known, offline) if action in ("wl_add", "op", "ban") else None
 
 
 def apply_offline(server_dir, action, name, reason="", who="panel", profile=None):

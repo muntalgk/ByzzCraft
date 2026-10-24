@@ -104,6 +104,10 @@ def _recycle_limit(path):
         return None
 
 
+class _BinRefused(OSError):
+    """The Recycle Bin is disabled or too small for the file (not a read or move failure)."""
+
+
 def _to_recycle_bin(path, size=None):
     """Moves path (file or folder) to the Recycle Bin. Raises OSError if that fails.
     If the Recycle Bin cannot hold it Windows would delete it for good without asking (we pass
@@ -113,9 +117,9 @@ def _to_recycle_bin(path, size=None):
     if lim is None:
         raise OSError(tr("Cannot read the Recycle Bin settings: not deleting anything, to be safe"))
     if lim[1]:
-        raise OSError(tr("The Recycle Bin is disabled on this drive: delete the file by hand if you are sure"))
+        raise _BinRefused(tr("The Recycle Bin is disabled on this drive: delete the file by hand if you are sure"))
     if size is not None and size >= lim[0]:
-        raise OSError(tr("Too big for the Recycle Bin (limit %d MB): delete it by hand if you are sure") % (lim[0] // 1048576))
+        raise _BinRefused(tr("Too big for the Recycle Bin (limit %d MB): delete it by hand if you are sure") % (lim[0] // 1048576))
     FO_DELETE = 3
     FOF_SILENT = 0x4
     FOF_NOCONFIRMATION = 0x10
@@ -607,11 +611,17 @@ class Backups:
         finally:
             self._end()
 
-    def _recycle(self, e):
+    def _recycle(self, e, auto=False):
         paths = [self._abs(e)] + ([p for _s, p in _extras(self._abs(e))] if e["folder"] != "backups" else [])
         for p in paths:
             if os.name == "nt":
-                _to_recycle_bin(p, e.get("size") if p == paths[0] else None)
+                try:
+                    _to_recycle_bin(p, e.get("size") if p == paths[0] else None)
+                except _BinRefused:
+                    # automatic backups must free space even when the bin cannot take them
+                    if not (auto and e["folder"] == "backups"):
+                        raise
+                    os.remove(p)
             else:
                 _to_trash_dir(p, os.path.join(self.server_dir, "trash"))
         with self._mu:
@@ -638,7 +648,7 @@ class Backups:
                 cand.sort(key=lambda e: e["mtime"], reverse=True)
                 for e in cand[n:]:
                     try:
-                        self._recycle(e)
+                        self._recycle(e, auto=kind in ("startup", "scheduled"))
                         removed.append(e["id"])
                     except Exception as ex:
                         self._set_error(tr("Cleanup failed for %s: %s") % (e["name"], ex))

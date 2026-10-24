@@ -8,6 +8,7 @@ for f in A.FILES.values():
         json.dump([{"uuid": "a1b2c3d4-0000-4000-8000-000000000001", "name": "Alice"},
                    {"uuid": "cd8c8cc0-0000-4000-8000-000000000002", "name": "Bob"}] if f == "whitelist.json" else [], fh)
 ok = fail = 0
+A.lookup = lambda name: ("069a79f4-44e9-4726-a5be-fca90e38aaf5", "Notch") if name.lower() == "notch" else None  # no network
 
 
 def check(name, cond, extra=""):
@@ -63,6 +64,8 @@ check("damaged file untouched", open(wlp, encoding="utf-8").read() == '[{"uuid":
 os.remove(wlp)
 print(A.apply_offline(d, "wl_add", "Dinnerbone", profile=("61699b2e-d327-4a01-9f1e-0ea8c3f06bc6", "Dinnerbone")))
 check("missing file = new list", [e["name"] for e in A.snapshot(d)["whitelist"]] == ["Dinnerbone"])
+off = A.resolve(d, "wl_add", "Notch", offline=True)
+check("offline uuid v3 of Notch", off == ("b50ad385-829d-3141-a216-7e7d7539ba7f", "Notch") and off[0][14] == "3", off)
 shutil.rmtree(d)
 print("PASS %d  FAIL %d" % (ok, fail))
 sys.exit(1 if fail else 0)

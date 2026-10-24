@@ -15,6 +15,7 @@ import time
 import activity as ACT
 import i18n
 from i18n import t as tr
+from paths import ASSETS
 
 CACHE_NAME = "timeline-cache-%s.json"   # %s = language: the event texts are already translated
 CACHE_VERSION = 1
@@ -105,7 +106,7 @@ class Timeline:
         self.panel_log = panel_log or os.path.join(os.path.dirname(os.path.abspath(__file__)), "panel.log")
         self.cache_path = os.path.join(cache_dir, CACHE_NAME % i18n.LANG)
         self._lock = threading.RLock()
-        self._deaths = _DeathMatcher(os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "lang.json"))
+        self._deaths = _DeathMatcher(os.path.join(ASSETS, "lang.json"))
         self._gz = {}       # name -> {"size": int, "events": [...]}
         self._latest = {"pos": 0, "head": "", "cur_day": None, "last_secs": None, "events": []}
         self._panel = {"size": -1, "events": []}
@@ -123,7 +124,8 @@ class Timeline:
         try:
             with open(self.cache_path, "r", encoding="utf-8") as f:
                 d = json.load(f)
-            if d.get("v") != CACHE_VERSION:
+            # events parsed without lang.json have no deaths: reparse once it exists
+            if d.get("v") != CACHE_VERSION or d.get("deaths") != bool(self._deaths.patterns):
                 return
             self._gz = d.get("gz", {})
             self._latest = d.get("latest", self._latest)
@@ -138,7 +140,8 @@ class Timeline:
             tmp = self.cache_path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump({"v": CACHE_VERSION, "gz": self._gz, "latest": self._latest,
-                           "panel": self._panel, "players": sorted(self._players)},
+                           "panel": self._panel, "players": sorted(self._players),
+                           "deaths": bool(self._deaths.patterns)},
                           f, ensure_ascii=False, separators=(",", ":"))
             os.replace(tmp, self.cache_path)
         except OSError:

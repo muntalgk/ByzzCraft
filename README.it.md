@@ -88,9 +88,15 @@ docker compose up -d
 docker compose logs
 ```
 
-Apri il link di configurazione dei log, con l'IP della macchina che fa girare Docker, e lascia `/minecraft` come
-cartella del server. Il pannello scarica server e Java nei due volumi di `docker-compose.yml`. Per aggiornare:
-`git pull && docker compose build --pull && docker compose up -d`.
+Apri il link di configurazione dei log (contiene l'IP della macchina) e lascia `/minecraft` come cartella del server.
+Il container usa la rete dell'host: su Linux funziona così. Su Docker Desktop (Windows/Mac) attivala in
+Settings > Resources > Network (Docker Desktop 4.34 o successivo).
+Il pannello scarica server e Java nei due volumi di `docker-compose.yml`. Per aggiornare:
+`git pull && docker compose build --pull && docker compose up -d` (Minecraft viene fermato in modo pulito prima).
+
+Server già esistente: mettilo in una cartella e montala al posto del volume, ad esempio `- ./minecraft:/minecraft`,
+dopo `sudo chown -R 1000:1000 ./minecraft` (il container gira con uid 1000).
+Se imposti un limite di memoria al container, imposta anche la RAM in **Impostazioni → Pannello** (la RAM automatica vede la memoria dell'host).
 
 ### Sul tuo PC (Windows o Linux con desktop)
 
@@ -102,6 +108,7 @@ python panel.py
 
 Apri <http://127.0.0.1:8765> sullo stesso PC: la configurazione si apre senza codice. Per avviarlo a ogni
 accesso: `python panel.py service` (su Windows lo aggiunge a Esecuzione automatica, senza admin).
+Se `python` non si trova, usa `py panel.py`. Senza git: "Code > Download ZIP" su GitHub e decomprimi.
 
 ### Dopo la configurazione
 
@@ -111,13 +118,15 @@ pulsante per sistemarlo. Premi **Accendi**.
 
 **Amici**: apri **Account** e aggiungi un utente per ognuno. Gli admin possono usare anche console,
 impostazioni, backup e accessi. Per farli entrare in gioco apri la porta di Minecraft: `sudo ufw allow 25565/tcp`
-(e inoltrala sul router se giocano da fuori casa).
+(su Windows: consenti Java quando Windows lo chiede, oppure da un terminale come amministratore
+`netsh advfirewall firewall add rule name="Minecraft" dir=in action=allow protocol=TCP localport=25565`),
+e inoltrala sul router se giocano da fuori casa.
 
 ### Come parte il server
 
 Il pannello avvia Java da solo, con i [flag di Aikar](https://docs.papermc.io/paper/aikars-flags), e fa il backup
 del mondo prima di ogni avvio (`backups/world_*.zip`, dopo aver controllato lo spazio libero). RAM (automatica:
-metà della macchina, da 1 a 4 GB, mai più di quella libera), flag Java in più, backup prima dell'avvio, spegnimento automatico e indirizzo
+metà della macchina, da 512 MB a 4 GB, mai più dell'80% di quella libera), flag Java in più, backup prima dell'avvio, spegnimento automatico e indirizzo
 per i giocatori stanno in **Impostazioni → Pannello**: si cambiano dal browser, senza SSH.
 
 Ti serve qualcosa che il pannello non fa? Metti un tuo script nella cartella del server e imposta
@@ -183,6 +192,11 @@ python3 panel.py assets                             # riscarica texture e nomi
 cd byzzcraft && git pull && sudo systemctl restart byzzcraft
 ```
 
+Su Windows: `git -C <cartella del pannello> pull`, poi riavvia il pannello. Un pannello avviato all'accesso gira
+come `pythonw.exe`: fermalo prima da Gestione attività.
+
+Docker: `git pull && docker compose build --pull && docker compose up -d` (Minecraft viene fermato in modo pulito prima).
+
 Impostazioni, utenti, backup e cache della mappa restano: stanno in `data/`, non nel repository (con `BYZZ_DATA`
 li tieni altrove). Le installazioni di prima della 1.0 li hanno accanto al codice e continuano a funzionare così. Quando esce una nuova
 release la Dashboard lo dice agli admin, con questo comando; la versione che usi è in fondo alla pagina **Account**.
@@ -201,6 +215,8 @@ La Dashboard elenca cosa manca e, quando il server non parte, dice perché. Se n
 `data/logs/server-start.log` ha l'output completo.
 
 - **"RCON non disponibile"**: riavvia una volta il server Minecraft dopo la configurazione, così legge RCON.
+  Se il server era già acceso durante la configurazione, scrivi `stop` una volta nella sua console (il pannello
+  non può ancora fermarlo), poi avvialo dal pannello.
 - **Porta 8765 occupata**: c'è già un pannello acceso, oppure cambia `port` in `data/panel-config.json`.
 - **Non avviarlo da root**: i file del server diventerebbero di root. Il pannello lo segnala nel log.
 

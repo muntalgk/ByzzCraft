@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+- Docker stops Minecraft cleanly before an update (no more world loss) and uses host networking.
+- Timeline shows deaths on new installs.
+- A crash after an exception is detected and the server restarts.
+- Map and item names fixed after the first assets download.
+- `server-ip` is supported (edit it in `server.properties` with the server off: the panel no longer changes it).
+- Offline-mode whitelist can be edited with the server off.
+- Setup no longer downloads vanilla into a folder that already has a world.
+- The systemd unit and the hints work with spaces in paths.
+- Automatic RAM can go down to 512 MB.
+- Executable start scripts keep their shebang.
+- Windows: hints for PowerShell; automatic backups too big for the Recycle Bin are deleted.
+- Root warning on the Dashboard.
+- Login lock per address only.
+
+Upgrading a Docker install from 1.0.0:
+- stop the Minecraft server from the panel first: the old container cannot stop it cleanly yet;
+- the setup choice is now respected: if you picked "Only this machine" and open the panel from another PC, run
+  `docker compose exec byzzcraft sed -i 's/"listen": "127.0.0.1"/"listen": "0.0.0.0"/' /data/panel-config.json && docker compose restart`.
+
 ## 1.0.0
 
 First public release.

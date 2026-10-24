@@ -89,9 +89,15 @@ docker compose up -d
 docker compose logs
 ```
 
-Open the setup link from the logs, with the IP of the Docker host, and keep `/minecraft` as the server folder.
+Open the setup link from the logs (it has the host's IP) and keep `/minecraft` as the server folder.
+The container uses host networking: it works as is on Linux. On Docker Desktop (Windows/Mac) enable it in
+Settings > Resources > Network (Docker Desktop 4.34 or newer).
 The panel downloads the server and Java into the two volumes of `docker-compose.yml`. Update with
-`git pull && docker compose build --pull && docker compose up -d`.
+`git pull && docker compose build --pull && docker compose up -d` (Minecraft is stopped cleanly first).
+
+Existing server: put it in a folder and mount it instead of the named volume, e.g. `- ./minecraft:/minecraft`,
+after `sudo chown -R 1000:1000 ./minecraft` (the container runs as uid 1000).
+If you set a memory limit on the container, set the RAM in **Settings → Panel** too (automatic RAM sees the host's memory).
 
 ### On your own PC (Windows or Linux with a desktop)
 
@@ -103,6 +109,7 @@ python panel.py
 
 Open <http://127.0.0.1:8765> on the same PC: the setup page opens without a code. To start it at every
 login: `python panel.py service` (on Windows it adds ByzzCraft to the Startup folder, no admin needed).
+If `python` is not found, use `py panel.py`. No git: "Code > Download ZIP" on GitHub and unzip.
 
 ### After the setup
 
@@ -112,13 +119,15 @@ to Mojang, so they are not in this repository). If something is still missing (J
 
 **Friends**: open **Account** and add a user for each of them. Admin users can also use the console,
 settings, backups and access lists. For them to join the game, open the Minecraft port: `sudo ufw allow 25565/tcp`
-(and forward it on your router if they play from outside).
+(on Windows: allow Java when Windows asks, or from an administrator terminal
+`netsh advfirewall firewall add rule name="Minecraft" dir=in action=allow protocol=TCP localport=25565`),
+and forward it on your router if they play from outside.
 
 ### How the server starts
 
 The panel starts Java by itself, with [Aikar's flags](https://docs.papermc.io/paper/aikars-flags), and backs up
 the world before each start (`backups/world_*.zip`, after checking the free disk space). RAM (automatic: half
-of the machine, 1 to 4 GB, never more than what is free), extra Java flags, the backup before the start, the auto stop and the address
+of the machine, 512 MB to 4 GB, never more than 80% of what is free), extra Java flags, the backup before the start, the auto stop and the address
 shown to players are in **Settings → Panel**, so you change them from the browser, without SSH.
 
 Need something the panel does not do? Put your own script in the server folder and set `start_script` in
@@ -184,6 +193,11 @@ python3 panel.py assets                             # download textures and name
 cd byzzcraft && git pull && sudo systemctl restart byzzcraft
 ```
 
+On Windows: `git -C <panel folder> pull`, then restart the panel. A panel started at login runs as
+`pythonw.exe`: stop it from Task Manager first.
+
+Docker: `git pull && docker compose build --pull && docker compose up -d` (Minecraft is stopped cleanly first).
+
 Settings, users, backups and the map cache stay: they are in `data/`, not in the repository (set `BYZZ_DATA` to
 keep them somewhere else). Installs from before 1.0 keep them next to the code and go on working as they are. When a new release is out
 the Dashboard tells admins, with this command; the version you run is at the bottom of the **Account** page.
@@ -217,6 +231,8 @@ The Dashboard lists what is missing, and when the server does not start it says 
 `data/logs/server-start.log` has the full output.
 
 - **"RCON unavailable"**: restart the Minecraft server once after setup, so it reads the new RCON settings.
+  If the server was already running during the setup, type `stop` once in its own console (the panel cannot
+  stop it yet), then start it from the panel.
 - **Port 8765 in use**: another panel is running, or change `port` in `data/panel-config.json`.
 - **Do not run it as root**: the server files would belong to root. The panel warns about it in the log.
 
