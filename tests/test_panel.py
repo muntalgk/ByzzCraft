@@ -48,6 +48,18 @@ try:
     c.proc.wait(timeout=20)
     check("force stop while loading: off, no start error", ok and c.state == "off" and c.start_error is None, (ok, c.state))
 
+    # language from Settings > Panel: only the ones with a translation file
+    check("languages", panel.languages()[:1] == ["en"] and "it" in panel.languages(), panel.languages())
+    form = {"auto_stop_minutes": 30, "backup_on_start": True, "auto_restart": True}
+    try:
+        panel.save_panel_settings(dict(form, lang="xx"), "test")
+        check("unknown language refused", False)
+    except ValueError:
+        check("unknown language refused", True)
+    changed = panel.save_panel_settings(dict(form, lang="it"), "test")
+    saved = json.load(open(j(root, "data", "panel-config.json"), encoding="utf-8"))
+    check("language saved", "lang" in changed and saved.get("lang") == "it" and panel.CFG["lang"] == "it", (changed, saved.get("lang")))
+
     # BungeeCord/Velocity forward the real UUIDs: no offline UUIDs then
     check("no proxy config: not forwarded", not panel.uuid_forwarded())
     with open(j(srv_dir, "spigot.yml"), "w") as f:

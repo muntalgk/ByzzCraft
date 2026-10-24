@@ -244,7 +244,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .wm{position:relative;overflow:hidden;background:#0b0d10;border-radius:12px;border:1px solid var(--line);touch-action:none;cursor:grab;user-select:none}
 .wm:active{cursor:grabbing}
 .wm-world{position:absolute;left:0;top:0;transform-origin:0 0}/* no will-change: the browser would paint at one scale only (missing tiles, blurry text when zoomed) */
-.wm-world img{position:absolute;width:512px;height:512px;image-rendering:auto}
+.wm-world img{position:absolute;width:513px;height:513px;image-rendering:auto}   /* 1 px overlap: no seams between tiles when zoomed out */
 .wm.px .wm-world img{image-rendering:pixelated}
 .wm-mk{position:absolute;transform-origin:0 0;transform:scale(var(--inv,1)) translate(-50%,-50%);pointer-events:auto}
 .wm-pl{transition:left 3s linear,top 3s linear;z-index:5}
@@ -363,8 +363,8 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .acr .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .acc{display:grid;gap:16px;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.acc-wide{grid-column:1/-1}
 @media (max-width:900px){.acc{grid-template-columns:minmax(0,1fr)}}
-.ps{display:grid;gap:0 16px;grid-template-columns:repeat(3,minmax(0,1fr))}.ps-wide{grid-column:1/-1}.ps-info{font-size:12.5px;color:var(--mute);margin:0}
-@media (max-width:900px){.ps{grid-template-columns:minmax(0,1fr)}}.acc h3{font-size:15px;margin:0 0 6px}
+.ps{display:grid;gap:0 16px;grid-template-columns:repeat(3,minmax(0,1fr))}.ps-wide{grid-column:span 2}.ps-info{font-size:12.5px;color:var(--mute);margin:0}
+@media (max-width:900px){.ps{grid-template-columns:minmax(0,1fr)}.ps-wide{grid-column:auto}}.acc h3{font-size:15px;margin:0 0 6px}
 .acc label.f{display:block;font-size:12.5px;color:var(--text2);margin:12px 0 6px}.acc .search{width:100%;min-width:0}
 .acc .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}.acc .ac-list{margin-top:8px}
 .sb{background:var(--card2);border:1px solid var(--line2);color:var(--text2);border-radius:8px;padding:5px 10px;font-size:12.5px;cursor:pointer;white-space:nowrap;transition:all .15s}
@@ -525,6 +525,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
           <div><label class="f" for="ps-ram">{{Server RAM}}</label><input class="search" id="ps-ram" maxlength="7" spellcheck="false" autocomplete="off"></div>
           <div><label class="f" for="ps-stop">{{Stop when empty for (minutes, 0 = never)}}</label><input class="search" type="number" min="0" max="1440" id="ps-stop"></div>
           <div><label class="f" for="ps-addr">{{Server address for players (optional)}}</label><input class="search" id="ps-addr" maxlength="100" spellcheck="false" autocomplete="off" placeholder="{{e.g. play.example.com}}"></div>
+          <div><label class="f" for="ps-lang">{{Language}}</label><select class="search" id="ps-lang"></select></div>
           <div class="ps-wide"><label class="f" for="ps-args">{{Extra Java flags (optional)}}</label><input class="search" id="ps-args" maxlength="500" spellcheck="false" autocomplete="off"></div>
         </div>
         <div class="row"><label class="toggle"><input type="checkbox" id="ps-bk"> {{Back up the world before every start}}</label></div>
@@ -819,12 +820,14 @@ async function saveProps(restart){const j=await api("/api/properties",{changes:S
 const PS={async load(){if(!BOOT.admin)return;const r=await fetch("/api/panel-settings");if(r.ok)this.render(await r.json())},
   render(j){$("#ps-ram").value=j.ram;$("#ps-ram").placeholder=_t("automatic: %s",j.ram_auto);$("#ps-stop").value=j.auto_stop_minutes;
     $("#ps-addr").value=j.mc_address;$("#ps-args").value=j.java_args;$("#ps-bk").checked=j.backup_on_start;$("#ps-ar").checked=j.auto_restart;
+    $("#ps-lang").innerHTML=j.langs.map(([c,n])=>"<option value='"+esc(c)+"'>"+esc(n)+"</option>").join("");$("#ps-lang").value=j.lang;
     ["#ps-ram","#ps-args","#ps-bk"].forEach(s=>$(s).disabled=!!j.start_script);
     $("#ps-info").textContent=j.start_script?_t("Started by your script %s: RAM, Java flags and the backup before the start are set there.",j.start_script)
       :_t("Server %s · %s · this machine has %s GB of RAM",j.jar||_t("not found"),
         !j.java?_t("Java not found"):"Java "+(j.java_need||"")+" ("+(j.java_bundled?_t("downloaded by the panel"):_t("installed on the system"))+")",nf(j.ram_total/1024,1))},
   async save(){const j=await api("/api/panel-settings",{ram:$("#ps-ram").value,java_args:$("#ps-args").value,backup_on_start:$("#ps-bk").checked,auto_restart:$("#ps-ar").checked,
-    auto_stop_minutes:+$("#ps-stop").value||0,mc_address:$("#ps-addr").value});toast(j.message,j.ok?"good":"bad");
+    auto_stop_minutes:+$("#ps-stop").value||0,mc_address:$("#ps-addr").value,lang:$("#ps-lang").value});toast(j.message,j.ok?"good":"bad");
+    if(j.restart){const again=()=>fetch("/manifest.webmanifest").then(r=>r.ok?location.reload():setTimeout(again,1000)).catch(()=>setTimeout(again,1000));setTimeout(again,2500);return}   /* the panel restarts in the new language */
     if(j.ok){this.render(j.settings);BOOT.address=j.settings.mc_address;renderStatus()}}};
 $("#ps-save").onclick=()=>PS.save();
 $("#p-save").onclick=()=>saveProps(false);$("#p-save-r").onclick=()=>{if(S.status.state!="on"||confirm(_t("Save and restart the server now?")))saveProps(S.status.state=="on")};
@@ -932,7 +935,8 @@ function evHTML(e,compact){const u=e.player&&uuidOf(e.player);const face=u&&["jo
   const ic=face?"<span class=fc style='"+faceStyle(u,compact?24:30)+"'></span>":"<span class=ic>"+(EVI[e.type]||"•")+"</span>";
   const sub=e.type=="death"&&e.detail&&e.detail.killer?"":e.type=="chat"&&e.player?"":"";
   return "<div class='ev "+e.type+"'>"+ic+"<div class=tx>"+esc(e.text)+sub+"</div><time>"+(compact?hhmm(e.t):hhmmss(e.t))+"</time></div>"}
-function renderDashFeed(){const box=$("#dash-feed");const evs=(S.timeline||[]).filter(e=>e.type!="chat"&&(e.type!="panel"||(e.detail||{}).cat=="server")).slice(0,8);
+const feedEv=e=>e.type!="chat"&&(e.type!="panel"||(e.detail||{}).cat=="server");   /* events the dashboard feed shows */
+function renderDashFeed(){const box=$("#dash-feed");const evs=(S.timeline||[]).filter(feedEv).slice(0,8);
   box.innerHTML=evs.length?evs.map(e=>evHTML(e,true)).join(""):"<div style='color:var(--mute);font-size:14px'>"+_t("No events yet.")+"</div>"}
 function heartsMini(h){let s="";for(let i=0;i<10;i++){const v=h-i*2;s+="<img src='/hud/"+(v>=2?"heart_full":v>=1?"heart_half":"heart_container")+".png'>"}return s}
 function renderOnline(){renderMe();setSub();if(CUR=="audit"&&RGV.loaded)RGV.render();const box=$("#online-strip");const on=(P.roster||[]).filter(p=>p.online);
@@ -941,7 +945,7 @@ function renderOnline(){renderMe();setSub();if(CUR=="audit"&&RGV.loaded)RGV.rend
   box.innerHTML=on.map(p=>{const q=pos[p.uuid]||{};const h=q.health!=null?q.health:p.health;const where=q.pos?(DIM[q.dim]||q.dim)+" · "+q.pos[0].toFixed(0)+" "+q.pos[2].toFixed(0):"online";
     return "<div class=op data-u='"+p.uuid+"'><span class=fc style='"+faceStyle(p.uuid,34)+"'></span><div><b>"+esc(p.name)+"</b><small>"+esc(where)+"</small><div class=hearts>"+heartsMini(h||0)+"</div></div></div>"}).join("");
   box.querySelectorAll(".op[data-u]").forEach(o=>o.onclick=()=>{go("players");selectPlayer(o.dataset.u)})}
-function onTimeline(e){S.timeline=S.timeline||[];S.timeline.unshift(e);S.timeline.length=Math.min(S.timeline.length,40);renderDashFeed();TLV.live(e);
+function onTimeline(e){S.timeline=S.timeline||[];if(feedEv(e)){S.timeline.unshift(e);S.timeline.length=Math.min(S.timeline.length,40);renderDashFeed()}TLV.live(e);
   const T={death:"bad",join:"good",leave:"",server_ready:"good",server_stop:""};if(e.type in T)toast((EVI[e.type]||"")+" "+e.text,T[e.type])}
 async function loadRoster(){try{const r=await fetch("/api/players");if(!r.ok)return;const j=await r.json();P.roster=j.players;P.hardcore=j.hardcore;renderOnline();renderRoster();TLV.fillPlayers();MAPF.drawMarkers();MAPM.drawMarkers();renderDashFeed();
   if(TLV.opened){TLV.renderSessions();TLV.render()}}catch(e){}}
