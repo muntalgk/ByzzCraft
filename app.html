@@ -151,8 +151,9 @@ main{padding:22px 28px 60px;min-width:0}
 .audit li:last-child{border-bottom:0}
 .audit time{color:var(--mute);font:12.5px var(--mono);white-space:nowrap;padding-top:2px}
 /* ---------- toasts ---------- */
-#toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:9}
-.toast{background:#0b0d10;border:1px solid var(--line2);border-left:3px solid var(--info);border-radius:10px;padding:10px 14px;font-size:14px;max-width:360px;box-shadow:0 10px 30px #0009;animation:in .2s ease}
+#toasts{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(420px,calc(100vw - 32px));display:flex;flex-direction:column;gap:8px;z-index:60;pointer-events:none}
+.toast{background:#0b0d10;border:1px solid var(--line2);border-left:3px solid var(--info);border-radius:10px;padding:10px 14px;font-size:14px;box-shadow:0 10px 30px #0009;animation:in .2s ease;position:relative;padding-right:44px;pointer-events:auto}
+.toast .x{position:absolute;top:5px;right:5px;width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:var(--mute);font-size:18px;line-height:1;cursor:pointer}.toast .x:hover{background:#ffffff10;color:var(--text)}
 .toast.bad{border-left-color:var(--crit)}.toast.good{border-left-color:var(--good)}
 @keyframes pulse{from{opacity:.35}to{opacity:1}}
 @keyframes in{from{transform:translateY(8px);opacity:0}}
@@ -712,7 +713,8 @@ $("#logout").onclick=async e=>{const b=e.currentTarget;
   await fetch("/logout",{method:"POST",headers:{"X-CSRF":BOOT.csrf}});location.href="/"};
 $("#srv-pill").onclick=async()=>{if(!BOOT.address)return;try{await navigator.clipboard.writeText(BOOT.address);toast(_t("Address copied: %s",BOOT.address),"good")}catch(e){toast(_t("Server address: %s",BOOT.address))}};
 
-function toast(msg,kind){if(!msg)return;const d=document.createElement("div");d.className="toast "+(kind||"");d.textContent=msg;$("#toasts").append(d);setTimeout(()=>d.remove(),5000)}
+function toast(msg,kind){if(!msg)return;const d=document.createElement("div");d.className="toast "+(kind||"");d.setAttribute("role","status");d.textContent=msg;
+  const x=document.createElement("button");x.className="x";x.textContent="×";x.title=_t("Close");x.onclick=()=>d.remove();d.append(x);$("#toasts").append(d);setTimeout(()=>d.remove(),5000)}
 async function api(path,body){try{const r=await fetch(path,{method:"POST",headers:{"X-CSRF":BOOT.csrf,"Content-Type":"application/json"},body:JSON.stringify(body||{})});
   if(r.status==401){location.reload();return{}}const j=await r.json();return j}catch(e){return{ok:false,message:_t("Panel unreachable")}}}
 
