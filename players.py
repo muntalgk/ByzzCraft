@@ -2,8 +2,7 @@
 import base64, gzip, json, os, re, struct, threading, time, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ASSETS = os.path.join(HERE, "assets")
-CACHE = os.path.join(HERE, "cache")
+from paths import ASSETS, CACHE  # noqa: E402
 UA = "byzzcraft (+https://github.com/muntalgk/byzzcraft)"
 
 

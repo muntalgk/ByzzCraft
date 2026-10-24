@@ -22,7 +22,7 @@ it reads the server's own files and talks to it over RCON.
 
 It can also set up a new server from nothing: it downloads `server.jar` from Mojang and Java from
 [Eclipse Temurin](https://adoptium.net) if they are missing. Vanilla, Paper (and its forks) and Fabric servers
-are recognised by their jar; set `server_jar` in `panel-config.json` if yours has an unusual name. It works with
+are recognised by their jar; set `server_jar` in `data/panel-config.json` if yours has an unusual name. It works with
 Minecraft Java 1.20.5 and newer, including the 26.x world layout and Paper's separate Nether and End folders.
 
 ## Install
@@ -51,7 +51,7 @@ server there), the language, your admin user, who can open the panel (this machi
 network), and whether you accept the [Minecraft EULA](https://aka.ms/MinecraftEULA). Without the code the
 page does not open, so nobody else on the network can take the admin account. If the link does not open at
 all, the firewall blocks the port: `sudo ufw allow 8765/tcp`. Lost the link?
-`grep setup= logs/byzzcraft.log`.
+`grep setup= data/logs/byzzcraft.log`.
 
 Then keep the panel running after you close SSH and after a reboot (the command prints a systemd unit for
 your user and folder):
@@ -98,7 +98,7 @@ of the machine, 1 to 4 GB), extra Java flags, the backup before the start, the a
 shown to players are in **Settings → Panel**, so you change them from the browser, without SSH.
 
 Need something the panel does not do? Put your own script in the server folder and set `start_script` in
-`panel-config.json`: the panel runs it and passes `JAVA` (its own Java, if it downloaded one), `SERVER_JAR`
+`data/panel-config.json`: the panel runs it and passes `JAVA` (its own Java, if it downloaded one), `SERVER_JAR`
 and `PYTHON`. Examples are in `examples/`.
 
 ## Reach it from other devices
@@ -138,16 +138,16 @@ then 15 minutes locked). The proxy must run on the same machine as the panel.
 
 | File | What is in it |
 |---|---|
-| `logs/byzzcraft.log` | technical log of the panel: start-up, downloads, errors with tracebacks (rotated, 5 × 1 MB) |
-| `logs/server-start.log` | output of Java (or of your start script), last start only: why Minecraft did not start |
-| `panel.log` | who did what in the panel (the **Log** tab) |
+| `data/logs/byzzcraft.log` | technical log of the panel: start-up, downloads, errors with tracebacks (rotated, 5 × 1 MB) |
+| `data/logs/server-start.log` | output of Java (or of your start script), last start only: why Minecraft did not start |
+| `data/panel.log` | who did what in the panel (the **Log** tab) |
 | `<server>/logs/latest.log` | Minecraft's own log (the **Console** tab) |
 
 Admins can read the first two in the **Log** tab too, without SSH. Useful commands:
 
 ```bash
 journalctl -u byzzcraft -f                          # the panel, when it runs as a service
-tail -f logs/byzzcraft.log logs/server-start.log    # same, from the files
+tail -f data/logs/byzzcraft.log data/logs/server-start.log    # same, from the files
 sudo systemctl restart byzzcraft                    # restart the panel (Minecraft keeps running)
 python3 panel.py passwd NAME                        # forgot a password
 python3 panel.py java                               # download the Java that server.jar needs
@@ -160,7 +160,8 @@ python3 panel.py assets                             # download textures and name
 cd byzzcraft && git pull && sudo systemctl restart byzzcraft
 ```
 
-Settings, users, backups and the map cache stay: they are not in the repository. When a new release is out
+Settings, users, backups and the map cache stay: they are in `data/`, not in the repository (set `BYZZ_DATA` to
+keep them somewhere else). Installs from before 1.0 keep them next to the code and go on working as they are. When a new release is out
 the Dashboard tells admins, with this command; the version you run is at the bottom of the **Account** page.
 
 Backups and restores check the free disk space first and stop with a message instead of filling the disk; the
@@ -168,7 +169,7 @@ Dashboard warns when less than three backups would fit.
 
 ## Configuration
 
-`panel-config.json` is written by the setup; you can edit it and restart the panel.
+`data/panel-config.json` is written by the setup; you can edit it and restart the panel.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -189,11 +190,11 @@ Dashboard warns when less than three backups would fit.
 ## Troubleshooting
 
 The Dashboard lists what is missing, and when the server does not start it says why. If that is not enough,
-`logs/server-start.log` has the full output.
+`data/logs/server-start.log` has the full output.
 
 - **Login does not stick on `http://192.168…`**: update the panel; older versions marked the cookie HTTPS-only.
 - **"RCON unavailable"**: restart the Minecraft server once after setup, so it reads the new RCON settings.
-- **Port 8765 in use**: another panel is running, or change `port` in `panel-config.json`.
+- **Port 8765 in use**: another panel is running, or change `port` in `data/panel-config.json`.
 - **Do not run it as root**: the server files would belong to root. The panel warns about it in the log.
 
 ## Translations

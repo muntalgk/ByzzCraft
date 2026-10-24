@@ -15,7 +15,7 @@ import zlib
 from mapgen import _png
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ASSETS = os.path.join(HERE, "assets")
+from paths import ASSETS, DATA  # noqa: E402
 MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
 TEX = "assets/minecraft/textures/"
 # cartella nel jar -> cartella in assets/ (le sottocartelle diventano prefisso: hud/heart/full.png -> hud/heart_full.png)
@@ -269,7 +269,7 @@ def install(server_dir, version=None, log=print, jar=None):
     version = version or server_version(server_dir, jar)
     log("Downloading the Minecraft %s client from Mojang..." % version)
     _, jar = mojang_jar(version, "client")
-    tmp = os.path.join(HERE, "assets.download-tmp")
+    tmp = os.path.join(DATA, "assets.download-tmp")
     shutil.rmtree(tmp, ignore_errors=True)
     os.makedirs(tmp)
     extract(jar, tmp)

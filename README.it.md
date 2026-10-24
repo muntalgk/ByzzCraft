@@ -22,7 +22,7 @@ dipendenza, nessun database: legge i file del server e gli parla via RCON.
 
 Può anche creare un server da zero: scarica `server.jar` da Mojang e Java da [Eclipse Temurin](https://adoptium.net)
 se mancano. Server vanilla, Paper (e derivati) e Fabric li riconosce dal jar; se il tuo ha un nome strano imposta
-`server_jar` in `panel-config.json`. Funziona con Minecraft Java 1.20.5 e successive, compreso il formato dei
+`server_jar` in `data/panel-config.json`. Funziona con Minecraft Java 1.20.5 e successive, compreso il formato dei
 mondi della 26.x e le cartelle separate di Nether ed End di Paper.
 
 ## Installazione
@@ -50,7 +50,7 @@ Aprilo nel browser **del tuo computer**. La pagina chiede la cartella del server
 la lingua, il tuo utente admin, chi può aprire il pannello (solo questa macchina o la rete di casa) e se
 accetti l'[EULA di Minecraft](https://aka.ms/MinecraftEULA). Senza codice la pagina non si apre, così nessun
 altro sulla rete può prendersi l'admin. Se il link non si apre proprio, il firewall blocca la porta:
-`sudo ufw allow 8765/tcp`. Link perso? `grep setup= logs/byzzcraft.log`.
+`sudo ufw allow 8765/tcp`. Link perso? `grep setup= data/logs/byzzcraft.log`.
 
 Poi fai in modo che resti acceso quando chiudi SSH e dopo un riavvio (il comando stampa un'unit systemd per il
 tuo utente e la tua cartella):
@@ -97,7 +97,7 @@ metà della macchina, da 1 a 4 GB), flag Java in più, backup prima dell'avvio, 
 per i giocatori stanno in **Impostazioni → Pannello**: si cambiano dal browser, senza SSH.
 
 Ti serve qualcosa che il pannello non fa? Metti un tuo script nella cartella del server e imposta
-`start_script` in `panel-config.json`: il pannello lo esegue e gli passa `JAVA` (il suo Java, se ne ha
+`start_script` in `data/panel-config.json`: il pannello lo esegue e gli passa `JAVA` (il suo Java, se ne ha
 scaricato uno), `SERVER_JAR` e `PYTHON`. Gli esempi sono in `examples/`.
 
 ## Raggiungerlo da altri dispositivi
@@ -137,16 +137,16 @@ minuti di blocco). Il proxy deve girare sulla stessa macchina del pannello.
 
 | File | Cosa contiene |
 |---|---|
-| `logs/byzzcraft.log` | log tecnico del pannello: avvio, download, errori con traceback (a rotazione, 5 × 1 MB) |
-| `logs/server-start.log` | output di Java (o del tuo script di avvio), solo l'ultimo: perché Minecraft non è partito |
-| `panel.log` | chi ha fatto cosa nel pannello (tab **Registro**) |
+| `data/logs/byzzcraft.log` | log tecnico del pannello: avvio, download, errori con traceback (a rotazione, 5 × 1 MB) |
+| `data/logs/server-start.log` | output di Java (o del tuo script di avvio), solo l'ultimo: perché Minecraft non è partito |
+| `data/panel.log` | chi ha fatto cosa nel pannello (tab **Registro**) |
 | `<server>/logs/latest.log` | il log di Minecraft (tab **Console**) |
 
 Gli admin leggono i primi due anche nel tab **Registro**, senza SSH. Comandi utili:
 
 ```bash
 journalctl -u byzzcraft -f                          # il pannello, quando gira come servizio
-tail -f logs/byzzcraft.log logs/server-start.log    # lo stesso, dai file
+tail -f data/logs/byzzcraft.log data/logs/server-start.log    # lo stesso, dai file
 sudo systemctl restart byzzcraft                    # riavvia il pannello (Minecraft resta acceso)
 python3 panel.py passwd NOME                        # password dimenticata
 python3 panel.py java                               # scarica il Java che serve a server.jar
@@ -159,7 +159,8 @@ python3 panel.py assets                             # riscarica texture e nomi
 cd byzzcraft && git pull && sudo systemctl restart byzzcraft
 ```
 
-Impostazioni, utenti, backup e cache della mappa restano: non stanno nel repository. Quando esce una nuova
+Impostazioni, utenti, backup e cache della mappa restano: stanno in `data/`, non nel repository (con `BYZZ_DATA`
+li tieni altrove). Le installazioni di prima della 1.0 li hanno accanto al codice e continuano a funzionare così. Quando esce una nuova
 release la Dashboard lo dice agli admin, con questo comando; la versione che usi è in fondo alla pagina **Account**.
 
 Backup e ripristini controllano prima lo spazio libero e si fermano con un messaggio invece di riempire il disco;
@@ -167,17 +168,17 @@ la Dashboard avvisa quando non ci stanno più tre backup.
 
 ## Configurazione
 
-`panel-config.json` lo scrive la configurazione iniziale; puoi modificarlo e riavviare il pannello. Le chiavi
+`data/panel-config.json` lo scrive la configurazione iniziale; puoi modificarlo e riavviare il pannello. Le chiavi
 sono descritte nel [README inglese](README.md#configuration).
 
 ## Problemi
 
 La Dashboard elenca cosa manca e, quando il server non parte, dice perché. Se non basta,
-`logs/server-start.log` ha l'output completo.
+`data/logs/server-start.log` ha l'output completo.
 
 - **Il login non resta su `http://192.168…`**: aggiorna il pannello; le versioni vecchie volevano HTTPS per il cookie.
 - **"RCON non disponibile"**: riavvia una volta il server Minecraft dopo la configurazione, così legge RCON.
-- **Porta 8765 occupata**: c'è già un pannello acceso, oppure cambia `port` in `panel-config.json`.
+- **Porta 8765 occupata**: c'è già un pannello acceso, oppure cambia `port` in `data/panel-config.json`.
 - **Non avviarlo da root**: i file del server diventerebbero di root. Il pannello lo segnala nel log.
 
 ## Licenza

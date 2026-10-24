@@ -32,7 +32,8 @@ import runtime as RT  # noqa: E402
 import i18n  # noqa: E402
 from i18n import t  # noqa: E402
 from sysinfo import NCPU, ProcSampler, listening_pid, pid_alive, system_memory, system_times  # noqa: E402
-CONFIG_PATH = os.environ.get("PANEL_CONFIG", os.path.join(HERE, "panel-config.json"))
+from paths import CACHE, DATA, LOGS, ASSETS as MOJANG  # noqa: E402
+CONFIG_PATH = os.environ.get("PANEL_CONFIG", os.path.join(DATA, "panel-config.json"))
 DEFAULTS = {
     "server_dir": os.path.dirname(HERE),
     "start_script": "",           # vuoto = il pannello avvia Java da solo; altrimenti uno script nella cartella del server
@@ -111,7 +112,7 @@ HUB = Hub()
 AUDIT = deque(maxlen=60)
 
 
-LOG_DIR = os.path.join(HERE, "logs")
+LOG_DIR = LOGS
 L = logging.getLogger("byzzcraft")   # log tecnico (logs/byzzcraft.log + stderr/journalctl); log() e' il registro "chi ha fatto cosa"
 
 
@@ -216,6 +217,7 @@ def load_users():
 
 
 def save_users(users):
+    os.makedirs(os.path.dirname(CFG["users_file"]), exist_ok=True)
     tmp = CFG["users_file"] + ".tmp"
     json.dump(users, open(tmp, "w", encoding="utf-8"), indent=2)
     os.replace(tmp, CFG["users_file"])
@@ -271,7 +273,7 @@ def write_props(changes, who):
     path = props_path()
     with open(path, encoding="utf-8") as f:
         lines = f.read().splitlines()
-    bdir = os.path.join(HERE, "backup-properties")
+    bdir = os.path.join(DATA, "backup-properties")
     os.makedirs(bdir, exist_ok=True)
     with open(os.path.join(bdir, "server.properties.%s" % datetime.now().strftime("%Y%m%d-%H%M%S")), "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
@@ -851,12 +853,12 @@ def sampler():
         time.sleep(max(0.2, SAMPLE_SECONDS - (time.time() - t0)))
 
 
-TLINE = TL.Timeline(CFG["server_dir"], os.path.join(HERE, "cache"), CFG["log_file"])
+TLINE = TL.Timeline(CFG["server_dir"], CACHE, CFG["log_file"])
 MAP_SEM = threading.BoundedSemaphore(2)     # massimo 2 tile generate insieme: non rubare CPU al server
-MARKERS_FILE = os.path.join(HERE, "markers.json")
+MARKERS_FILE = os.path.join(DATA, "markers.json")
 WORLD_BUSY = threading.Event()              # ripristino in corso: niente letture del mondo (mappa)
 OP_PENDING = threading.Event()              # backup/ripristino chiesto dal web, thread non ancora partito: niente avvii
-BACKUPS = BK.Backups(CFG["server_dir"], os.path.join(HERE, "cache", "backups-state.json"),
+BACKUPS = BK.Backups(CFG["server_dir"], os.path.join(CACHE, "backups-state.json"),
                      on_change=lambda: HUB.publish("backups", BACKUPS.status(), admin_only=True))
 
 
@@ -972,7 +974,7 @@ def do_restore(bid):
         with MAP_SEM, MAP_SEM:   # aspetta che nessuna tile stia leggendo il mondo
             pass
         r = BACKUPS.restore(bid, server_on=SRV.state != "off" or pid_alive(SRV.last_pid))
-        shutil.rmtree(os.path.join(HERE, "cache", "map"), ignore_errors=True)   # tile del mondo vecchio
+        shutil.rmtree(os.path.join(CACHE, "map"), ignore_errors=True)   # tile del mondo vecchio
         return r
     finally:
         WORLD_BUSY.clear()
@@ -1007,7 +1009,7 @@ def map_warmer():
                 try:   # un errore su una tile (es. PNG aperto da una richiesta) non ferma le altre
                     with MAP_SEM:
                         if not WORLD_BUSY.is_set():
-                            mapgen.get_tile(world_dir(), os.path.join(HERE, "cache", "map"), dim, rx, rz)
+                            mapgen.get_tile(world_dir(), os.path.join(CACHE, "map"), dim, rx, rz)
                 except Exception:  # noqa: BLE001
                     errors += 1
                 time.sleep(0.3)
@@ -1158,7 +1160,7 @@ def player_watcher():
 
 # ---------------------------------------------------------------- sessioni / limiti tentativi
 SESSIONS = {}        # sha256(token) -> sessione; su disco solo l'hash, mai il token
-SESS_FILE = os.path.join(HERE, "cache", "sessions.json")
+SESS_FILE = os.path.join(CACHE, "sessions.json")
 
 
 def tok_key(tok):
@@ -1276,7 +1278,7 @@ def guess_server_dir():
     return ""
 
 
-SETUP_TOKEN_FILE = os.path.join(HERE, "cache", "setup-token")
+SETUP_TOKEN_FILE = os.path.join(CACHE, "setup-token")
 
 
 def setup_token():
@@ -1363,6 +1365,7 @@ def save_config(changes):
         with open(CONFIG_PATH, encoding="utf-8") as fh:
             cfg = json.load(fh)
     cfg.update(changes)
+    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
     tmp = CONFIG_PATH + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(cfg, fh, indent=2, ensure_ascii=False)
@@ -1792,7 +1795,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, open(p, "rb").read(), "image/png", img_cache) if p else self.send(404, b"", "image/png")
         m = re.match(r"^/hud/([a-z0-9_]{1,64})\.png$", path)
         if m:
-            p = os.path.join(HERE, "assets", "hud", m.group(1) + ".png")
+            p = os.path.join(MOJANG, "hud", m.group(1) + ".png")
             return self.send(200, open(p, "rb").read(), "image/png", img_cache) if os.path.exists(p) else self.send(404, b"", "image/png")
         q = parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}
         if path == "/api/map":
@@ -1814,7 +1817,7 @@ class Handler(BaseHTTPRequestHandler):
             dim, rx, rz = m.group(1), int(m.group(2)), int(m.group(3))
             if WORLD_BUSY.is_set():
                 return self.send(503, b"", "image/png")
-            cache = os.path.join(HERE, "cache", "map")
+            cache = os.path.join(CACHE, "map")
             tile = os.path.join(cache, dim, "r.%d.%d.png" % (rx, rz))
             mca = mapgen._region_path(world_dir(), dim, rx, rz)
             try:
@@ -2278,7 +2281,7 @@ def main():
     if len(sys.argv) > 1:
         return cli(sys.argv[1:])
     setup_logging()
-    L.info("ByzzCraft %s starting: Python %s on %s, config %s", VERSION, sys.version.split()[0], sys.platform, CONFIG_PATH)
+    L.info("ByzzCraft %s starting: Python %s on %s, data in %s", VERSION, sys.version.split()[0], sys.platform, DATA)
     if os.name != "nt" and os.geteuid() == 0:
         L.warning("running as root: the server files would belong to root. Run it as a normal user.")
     load_sessions()

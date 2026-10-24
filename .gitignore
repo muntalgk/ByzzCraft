@@ -1,4 +1,5 @@
-# dati locali dell'istanza
+# dati locali dell'istanza: dalla 1.0 tutti in data/, gli altri nomi sono delle installazioni precedenti
+data/
 panel-config.json
 panel-users.json
 panel.log*

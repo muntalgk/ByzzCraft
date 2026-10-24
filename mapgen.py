@@ -9,7 +9,7 @@ CLI:
 import json, math, os, re, struct, sys, threading, time, zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from players import dim_dir, nbt_parse  # noqa: E402
+from players import ASSETS, dim_dir, nbt_parse  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIMS = ("overworld", "the_nether", "the_end")
@@ -44,7 +44,7 @@ def _tex():
     global _TEX
     if _TEX is None:
         try:
-            with open(os.path.join(HERE, "assets", "texcolors.json"), encoding="utf-8") as f:
+            with open(os.path.join(ASSETS, "texcolors.json"), encoding="utf-8") as f:
                 _TEX = json.load(f)
         except Exception:
             _TEX = {}
