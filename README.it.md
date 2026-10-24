@@ -22,7 +22,8 @@ dipendenza, nessun database: legge i file del server e gli parla via RCON.
 
 Può anche creare un server da zero: scarica `server.jar` da Mojang e Java da [Eclipse Temurin](https://adoptium.net)
 se mancano. Server vanilla, Paper (e derivati) e Fabric li riconosce dal jar; se il tuo ha un nome strano imposta
-`server_jar` in `panel-config.json`.
+`server_jar` in `panel-config.json`. Funziona con Minecraft Java 1.20.5 e successive, compreso il formato dei
+mondi della 26.x e le cartelle separate di Nether ed End di Paper.
 
 ## Installazione
 
@@ -80,22 +81,24 @@ accesso: `python panel.py service` (su Windows lo aggiunge a Esecuzione automati
 
 ### Dopo la configurazione
 
-Il pannello attiva RCON in `server.properties`, copia uno script di avvio nella cartella del server se non
-c'è e scarica le texture e i nomi che mostra (sono di Mojang, quindi non stanno nel repository). Se manca
-ancora qualcosa (Java, EULA, script di avvio) la **Dashboard** lo mostra con un pulsante per sistemarlo. Premi
-**Accendi**.
+Il pannello attiva RCON in `server.properties` e scarica le texture e i nomi che mostra (sono di Mojang,
+quindi non stanno nel repository). Se manca ancora qualcosa (Java, EULA) la **Dashboard** lo mostra con un
+pulsante per sistemarlo. Premi **Accendi**.
 
 **Amici**: apri **Account** e aggiungi un utente per ognuno. Gli admin possono usare anche console,
 impostazioni, backup e accessi. Per farli entrare in gioco apri la porta di Minecraft: `sudo ufw allow 25565/tcp`
 (e inoltrala sul router se giocano da fuori casa).
 
-### Lo script di avvio
+### Come parte il server
 
-Il pannello avvia Minecraft con uno script nella cartella del server: `start.sh` su Linux, `start.bat` su
-Windows. La configurazione copia quello di `examples/`. Fa il backup del mondo prima di ogni avvio
-(`backups/world_*.zip`) e scrive `logs/gc.log` per il grafico della memoria. Aprilo per cambiare la RAM
-(`RAM=4G`). Per usare un tuo script imposta `start_script` in `panel-config.json`; il pannello gli passa
-`JAVA` (il suo Java, se ne ha scaricato uno).
+Il pannello avvia Java da solo, con i [flag di Aikar](https://docs.papermc.io/paper/aikars-flags), e fa il backup
+del mondo prima di ogni avvio (`backups/world_*.zip`, dopo aver controllato lo spazio libero). RAM (automatica:
+metà della macchina, da 1 a 4 GB), flag Java in più, backup prima dell'avvio, spegnimento automatico e indirizzo
+per i giocatori stanno in **Impostazioni → Pannello**: si cambiano dal browser, senza SSH.
+
+Ti serve qualcosa che il pannello non fa? Metti un tuo script nella cartella del server e imposta
+`start_script` in `panel-config.json`: il pannello lo esegue e gli passa `JAVA` (il suo Java, se ne ha
+scaricato uno), `SERVER_JAR` e `PYTHON`. Gli esempi sono in `examples/`.
 
 ## Raggiungerlo da altri dispositivi
 
@@ -135,7 +138,7 @@ minuti di blocco). Il proxy deve girare sulla stessa macchina del pannello.
 | File | Cosa contiene |
 |---|---|
 | `logs/byzzcraft.log` | log tecnico del pannello: avvio, download, errori con traceback (a rotazione, 5 × 1 MB) |
-| `logs/server-start.log` | output dello script di avvio, solo l'ultimo: perché Minecraft non è partito |
+| `logs/server-start.log` | output di Java (o del tuo script di avvio), solo l'ultimo: perché Minecraft non è partito |
 | `panel.log` | chi ha fatto cosa nel pannello (tab **Registro**) |
 | `<server>/logs/latest.log` | il log di Minecraft (tab **Console**) |
 

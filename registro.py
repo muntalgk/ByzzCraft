@@ -38,6 +38,8 @@ _RULES = [
      lambda g: (t("%s the server" % g["v"]), _reason(g["r"]))),
     (_WHO + r": stop failed \((?P<e>.*)\)$", "server", "err", lambda g: (t("could not stop the server"), g["e"])),
     (r"panel started on (?P<u>.+)$", "sistema", "info", lambda g: (t("Panel started"), g["u"])),
+    (_WHO + r" changed the panel settings: (?P<k>.*)$", "impostazioni", "info", lambda g: (t("changed the panel settings"), g["k"])),
+    (_WHO + r": backup before start failed \((?P<e>.*)\)$", "backup", "err", lambda g: (t("backup before the start failed"), g["e"])),
     (_WHO + r" changed (?P<k>\S+): (?P<a>.*) -> (?P<b>.*)$", "impostazioni", "info",
      lambda g: (t("changed a setting"), {"key": g["k"], "old": g["a"], "new": g["b"]})),
     (_WHO + r" ran: (?P<c>.*)$", "console", "info", lambda g: (t("ran a command"), {"cmd": g["c"]})),

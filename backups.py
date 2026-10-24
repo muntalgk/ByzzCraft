@@ -446,12 +446,12 @@ class Backups:
 
     # ------------------------------------------------------------ creazione
     def create(self, kind="manuale", server_on=False, rcon=None, note=""):
-        prefix = {"manuale": "manuale", "programmato": "auto", "auto": "auto"}.get(kind)
+        prefix = {"manuale": "manuale", "programmato": "auto", "auto": "auto", "avvio": "world"}.get(kind)
         if prefix is None:
             raise ValueError(tr("Invalid backup type"))
         if server_on and rcon is None:
             raise ValueError(tr("RCON is needed to back up while the server is on"))
-        self._begin("backup", tr("Scheduled backup") if prefix == "auto" else tr("Manual backup"))
+        self._begin("backup", {"auto": tr("Scheduled backup"), "world": tr("Backup before the start")}.get(prefix, tr("Manual backup")))
         with self._mu:
             self._last_error = None   # l'avviso vecchio non vale piu' per questo tentativo
         tmpdir = part = None

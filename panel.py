@@ -10,7 +10,7 @@ Utenti:           python panel.py adduser NOME [--admin]
                   python panel.py users
 Asset:            python panel.py assets [VERSIONE]   (texture e traduzioni scaricate da Mojang)
 """
-import base64, getpass, hashlib, hmac, html, json, logging, logging.handlers, os, queue, re, secrets, shutil, socket, struct, subprocess, sys, threading, time, urllib.request
+import base64, getpass, hashlib, hmac, html, json, logging, logging.handlers, os, queue, re, secrets, shlex, shutil, socket, struct, subprocess, sys, threading, time, urllib.request
 from collections import deque
 from datetime import datetime
 from http.cookies import SimpleCookie
@@ -35,8 +35,11 @@ from sysinfo import NCPU, ProcSampler, listening_pid, pid_alive, system_memory, 
 CONFIG_PATH = os.environ.get("PANEL_CONFIG", os.path.join(HERE, "panel-config.json"))
 DEFAULTS = {
     "server_dir": os.path.dirname(HERE),
-    "start_script": "start.bat" if os.name == "nt" else "start.sh",
+    "start_script": "",           # vuoto = il pannello avvia Java da solo; altrimenti uno script nella cartella del server
     "server_jar": "",             # jar da avviare; vuoto = riconosciuto da solo (Fabric, Paper, vanilla server.jar)
+    "ram": "",                    # RAM del server, es. "6G"; vuoto = automatica (meta' della macchina, da 1 a 4 GB)
+    "java_args": "",              # flag Java in piu', dopo quelli standard
+    "backup_on_start": True,      # backup del mondo prima di ogni avvio (solo senza start_script: uno script fa il suo)
     "listen": "127.0.0.1",
     "port": 8765,
     "auto_stop_minutes": 30,      # spegne il server se resta vuoto per N minuti (0 = mai)
@@ -519,6 +522,7 @@ class ServerControl:
         self.last_pid = None        # PID di java: finche' e' vivo il mondo e' ancora in uso
         self.props_mtime_on = None  # data di server.properties quando il server e' risultato acceso
         self.start_error = None     # perche' l'ultimo avvio non e' riuscito (mostrato in dashboard)
+        self.preparing = False      # "starting", ma ancora nel backup prima dell'avvio
 
     def port(self):
         return int(server_props().get("server-port", 25565))
@@ -536,7 +540,8 @@ class ServerControl:
         return {"state": self.state, "online": info[0] if info else 0, "max": info[1] if info else 0,
                 "players": info[2] if info else [], "since": self.proc_started, "empty_minutes": empty,
                 "auto_stop_minutes": CFG["auto_stop_minutes"], "restart_pending": self.restart_pending,
-                "props_changed": pending, "start_error": self.start_error}
+                "props_changed": pending, "start_error": self.start_error,
+                "backup_progress": round(100 * ((BACKUPS.status()["busy"] or {}).get("progress") or 0)) if self.preparing else None}
 
     def update(self, info):
         with LOCK:
@@ -553,7 +558,7 @@ class ServerControl:
                 self.empty_since = None
                 if self.state == "starting":
                     gone = self.proc is not None and self.proc.poll() is not None
-                    if gone or time.time() - self.started_at > CFG["start_timeout_seconds"]:
+                    if gone or not self.preparing and time.time() - self.started_at > CFG["start_timeout_seconds"]:
                         self.state = "off"
                         self.start_error = start_failure(gone, self.proc.returncode if self.proc else None)
                 elif self.state in ("on", "stopping"):
@@ -587,31 +592,66 @@ class ServerControl:
             busy = backup_busy()
             if busy or OP_PENDING.is_set():
                 return False, t("Wait for it to finish: %s in progress.") % (busy or t("backup operation")).lower()
-            env = dict(os.environ, NOPAUSE="1", PYTHON=sys.executable)
             jar = server_jar()
             java = RT.java_for(RT.required(CFG["server_dir"], jar))[0]
+            script = CFG.get("start_script")
+            if script:
+                script = os.path.join(CFG["server_dir"], script)
+                if not os.path.exists(script):
+                    return False, t("Start script %s not found: see the Dashboard checks.") % script
+            elif not jar:
+                return False, t("No Minecraft server (.jar) in %s.") % CFG["server_dir"]
+            self.state, self.started_at, self.start_error, self.proc = "starting", time.time(), None, None
+            self.preparing = not script and CFG.get("backup_on_start", True) and os.path.isdir(world_dir())
+        log("%s started the server" % who)
+        threading.Thread(target=worker(lambda: self._launch(script, jar, java)), name="launch", daemon=True).start()
+        HUB.publish("status", self.snapshot())
+        return True, t("Starting: world backup and loading.") if self.preparing else t("Starting.")
+
+    def _launch(self, script, jar, java):
+        """Backup del mondo (con il controllo dello spazio) e poi Java. In un thread: la pagina vede l'avanzamento del backup
+        e il tempo massimo di avvio parte dopo il backup."""
+        if self.preparing:
+            try:
+                BACKUPS.world_dir = world_dir()
+                BACKUPS.create("avvio")
+            except Exception as e:  # noqa: BLE001  (si parte lo stesso, come faceva lo script)
+                log("panel: backup before start failed (%s)" % e)
+                HUB.publish("notice", {"ok": False, "message": t("World backup before the start failed: %s") % e})
+        with LOCK:
+            self.preparing = False
+            if self.state != "starting":
+                return
+            env = dict(os.environ, NOPAUSE="1", PYTHON=sys.executable, SERVER_JAR=jar or "server.jar")
             if java:
                 env["JAVA"] = java   # gli script d'esempio lo usano; uno script proprio puo' ignorarlo
-            env["SERVER_JAR"] = jar or "server.jar"
-            script = os.path.join(CFG["server_dir"], CFG["start_script"])
-            if not os.path.exists(script):
-                return False, t("Start script %s not found: see the Dashboard checks.") % script
+            if script:
+                cmd = ["cmd.exe", "/c", script] if os.name == "nt" else ["sh", script]
+            else:
+                cmd = launch_cmd(jar, java)
+                os.makedirs(os.path.join(CFG["server_dir"], "logs"), exist_ok=True)
             os.makedirs(LOG_DIR, exist_ok=True)
             out = open(START_LOG, "wb")   # solo l'ultimo avvio: e' quello che serve per capire perche' non parte
-            out.write(("--- %s: %s\n" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), script)).encode())
+            out.write(("--- %s: %s\n" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), " ".join(cmd))).encode())
             out.flush()
             io = dict(cwd=CFG["server_dir"], env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT)
-            if os.name == "nt":
-                flags = subprocess.CREATE_NO_WINDOW if CFG.get("hide_console") else subprocess.CREATE_NEW_CONSOLE
-                self.proc = subprocess.Popen(["cmd.exe", "/c", script], creationflags=flags, **io)
-            else:
-                # sessione propria: il server non si ferma se il pannello viene riavviato
-                self.proc = subprocess.Popen(["sh", script], start_new_session=True, **io)
+            try:
+                if os.name == "nt":
+                    flags = subprocess.CREATE_NO_WINDOW if CFG.get("hide_console") else subprocess.CREATE_NEW_CONSOLE
+                    self.proc = subprocess.Popen(cmd, creationflags=flags, **io)
+                else:
+                    # sessione propria: il server non si ferma se il pannello viene riavviato
+                    self.proc = subprocess.Popen(cmd, start_new_session=True, **io)
+            except OSError as e:   # Java non trovato
+                out.write(str(e).encode())
+                out.close()
+                self.state = "off"
+                self.start_error = start_failure(True)
+                HUB.publish("status", self.snapshot())
+                return
             out.close()   # il figlio ha la sua copia
-            self.state, self.started_at, self.start_error = "starting", time.time(), None
-        log("%s started the server" % who)
+            self.started_at = time.time()
         HUB.publish("status", self.snapshot())
-        return True, t("Starting: world backup and loading.")
 
     def stop(self, who, reason=None, restart=False):
         with LOCK:
@@ -635,8 +675,32 @@ class ServerControl:
 
 
 START_LOG = os.path.join(LOG_DIR, "server-start.log")
+# Aikar's flags (https://docs.papermc.io/paper/aikars-flags): G1 tarato per i server Minecraft
+AIKAR = ("-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC "
+         "-XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 "
+         "-XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 "
+         "-XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 "
+         "-Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true --enable-native-access=ALL-UNNAMED").split()
+RAM_RE = re.compile(r"^(\d{3,6})M$|^(\d{1,3})G$")
+
+
+def auto_ram():
+    """Meta' della RAM della macchina, da 1 a 4 GB: di piu' e il sistema puo' uccidere il server mentre parte."""
+    return "%dM" % max(1024, min(4096, int(system_memory()[1] / 2)))
+
+
+def ram_mb(ram):
+    m = RAM_RE.match(ram)
+    return int(m.group(1)) if m.group(1) else int(m.group(2)) * 1024
+
+
+def launch_cmd(jar, java):
+    """Riga di comando di Java quando non c'e' uno script di avvio. gc.log serve al grafico della memoria."""
+    ram = CFG.get("ram") or auto_ram()
+    return ([java or "java", "-Xms" + ram, "-Xmx" + ram] + AIKAR + ["-Xlog:gc:file=logs/gc.log:time,uptime:filecount=3,filesize=10M"]
+            + shlex.split(CFG.get("java_args") or "", posix=os.name != "nt") + ["-jar", jar, "nogui"])
 START_HINTS = (   # (testo nell'output dello script, spiegazione per l'utente)
-    (r"java: (command )?not found|'java' is not recognized|java.exe.*(not found|cannot find)|No such file or directory.*java",
+    (r"java: (command )?not found|'java' is not recognized|java.exe.*(not found|cannot find)|No such file or directory.*java|WinError 2\]",
      "Java is not installed: download it from the Dashboard checks."),
     (r"UnsupportedClassVersionError|has been compiled by a more recent version", "Java is too old for this Minecraft version: download the right one from the Dashboard checks."),
     (r"agree to the EULA", "You have not accepted the Minecraft EULA: accept it from the Dashboard checks."),
@@ -1229,6 +1293,61 @@ def setup_remote_page():
         html.escape("grep setup= %s" % os.path.join(LOG_DIR, "byzzcraft.log"))))
 
 
+def save_config(changes):
+    """Aggiorna panel-config.json (le chiavi che non tocca restano) e la config in memoria."""
+    cfg = {}
+    if os.path.exists(CONFIG_PATH):
+        with open(CONFIG_PATH, encoding="utf-8") as fh:
+            cfg = json.load(fh)
+    cfg.update(changes)
+    tmp = CONFIG_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(cfg, fh, indent=2, ensure_ascii=False)
+    os.replace(tmp, CONFIG_PATH)
+    CFG.update(changes)
+    return cfg
+
+
+def panel_settings():
+    need = RT.required(CFG["server_dir"], server_jar())
+    return {**{k: CFG.get(k, DEFAULTS.get(k)) for k in PANEL_KEYS}, "ram_auto": auto_ram(), "ram_total": round(system_memory()[1]),
+            "jar": server_jar(), "java": RT.java_for(need)[0], "java_need": need, "start_script": CFG.get("start_script") or ""}
+
+
+PANEL_KEYS = ("ram", "java_args", "backup_on_start", "auto_stop_minutes", "mc_address")
+
+
+def save_panel_settings(data, who):
+    """Impostazioni del pannello dalla pagina Impostazioni. ValueError con il messaggio da mostrare."""
+    ram = str(data.get("ram", "")).strip().upper()
+    if ram and not RAM_RE.match(ram):
+        raise ValueError(t("RAM: write it like 4G or 3072M, or leave it empty for automatic."))
+    if ram and ram_mb(ram) > system_memory()[1] - 512:
+        raise ValueError(t("RAM: this machine has %s MB in all, leave some to the system.") % round(system_memory()[1]))
+    args = str(data.get("java_args", "")).strip()
+    if len(args) > 500 or "\n" in args or "\r" in args or re.search(r"(^|\s)-(jar|Xmx|Xms)", args):
+        raise ValueError(t("Java flags: one line, without -jar, -Xms or -Xmx (RAM has its own field)."))
+    try:
+        shlex.split(args)   # anche su Windows: qui conta solo trovare le virgolette non chiuse
+    except ValueError:
+        raise ValueError(t("Java flags: a quote is not closed."))
+    try:
+        mins = int(data.get("auto_stop_minutes", 0))
+    except (TypeError, ValueError):
+        mins = -1
+    if not 0 <= mins <= 1440:
+        raise ValueError(t("Auto stop: minutes from 0 (never) to 1440."))
+    addr = str(data.get("mc_address", "")).strip()
+    if len(addr) > 100 or re.search(r"[\s<>\"']", addr):
+        raise ValueError(t("Invalid server address."))
+    new = {"ram": ram, "java_args": args, "backup_on_start": bool(data.get("backup_on_start")), "auto_stop_minutes": mins, "mc_address": addr}
+    changed = [k for k in PANEL_KEYS if CFG.get(k, DEFAULTS.get(k)) != new[k]]
+    if changed:
+        save_config(new)
+        log("%s changed the panel settings: %s" % (who, ", ".join(changed)))
+    return changed
+
+
 def do_setup(f):
     """Prima configurazione, dalla pagina web o da `panel.py setup`. Ritorna l'errore da mostrare, o None."""
     sd = os.path.abspath(os.path.expanduser(f.get("server_dir", "").strip().strip('"')))
@@ -1245,15 +1364,8 @@ def do_setup(f):
         except Exception as e:  # noqa: BLE001
             L.exception("server download failed")
             return t("Could not download the Minecraft server: %s") % e
-    cfg = {}
-    if os.path.exists(CONFIG_PATH):
-        with open(CONFIG_PATH, encoding="utf-8") as fh:
-            cfg = json.load(fh)
-    cfg.update({"server_dir": sd, "port": CFG["port"], "lang": f.get("lang") if f.get("lang") in ("en", "it") else "en",
-                "listen": "0.0.0.0" if f.get("network") == "1" else "127.0.0.1", "java_auto": f.get("java") == "1"})
-    with open(CONFIG_PATH, "w", encoding="utf-8") as fh:
-        json.dump(cfg, fh, indent=2, ensure_ascii=False)
-    CFG.update(cfg)
+    cfg = save_config({"server_dir": sd, "port": CFG["port"], "lang": f.get("lang") if f.get("lang") in ("en", "it") else "en",
+                       "listen": "0.0.0.0" if f.get("network") == "1" else "127.0.0.1", "java_auto": f.get("java") == "1"})
     i18n.load(cfg["lang"])   # la prima pagina la serve ancora questo processo, prima del riavvio
     prepare_server(sd, f.get("eula") == "1")
     users = {}
@@ -1300,10 +1412,11 @@ def prepare_server(sd, accept_eula):
     if accept_eula and "eula=true" not in (open(eula, encoding="utf-8").read() if os.path.exists(eula) else ""):
         with open(eula, "w", encoding="utf-8") as f:
             f.write("# accepted in the ByzzCraft setup (https://aka.ms/MinecraftEULA)\neula=true\n")
-    script = os.path.join(sd, CFG["start_script"])
-    example = os.path.join(HERE, "examples", CFG["start_script"])
-    if not os.path.exists(script) and os.path.exists(example):
-        shutil.copy(example, script)
+    if CFG.get("start_script"):   # il pannello avvia Java da solo: lo script serve solo se configurato
+        script = os.path.join(sd, CFG["start_script"])
+        example = os.path.join(HERE, "examples", CFG["start_script"])
+        if not os.path.exists(script) and os.path.exists(example):
+            shutil.copy(example, script)
 
 
 def restart_soon():
@@ -1384,16 +1497,16 @@ def health():
     java, found = RT.java_for(need)
     eula_path = os.path.join(sd, "eula.txt")
     eula = os.path.exists(eula_path) and "eula=true" in open(eula_path, encoding="utf-8", errors="replace").read()
-    script = os.path.join(sd, CFG["start_script"])
+    script = CFG.get("start_script") and os.path.join(sd, CFG["start_script"])
     checks = [
         ("server", bool(jar), t("No Minecraft server (.jar) in %s.") % sd, None),
         # uno script proprio sceglie il suo Java (es. quello del launcher): si controlla solo con gli script d'esempio
-        ("java", bool(java) or not need or CFG["start_script"] not in ("start.sh", "start.bat"),
+        ("java", bool(java) or not need or CFG.get("start_script") not in ("", "start.sh", "start.bat"),
          t("Java %s is not installed (found: %s).") % (need, found or t("none")), "java"),
         ("eula", eula, t("The Minecraft EULA is not accepted yet: the server will not start."), "eula"),
         ("rcon", p.get("enable-rcon") == "true" and bool(p.get("rcon.password")), t("RCON is off: the panel cannot talk to the server."), "rcon"),
-        ("script", os.path.exists(script), t("Start script %s not found.") % script,
-         "script" if os.path.exists(os.path.join(HERE, "examples", CFG["start_script"])) else None),
+        ("script", not script or os.path.exists(script), t("Start script %s not found.") % script,
+         "script" if script and os.path.exists(os.path.join(HERE, "examples", CFG["start_script"])) else None),
         ("assets", AS.present(), t("Map textures and item icons are not downloaded yet."), "assets"),
         # systemd imposta INVOCATION_ID; su Windows pythonw (senza console) vuol dire avvio automatico, non da terminale
         ("service", bool(os.environ.get("INVOCATION_ID")) or os.name == "nt" and (os.path.exists(STARTUP_CMD) or not sys.stdout),
@@ -1699,6 +1812,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_file(p, re.sub(r"[^\w.\-]", "_", os.path.basename(p), flags=re.ASCII))
             except (ValueError, OSError) as e:
                 return self.json(404, {"error": str(e)})
+        if path == "/api/panel-settings":
+            if not s["admin"]:
+                return self.json(403, {"error": "admins only"})
+            return self.json(200, panel_settings())
         if path == "/api/properties":
             if not s["admin"]:
                 return self.json(403, {"error": "admins only"})
@@ -1836,6 +1953,14 @@ class Handler(BaseHTTPRequestHandler):
             ok = fix_health(str(data.get("id", "")), s["user"])
             HUB.publish("health", {})
             return self.json(200, {"ok": ok, "message": t("Done.") if ok else t("Invalid request.")})
+        if self.path == "/api/panel-settings":
+            try:
+                changed = save_panel_settings(data, s["user"])
+            except ValueError as e:
+                return self.json(200, {"ok": False, "message": str(e)})
+            HUB.publish("status", SRV.snapshot())
+            msg = t("Saved: the new RAM and Java flags apply at the next start.") if {"ram", "java_args"} & set(changed) else t("Saved.") if changed else t("No changes")
+            return self.json(200, {"ok": True, "message": msg, "settings": panel_settings()})
         if self.path == "/api/users/save":
             return self.save_user(tok, s, data)
         if self.path == "/api/users/delete":

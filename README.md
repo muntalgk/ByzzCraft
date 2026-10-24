@@ -22,7 +22,8 @@ it reads the server's own files and talks to it over RCON.
 
 It can also set up a new server from nothing: it downloads `server.jar` from Mojang and Java from
 [Eclipse Temurin](https://adoptium.net) if they are missing. Vanilla, Paper (and its forks) and Fabric servers
-are recognised by their jar; set `server_jar` in `panel-config.json` if yours has an unusual name.
+are recognised by their jar; set `server_jar` in `panel-config.json` if yours has an unusual name. It works with
+Minecraft Java 1.20.5 and newer, including the 26.x world layout and Paper's separate Nether and End folders.
 
 ## Install
 
@@ -81,21 +82,24 @@ login: `python panel.py service` (on Windows it adds ByzzCraft to the Startup fo
 
 ### After the setup
 
-The panel turns on RCON in `server.properties`, copies a start script into the server folder if there is
-none, and downloads the textures and names it shows (they belong to Mojang, so they are not in this
-repository). If something is still missing (Java, the EULA, the start script) the **Dashboard** shows it with
-a button to fix it. Press **Start**.
+The panel turns on RCON in `server.properties` and downloads the textures and names it shows (they belong
+to Mojang, so they are not in this repository). If something is still missing (Java, the EULA) the
+**Dashboard** shows it with a button to fix it. Press **Start**.
 
 **Friends**: open **Account** and add a user for each of them. Admin users can also use the console,
 settings, backups and access lists. For them to join the game, open the Minecraft port: `sudo ufw allow 25565/tcp`
 (and forward it on your router if they play from outside).
 
-### The start script
+### How the server starts
 
-The panel starts Minecraft with a script in the server folder: `start.sh` on Linux, `start.bat` on Windows.
-Setup copies the one from `examples/`. It backs up the world before each start (`backups/world_*.zip`) and
-writes `logs/gc.log` for the heap chart. Open it to change the RAM (`RAM=4G`). To use your own script, set
-`start_script` in `panel-config.json`; the panel passes `JAVA` (its own Java, if it downloaded one).
+The panel starts Java by itself, with [Aikar's flags](https://docs.papermc.io/paper/aikars-flags), and backs up
+the world before each start (`backups/world_*.zip`, after checking the free disk space). RAM (automatic: half
+of the machine, 1 to 4 GB), extra Java flags, the backup before the start, the auto stop and the address
+shown to players are in **Settings → Panel**, so you change them from the browser, without SSH.
+
+Need something the panel does not do? Put your own script in the server folder and set `start_script` in
+`panel-config.json`: the panel runs it and passes `JAVA` (its own Java, if it downloaded one), `SERVER_JAR`
+and `PYTHON`. Examples are in `examples/`.
 
 ## Reach it from other devices
 
@@ -135,7 +139,7 @@ then 15 minutes locked). The proxy must run on the same machine as the panel.
 | File | What is in it |
 |---|---|
 | `logs/byzzcraft.log` | technical log of the panel: start-up, downloads, errors with tracebacks (rotated, 5 × 1 MB) |
-| `logs/server-start.log` | output of the start script, last start only: why Minecraft did not start |
+| `logs/server-start.log` | output of Java (or of your start script), last start only: why Minecraft did not start |
 | `panel.log` | who did what in the panel (the **Log** tab) |
 | `<server>/logs/latest.log` | Minecraft's own log (the **Console** tab) |
 
@@ -169,14 +173,17 @@ Dashboard warns when less than three backups would fit.
 | Key | Default | Meaning |
 |---|---|---|
 | `server_dir` | chosen at setup | Minecraft server folder |
-| `start_script` | `start.sh` / `start.bat` | script that starts the server |
+| `start_script` | empty | empty: the panel starts Java; otherwise a script in the server folder |
+| `ram` | empty (automatic) | server RAM, e.g. `6G` (also in **Settings → Panel**) |
+| `java_args` | empty | extra Java flags (also in **Settings → Panel**) |
+| `backup_on_start` | `true` | back up the world before each start (without `start_script`) |
 | `listen`, `port` | `127.0.0.1`, `8765` | where the panel listens (`0.0.0.0` = home network) |
 | `lang` | chosen at setup | interface language: `en`, `it` |
 | `title` | `ByzzCraft` | name shown in the page |
 | `auto_stop_minutes` | `30` | stop the server after N minutes empty (0 = never) |
 | `mc_address` | | server address shown to players, with a copy button |
 | `java_auto` | chosen at setup | download Java by itself when it is missing |
-| `server_jar` | found by itself | jar to start (Fabric launcher, Paper, `server.jar`), passed to the start script as `SERVER_JAR` |
+| `server_jar` | found by itself | jar to start (Fabric launcher, Paper, `server.jar`); a start script gets it as `SERVER_JAR` |
 | `update_check` | `true` | once a day ask GitHub for a newer release (one GET, nothing sent) |
 
 ## Troubleshooting

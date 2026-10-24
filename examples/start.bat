@@ -1,5 +1,7 @@
 @echo off
-rem ByzzCraft example start script for Windows: copy it into the Minecraft server folder.
+rem Optional. ByzzCraft starts Java by itself (RAM and flags in Settings > Panel). Use a script only when you
+rem need something the panel does not do: copy it into the Minecraft server folder and set
+rem "start_script": "start.bat" in panel-config.json.
 rem The panel needs two things from it: a world backup before each start (backups\world_*.zip)
 rem and the GC log in logs\gc.log (heap chart).
 title Minecraft server

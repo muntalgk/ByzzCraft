@@ -1,5 +1,7 @@
 #!/bin/sh
-# ByzzCraft example start script for Linux: copy it into the Minecraft server folder.
+# Optional. ByzzCraft starts Java by itself (RAM and flags in Settings > Panel). Use a script only when you
+# need something the panel does not do: copy it into the Minecraft server folder and set
+# "start_script": "start.sh" in panel-config.json.
 # The panel needs two things from it: a world backup before each start (backups/world_*.zip)
 # and the GC log in logs/gc.log (heap chart). The panel passes JAVA (its own Java, if it downloaded one)
 # and PYTHON (used for the zip, so `zip` does not need to be installed).

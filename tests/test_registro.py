@@ -40,6 +40,8 @@ CASES = [
     ("alice: manual backup failed (disk full)", "backup", "alice", "manual backup failed"),
     ("admin: restore of auto_2026-10-21_04-00-00.zip completed", "backup", "admin", "restore completed"),
     ("admin: restore of auto_2026-10-21_04-00-00.zip failed (boom)", "backup", "admin", "restore failed"),
+    ("admin changed the panel settings: ram, java_args", "impostazioni", "admin", "changed the panel settings"),
+    ("panel: backup before start failed (disk full)", "backup", "panel", "backup before the start failed"),
     ("sampling error: boom", "sistema", None, "Sampling error"),
     ("invalid request /api/x: ValueError", "sistema", None, "Invalid request"),
     ("map: 3 tiles not updated this round, retrying in 5 minutes", "sistema", None, "Map:"),

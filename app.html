@@ -362,7 +362,9 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .tg.on{color:#8be29a;border-color:#2f6b3a}.tg.opx{color:#f0c75e;border-color:#5a4a1c}.tg.wl{color:#a9c8f5;border-color:#2e4466}.tg.ban{color:#ff9b94;border-color:#5a2a28}
 .acr .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .acc{display:grid;gap:16px;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.acc-wide{grid-column:1/-1}
-@media (max-width:900px){.acc{grid-template-columns:minmax(0,1fr)}}.acc h3{font-size:15px;margin:0 0 6px}
+@media (max-width:900px){.acc{grid-template-columns:minmax(0,1fr)}}
+.ps{display:grid;gap:0 16px;grid-template-columns:repeat(3,minmax(0,1fr))}.ps-wide{grid-column:1/-1}.ps-info{font-size:12.5px;color:var(--mute);margin:0}
+@media (max-width:900px){.ps{grid-template-columns:minmax(0,1fr)}}.acc h3{font-size:15px;margin:0 0 6px}
 .acc label.f{display:block;font-size:12.5px;color:var(--text2);margin:12px 0 6px}.acc .search{width:100%;min-width:0}
 .acc .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}.acc .ac-list{margin-top:8px}
 .sb{background:var(--card2);border:1px solid var(--line2);color:var(--text2);border-radius:8px;padding:5px 10px;font-size:12.5px;cursor:pointer;white-space:nowrap;transition:all .15s}
@@ -517,6 +519,15 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 
     <!-- PROPERTIES -->
     <section id="v-props" hidden>
+      <div class="acc" style="margin-bottom:20px"><div class="card acc-wide"><h3>{{Panel}}</h3><p class="ps-info" id="ps-info"></p>
+        <div class="ps">
+          <div><label class="f" for="ps-ram">{{Server RAM}}</label><input class="search" id="ps-ram" maxlength="7" spellcheck="false" autocomplete="off"></div>
+          <div><label class="f" for="ps-stop">{{Stop when empty for (minutes, 0 = never)}}</label><input class="search" type="number" min="0" max="1440" id="ps-stop"></div>
+          <div><label class="f" for="ps-addr">{{Server address for players (optional)}}</label><input class="search" id="ps-addr" maxlength="100" spellcheck="false" autocomplete="off" placeholder="{{e.g. play.example.com}}"></div>
+          <div class="ps-wide"><label class="f" for="ps-args">{{Extra Java flags (optional)}}</label><input class="search" id="ps-args" maxlength="500" spellcheck="false" autocomplete="off"></div>
+        </div>
+        <div class="row"><label class="toggle"><input type="checkbox" id="ps-bk"> {{Back up the world before every start}}</label></div>
+        <div class="row"><button class="btn primary" id="ps-save">{{Save}}</button></div></div></div>
       <div class="toolbar"><input class="search" id="p-filter" placeholder="{{Search settings...}}"><span class="lock" id="p-note">{{Changes apply at the next server restart. Every save backs up the file.}}</span></div>
       <div id="p-list"></div>
       <div class="savebar" id="savebar"><span id="p-count"></span><div class="actions"><button class="btn" id="p-undo">{{Cancel}}</button><button class="btn" id="p-save">{{Save}}</button><button class="btn primary" id="p-save-r">{{Save and restart}}</button></div></div>
@@ -617,7 +628,7 @@ const SUBS={dash:()=>_t("Live server and world status"),map:()=>_t("Top-down vie
   backups:()=>BK.items?_t("%s backups",BK.items.length)+" · "+gb(BK.items.reduce((a,e)=>a+e.size,0))+" · "+_t("%s free on disk",gb(BK.disk.free)):_t("World copies, schedule and restore")};
 let CUR="dash";function setSub(){$("#v-sub").textContent=SUBS[CUR]?SUBS[CUR]():""}
 function go(v){if(!TITLES[v])v="dash";CUR=v;$$(".tab").forEach(t=>{t.classList.toggle("on",t.dataset.v==v);if(t.dataset.v==v&&innerWidth<=760)t.scrollIntoView({inline:"nearest",block:"nearest"})});Object.keys(TITLES).forEach(x=>$("#v-"+x).hidden=x!=v);
-  $("#v-title").textContent=TITLES[v];setSub();if(v=="props")loadProps();if(v=="console"){renderConsole();setTimeout(()=>$("#cmd").focus(),50)}if(v=="metrics")charts.forEach(c=>c.draw());
+  $("#v-title").textContent=TITLES[v];setSub();if(v=="props"){loadProps();PS.load()}if(v=="console"){renderConsole();setTimeout(()=>$("#cmd").focus(),50)}if(v=="metrics")charts.forEach(c=>c.draw());
   if(v=="players")loadPlayers();if(v=="map")MAPF.show();if(v=="timeline")TLV.open();if(v=="dash")MAPM.show();if(v=="backups")BK.load();if(v=="access")ACV.load();if(v=="audit")RGV.load();if(v=="account")ACC.load();location.hash=v}
 $$(".tab").forEach(t=>t.onclick=()=>go(t.dataset.v));$$("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
 $("#logout").onclick=async e=>{const b=e.currentTarget;
@@ -678,7 +689,7 @@ function dur(sec){const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60);return 
 function renderStatus(){const s=S.status;if(BOOT.admin&&BK.st)BK.renderStatus();const hero=$("#hero");hero.className="card hero "+s.state;$("#st-label").textContent=STATE[s.state]||s.state;
   let sub="";if(s.state=="on"){sub=_t("%s / %s players",s.online,s.max)+(s.since?" · "+_t("on for %s",dur(Date.now()/1000-s.since)):"");
     if(s.online==0&&s.auto_stop_minutes)sub+=" · "+_t("stops after %s min with nobody on",s.auto_stop_minutes)+(s.empty_minutes?" "+_t("(empty for %s min)",s.empty_minutes):"")}
-  else if(s.state=="starting")sub=_t("World backup and loading: usually under a minute.");
+  else if(s.state=="starting")sub=s.backup_progress!=null?_t("Backing up the world: %s%",s.backup_progress):_t("Loading the world: usually under a minute.");
   else if(s.state=="stopping")sub=_t("Saving the world...");else sub=s.start_error||_t("Press Start when you want to play.");$("#st-sub").classList.toggle("st-err",s.state=="off"&&!!s.start_error);
   $("#st-sub").textContent=sub;
   const pl=$("#players");pl.innerHTML="";
@@ -802,6 +813,16 @@ function propRow(p,m){const v=p.key in S.edits?S.edits[p.key]:p.value;const dis=
 function savebar(){const n=Object.keys(S.edits).length;$("#savebar").classList.toggle("show",n>0);$("#p-count").textContent=(n==1?_t("%s unsaved change",n):_t("%s unsaved changes",n))}
 $("#p-filter").oninput=renderProps;$("#p-undo").onclick=()=>{S.edits={};renderProps()};
 async function saveProps(restart){const j=await api("/api/properties",{changes:S.edits,restart});toast(j.message,j.ok?"good":"bad");if(j.ok){await loadProps();if(restart)go("dash")}}
+const PS={async load(){if(!BOOT.admin)return;const r=await fetch("/api/panel-settings");if(r.ok)this.render(await r.json())},
+  render(j){$("#ps-ram").value=j.ram;$("#ps-ram").placeholder=_t("automatic: %s",j.ram_auto);$("#ps-stop").value=j.auto_stop_minutes;
+    $("#ps-addr").value=j.mc_address;$("#ps-args").value=j.java_args;$("#ps-bk").checked=j.backup_on_start;
+    ["#ps-ram","#ps-args","#ps-bk"].forEach(s=>$(s).disabled=!!j.start_script);
+    $("#ps-info").textContent=j.start_script?_t("Started by your script %s: RAM, Java flags and the backup before the start are set there.",j.start_script)
+      :_t("Server %s · Java %s · this machine has %s GB of RAM",j.jar||_t("not found"),j.java||_t("not found"),nf(j.ram_total/1024,1))},
+  async save(){const j=await api("/api/panel-settings",{ram:$("#ps-ram").value,java_args:$("#ps-args").value,backup_on_start:$("#ps-bk").checked,
+    auto_stop_minutes:+$("#ps-stop").value||0,mc_address:$("#ps-addr").value});toast(j.message,j.ok?"good":"bad");
+    if(j.ok){this.render(j.settings);BOOT.address=j.settings.mc_address;renderStatus()}}};
+$("#ps-save").onclick=()=>PS.save();
 $("#p-save").onclick=()=>saveProps(false);$("#p-save-r").onclick=()=>{if(S.status.state!="on"||confirm(_t("Save and restart the server now?")))saveProps(S.status.state=="on")};
 
 /* ---------------- players ---------------- */
