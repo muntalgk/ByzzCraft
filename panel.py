@@ -1885,7 +1885,7 @@ class Handler(BaseHTTPRequestHandler):
         m = re.match(r"^/icon/([a-z0-9_]{1,64})\.png$", path)
         if m:
             p = PL.icon_path(m.group(1))
-            return self.send(200, open(p, "rb").read(), "image/png", img_cache) if p else self.send(404, b"", "image/png")
+            return self.send(200, AS.icon_png(m.group(1), p), "image/png", img_cache) if p else self.send(404, b"", "image/png")
         m = re.match(r"^/hud/([a-z0-9_]{1,64})\.png$", path)
         if m:
             p = os.path.join(MOJANG, "hud", m.group(1) + ".png")

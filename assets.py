@@ -118,6 +118,34 @@ def download_server(server_dir, version=None, log=print):
     return version
 
 
+# grey in the jar, colored by the biome in the game: the inventory shows them with the default color
+GRASS, FOLIAGE = (145, 189, 89), (72, 181, 24)
+TINT = {"grass_block": GRASS, "short_grass": GRASS, "tall_grass": GRASS, "fern": GRASS, "large_fern": GRASS, "bush": GRASS,
+        "oak_leaves": FOLIAGE, "jungle_leaves": FOLIAGE, "acacia_leaves": FOLIAGE, "dark_oak_leaves": FOLIAGE, "vine": FOLIAGE,
+        "mangrove_leaves": (146, 198, 72), "birch_leaves": (128, 167, 85), "spruce_leaves": (97, 153, 97), "lily_pad": (32, 128, 48)}
+_TINTED = {}
+
+
+def icon_png(iid, path):
+    """The icon's PNG; grey grass, leaves and vines get their inventory color."""
+    with open(path, "rb") as f:
+        data = f.read()
+    c = TINT.get(iid)
+    if c is None:
+        return data
+    if iid not in _TINTED:
+        try:
+            w, h, px = png_rgba(data)
+        except Exception:
+            return data
+        op = [p for p in px if p[3]]
+        if not op or sum(max(p[:3]) - min(p[:3]) < 16 for p in op) < 0.9 * len(op):   # already colored: a resource pack
+            _TINTED[iid] = data
+        else:
+            _TINTED[iid] = _png(bytes(v for r, g, b, a in px for v in (r * c[0] // 255, g * c[1] // 255, b * c[2] // 255, a)), w, h)
+    return _TINTED[iid]
+
+
 def png_rgba(data):
     """Non-interlaced PNG with 1-8 bit depth -> (width, height, [(r, g, b, a), ...])."""
     pos, idat, plte, trns = 8, b"", b"", b""

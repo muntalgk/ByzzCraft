@@ -75,5 +75,17 @@ try:
     check("installer ignored", A.find_jar(d) == "fabric-server-launch.jar")
 finally:
     shutil.rmtree(d, ignore_errors=True)
+# biome-colored icons: grey ones get the inventory color, colored ones (a resource pack) and other ids stay as they are
+import tempfile
+t = tempfile.mkdtemp()
+try:
+    grey, green = os.path.join(t, "g.png"), os.path.join(t, "c.png")
+    open(grey, "wb").write(A._png(bytes([200, 200, 200, 255, 0, 0, 0, 0]), 2, 1))
+    open(green, "wb").write(A._png(bytes([20, 200, 20, 255, 20, 200, 20, 255]), 2, 1))
+    check("grass tinted", A.png_rgba(A.icon_png("grass_block", grey))[2] == [(113, 148, 69, 255), (0, 0, 0, 0)], A.png_rgba(A.icon_png("grass_block", grey)))
+    check("colored texture kept", A.icon_png("oak_leaves", green) == open(green, "rb").read())
+    check("other ids untouched", A.icon_png("stone", grey) == open(grey, "rb").read())
+finally:
+    shutil.rmtree(t, ignore_errors=True)
 print("PASS %d  FAIL %d" % (OK, FAIL))
 sys.exit(1 if FAIL else 0)

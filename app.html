@@ -937,11 +937,11 @@ function hudRow(kind,val,max,extra){const n=10;let h="";const hc=P.hardcore&&kin
   if(kind=="heart"&&extra>0)for(let i=0;i<Math.ceil(extra/2);i++)h+="<img src='/hud/heart_absorbing_"+hc+(extra-i*2>=2?"full":"half")+".png'>";
   return "<div class='hud "+kind+"'>"+h+"</div>"}
 const SLOT_PH={head:"empty_armor_slot_helmet",chest:"empty_armor_slot_chestplate",legs:"empty_armor_slot_leggings",feet:"empty_armor_slot_boots",offhand:"empty_armor_slot_shield"};
-function slotHTML(it,ph,sel){if(!it)return "<div class='slot"+(sel?" sel":"")+"'>"+(ph?"<img class=ph src='/icon/"+ph+".png?v=4' onerror=\"this.remove()\">":"")+"</div>";
+function slotHTML(it,ph,sel){if(!it)return "<div class='slot"+(sel?" sel":"")+"'>"+(ph?"<img class=ph src='/icon/"+ph+".png?v=5' onerror=\"this.remove()\">":"")+"</div>";
   const tip=encodeURIComponent(JSON.stringify({n:it.name,e:it.ench,g:it.glint,d:it.dmg,m:it.max,id:it.id,c:it.count}));
   const dur=it.max&&it.dmg>0?"<div class=dur><b style='width:"+(100*(1-it.dmg/it.max))+"%;background:hsl("+Math.round(120*(1-it.dmg/it.max))+",90%,45%)'></b></div>":"";
-  const glint=it.glint?"<div class=glint style=\"-webkit-mask-image:url('/icon/"+it.id+".png?v=4');mask-image:url('/icon/"+it.id+".png?v=4')\"></div>":"";
-  return "<div class='slot"+(sel?" sel":"")+"' data-tip='"+tip+"'><img src='/icon/"+it.id+".png?v=4' alt='"+esc(it.name.slice(0,10))+"' onerror='icoErr(this)'>"+glint+dur+(it.count>1?"<span class=cnt>"+it.count+"</span>":"")+"</div>"}
+  const glint=it.glint?"<div class=glint style=\"-webkit-mask-image:url('/icon/"+it.id+".png?v=5');mask-image:url('/icon/"+it.id+".png?v=5')\"></div>":"";
+  return "<div class='slot"+(sel?" sel":"")+"' data-tip='"+tip+"'><img src='/icon/"+it.id+".png?v=5' alt='"+esc(it.name.slice(0,10))+"' onerror='icoErr(this)'>"+glint+dur+(it.count>1?"<span class=cnt>"+it.count+"</span>":"")+"</div>"}
 /* a failed icon gets one more try (a phone can drop image loads), then its name */
 function icoErr(i){if(!i.dataset.r){i.dataset.r=1;setTimeout(()=>i.src+="&r=1",800)}else i.outerHTML="<div class=fb>"+esc(i.alt)+"</div>"}
 /* only when it changed: rewriting the same inventory on every live update reloads every icon */
@@ -949,7 +949,7 @@ function setHTML(el,h){if(el._h!==h){el._h=h;el.innerHTML=h}}
 function invGrid(items,slots,sel){const by={};items.forEach(i=>by[i.slot]=i);return slots.map(s=>s==="gap"?"<div class=gap></div>":slotHTML(by[s],null,s===sel)).join("")}
 function range(a,b){const r=[];for(let i=a;i<=b;i++)r.push(i);return r}
 function dur2(sec){const d=Math.floor(sec/86400),h=Math.floor(sec%86400/3600),m=Math.floor(sec%3600/60);return d?_t("%s d %s h",d,h):h?h+" h "+m+" min":m+" min"}
-function topList(title,rows){return "<div><h4>"+title+"</h4><ol>"+(rows.length?rows.map(r=>"<li><img src='/icon/"+r[2]+".png?v=4' onerror=\"this.style.visibility='hidden'\">"+esc(r[0])+"<span>"+r[1].toLocaleString(LOC)+"</span></li>").join(""):"<li style='color:var(--mute)'>"+_t("none")+"</li>")+"</ol></div>"}
+function topList(title,rows){return "<div><h4>"+title+"</h4><ol>"+(rows.length?rows.map(r=>"<li><img src='/icon/"+r[2]+".png?v=5' onerror=\"this.style.visibility='hidden'\">"+esc(r[0])+"<span>"+r[1].toLocaleString(LOC)+"</span></li>").join(""):"<li style='color:var(--mute)'>"+_t("none")+"</li>")+"</ol></div>"}
 function renderPlayer(first){const d=P.cur;if(!d)return;const box=$("#pl-detail");
   if(first||!$("#scene")){box.innerHTML="<div class='card'><div class=pl-head><div><h2 id=pl-name></h2><div class=pl-meta id=pl-meta></div></div><div class=pos id=pl-pos></div></div>"+
     "<div class=pl-top><div class=viewer id=viewer><div class=shadow></div><div class=scene id=scene></div><div class=hint>"+_t("drag to rotate")+"</div></div><div class=vitals id=pl-vitals></div></div></div>"+
