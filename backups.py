@@ -1,6 +1,6 @@
-"""Gestione backup del mondo Minecraft (solo libreria standard, Windows e Linux).
+"""Minecraft world backups (standard library only, Windows and Linux).
 
-Usato da panel.py. Un'operazione alla volta (backup / ripristino / eliminazione).
+Used by panel.py. One operation at a time (backup / restore / delete).
 """
 import ctypes
 import json
@@ -11,7 +11,7 @@ import time
 import zipfile
 from datetime import datetime, timedelta
 
-from i18n import t as tr   # t e' usato come variabile locale (orari)
+from i18n import t as tr   # t is used as a local variable (times)
 
 if os.name == "nt":
     from ctypes import wintypes
@@ -19,7 +19,7 @@ else:
     wintypes = None
 
 TS_FMT = "%Y-%m-%d_%H-%M-%S"
-OLD_DIRS = ("old-worlds", "mondi-vecchi")   # dove vanno i mondi sostituiti; il secondo e' il nome prima della 1.0, solo letto
+OLD_DIRS = ("old-worlds", "mondi-vecchi")   # where replaced worlds go; the second is the name from before 1.0, only read
 KINDS_KEEP = ("startup", "scheduled", "manual")
 OLD_KINDS = {"avvio": "startup", "programmato": "scheduled", "manuale": "manual"}   # names in state files from before 1.0
 DEFAULT_SCHEDULE = {
@@ -29,14 +29,14 @@ DEFAULT_SCHEDULE = {
     "keep": {"startup": 10, "scheduled": 12, "manual": 0},
 }
 CHUNK = 1024 * 1024
-SPACE_MARGIN = 512 * 1024 * 1024   # resta sempre libero: il server deve poter salvare il mondo anche dopo un backup
+SPACE_MARGIN = 512 * 1024 * 1024   # always left free: the server must still be able to save the world after a backup
 
 
-EXTRA = ("_nether", "_the_end")   # Paper e Spigot tengono Nether ed End accanto al mondo: world_nether, world_the_end
+EXTRA = ("_nether", "_the_end")   # Paper and Spigot keep the Nether and the End next to the world: world_nether, world_the_end
 
 
 class Busy(ValueError):
-    """Un'altra operazione e' in corso: non e' un errore del backup, si riprova al giro dopo."""
+    """Another operation is running: not a backup error, it is retried at the next round."""
 
 
 def _extras(world):
@@ -68,7 +68,7 @@ def _rmfile(p):
         pass
 
 
-# ---------------------------------------------------------------- Cestino
+# ---------------------------------------------------------------- Recycle Bin
 if wintypes:
     class _SHFILEOPSTRUCTW(ctypes.Structure):
         _fields_ = [
@@ -84,7 +84,7 @@ if wintypes:
 
 
 def _recycle_limit(path):
-    """(byte massimi, elimina-subito) del Cestino del disco di path, letti dal registro; None se ignoti."""
+    """(max bytes, delete-right-away) of the Recycle Bin of path's disk, read from the registry; None if unknown."""
     try:
         import winreg
         buf = ctypes.create_unicode_buffer(80)
@@ -105,9 +105,9 @@ def _recycle_limit(path):
 
 
 def _to_recycle_bin(path, size=None):
-    """Sposta path (file o cartella) nel Cestino. Solleva OSError se fallisce.
-    Se il Cestino non puo' contenerlo Windows lo cancellerebbe per sempre senza chiedere (abbiamo
-    NOCONFIRMATION): in quel caso ci si ferma prima e si lascia la scelta a una persona."""
+    """Moves path (file or folder) to the Recycle Bin. Raises OSError if that fails.
+    If the Recycle Bin cannot hold it Windows would delete it for good without asking (we pass
+    NOCONFIRMATION): in that case we stop first and leave the choice to a person."""
     path = os.path.abspath(path)
     lim = _recycle_limit(path)
     if lim is None:
@@ -138,8 +138,8 @@ TRASH_DAYS = 7
 
 
 def _to_trash_dir(path, trash):
-    """Linux: niente Cestino di sistema sui server, si sposta in trash/ (stesso disco del server: istantaneo).
-    shortcut: chi resta in trash/ piu' di TRASH_DAYS giorni viene eliminato, come fa il Cestino di Windows quando e' pieno."""
+    """Linux: servers have no system trash, so it is moved to trash/ (same disk as the server: instant).
+    shortcut: what stays in trash/ more than TRASH_DAYS days is deleted, as the Windows Recycle Bin does when full."""
     os.makedirs(trash, exist_ok=True)
     limit = time.time() - TRASH_DAYS * 86400
     for n in os.listdir(trash):
@@ -151,11 +151,11 @@ def _to_trash_dir(path, trash):
             pass
     dst = os.path.join(trash, "%s_%s" % (datetime.now().strftime(TS_FMT), os.path.basename(path)))
     shutil.move(path, dst)
-    os.utime(dst)   # l'eta' nel cestino conta da adesso, non dalla data del backup
+    os.utime(dst)   # the age in the trash counts from now, not from the backup date
     return dst
 
 
-# ---------------------------------------------------------------- classe
+# ---------------------------------------------------------------- class
 class Backups:
     def __init__(self, server_dir, state_file, on_change=None):
         self.server_dir = os.path.abspath(server_dir)
@@ -165,17 +165,17 @@ class Backups:
         self.old_dir = os.path.join(self.server_dir, OLD_DIRS[0])
         self.world_dir = os.path.join(self.server_dir, "world")
         self._op_lock = threading.Lock()
-        self._mu = threading.RLock()  # stato / busy
+        self._mu = threading.RLock()  # state / busy
         self._busy = None
         self._last_error = None
         self._first_tick = None
         self._sched_thread = None
-        self._retry_at = None         # dopo un backup programmato fallito: non prima di questo istante
+        self._retry_at = None         # after a failed scheduled backup: not before this moment
         self._size_cache = {}
         self._last_notify = 0.0
         self._state = self._load_state()
 
-    # ------------------------------------------------------------ stato
+    # ------------------------------------------------------------ state
     def _load_state(self):
         st = {}
         try:
@@ -218,7 +218,7 @@ class Backups:
                 json.dump(data, f, ensure_ascii=False, indent=1)
             os.replace(tmp, self.state_file)
 
-    # ------------------------------------------------------------ utilità
+    # ------------------------------------------------------------ helpers
     def _notify(self, force=True):
         now = time.time()
         if not force and now - self._last_notify < 0.5:
@@ -280,7 +280,7 @@ class Backups:
             self._size_cache[key] = total
         return total
 
-    # ------------------------------------------------------------ elenco
+    # ------------------------------------------------------------ list
     def list(self):
         out = []
         with self._mu:
@@ -327,7 +327,7 @@ class Backups:
         return out
 
     def check_space(self, need, path=None):
-        """Errore leggibile prima di iniziare, invece di riempire il disco a meta' copia."""
+        """A readable error before starting, instead of filling the disk halfway through the copy."""
         free = shutil.disk_usage(path or self.server_dir).free
         if free < need + SPACE_MARGIN:
             raise ValueError(tr("Not enough disk space: about %s needed, %s free.") % (_mb(need + SPACE_MARGIN), _mb(free)))
@@ -357,7 +357,7 @@ class Backups:
             raise ValueError(tr("Not a zip file: only zips can be downloaded"))
         return self._abs(e)
 
-    # ------------------------------------------------------------ stato pubblico
+    # ------------------------------------------------------------ public state
     def status(self):
         with self._mu:
             busy = dict(self._busy) if self._busy else None
@@ -393,7 +393,7 @@ class Backups:
             self._save_state()
         self._notify()
 
-    # ------------------------------------------------------------ pianificazione
+    # ------------------------------------------------------------ schedule
     @staticmethod
     def _int_in(v, lo, hi, what):
         if isinstance(v, bool) or not isinstance(v, (int, float, str)):
@@ -448,7 +448,7 @@ class Backups:
         self._notify()
         return res
 
-    # ------------------------------------------------------------ creazione
+    # ------------------------------------------------------------ create
     def create(self, kind="manual", server_on=False, rcon=None, note=""):
         prefix = {"manual": "manual", "scheduled": "auto", "auto": "auto", "startup": "world"}.get(kind)
         if prefix is None:
@@ -457,7 +457,7 @@ class Backups:
             raise ValueError(tr("RCON is needed to back up while the server is on"))
         self._begin("backup", {"auto": tr("Scheduled backup"), "world": tr("Backup before the start")}.get(prefix, tr("Manual backup")))
         with self._mu:
-            self._last_error = None   # l'avviso vecchio non vale piu' per questo tentativo
+            self._last_error = None   # the old warning does not apply to this attempt
         tmpdir = part = None
         try:
             os.makedirs(self.backups_dir, exist_ok=True)
@@ -469,7 +469,7 @@ class Backups:
             part = final + ".part"
             srcs = [("world", self.world_dir)] + [("world" + sfx, p) for sfx, p in _extras(self.world_dir)]
             total = sum(self._tree_bytes(p) for _a, p in srcs)
-            # zip al massimo grande quanto il mondo; a server acceso prima c'e' anche la copia temporanea
+            # the zip is at most as big as the world; with the server on there is the temporary copy first
             self.check_space(total * (2 if server_on else 1), self.backups_dir)
             if server_on:
                 tmpdir = os.path.join(self.backups_dir, ".tmp-" + ts)
@@ -484,7 +484,7 @@ class Backups:
                     for arc, p in srcs:
                         done = self._copy_world(p, os.path.join(tmpdir, arc), total, done)
                 finally:
-                    # sempre, anche se save-off sembra fallito (la risposta puo' essersi persa)
+                    # always, even if save-off seems to have failed (the answer may have been lost)
                     err = None
                     for attempt in range(3):
                         try:
@@ -562,13 +562,13 @@ class Backups:
                     shutil.copyfile(s, d)
                     done += os.path.getsize(d)
                 except OSError as ex:
-                    _rmfile(d)   # un backup a cui manca un pezzo non va spacciato per buono
+                    _rmfile(d)   # a backup with a missing piece must not pass for a good one
                     raise OSError(tr("unreadable file: %s (%s)") % (os.path.relpath(s, src), ex))
                 self._progress(0.3 * done / total)
         return done
 
     def _zip_world(self, srcs, part, base, span):
-        """srcs: [(nome nello zip, cartella)]: world, e per Paper world_nether e world_the_end."""
+        """srcs: [(name in the zip, folder)]: world, and for Paper world_nether and world_the_end."""
         total = sum(self._tree_bytes(p) for _a, p in srcs)
         done = 0
         with zipfile.ZipFile(part, "w", zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as zf:
@@ -593,7 +593,7 @@ class Backups:
                 self._progress(base + span * done / total)
         return done
 
-    # ------------------------------------------------------------ eliminazione
+    # ------------------------------------------------------------ delete
     def delete(self, id):
         e = self._find(id)
         if e["pinned"]:
@@ -619,7 +619,7 @@ class Backups:
             self._state["note"].pop(e["id"], None)
             self._save_state()
 
-    # ------------------------------------------------------------ conservazione
+    # ------------------------------------------------------------ retention
     def prune(self):
         if not self._op_lock.acquire(blocking=False):
             return []
@@ -677,7 +677,7 @@ class Backups:
                                           args=(start, now, server_on, rcon), daemon=True)
                     self._sched_thread = th
                     th.start()
-                    return  # la pulizia avverrà a fine backup
+                    return  # cleanup happens when the backup is done
             if not self._op_lock.locked():
                 self.prune()
         except Exception as ex:
@@ -687,7 +687,7 @@ class Backups:
         try:
             self.create("scheduled", server_on=server_on, rcon=rcon if server_on else None)
         except Exception as ex:  # noqa: BLE001
-            # last_error è già salvato da create; non conta come fatto: si riprova tra 15 minuti
+            # last_error is already saved by create; it does not count as done: retried in 15 minutes
             if not isinstance(ex, Busy):
                 with self._mu:
                     self._retry_at = now + 900
@@ -696,7 +696,7 @@ class Backups:
             self._retry_at = None
             self._state["last_scheduled"] = now
             dt, daily = datetime.fromtimestamp(now), self._state["schedule"]["daily_at"]
-            # un backup a intervallo fatto dopo l'orario del giornaliero vale anche come giornaliero
+            # an interval backup made after the daily time also counts as the daily one
             if why == "daily" or (daily and (dt.hour, dt.minute) >= tuple(int(x) for x in daily.split(":"))):
                 self._state["last_daily"] = datetime.fromtimestamp(now).strftime("%Y-%m-%d")
             try:
@@ -709,7 +709,7 @@ class Backups:
         except Exception as ex:
             self._set_error(tr("Cleanup error: %s") % ex)
 
-    # ------------------------------------------------------------ ripristino
+    # ------------------------------------------------------------ restore
     def restore(self, id, server_on):
         if server_on:
             raise ValueError(tr("Stop the server first"))
@@ -748,7 +748,7 @@ class Backups:
                 if old:
                     os.replace(old, self.world_dir)
                 raise
-            # Nether ed End di Paper: si sostituiscono solo quelli che il backup contiene, i vecchi vanno accanto al mondo vecchio
+            # Paper's Nether and End: only those the backup contains are replaced, the old ones go next to the old world
             for sfx in EXTRA:
                 if os.path.isdir(tmp + sfx):
                     if os.path.isdir(self.world_dir + sfx):
@@ -793,7 +793,7 @@ class Backups:
                 prefix = [cands[0]]
             members = []
             for info in zf.infolist():
-                parts = self._split_name(info.filename)  # valida TUTTI i membri
+                parts = self._split_name(info.filename)  # validates ALL the members
                 if parts[:len(prefix)] == prefix and len(parts) > len(prefix):
                     members.append((info, parts[len(prefix):]))
             total = max(sum(i.file_size for i, _ in members), 1)

@@ -1,4 +1,4 @@
-"""Registro del pannello (panel.log) reso leggibile: categoria, utente, testo e dettagli per ogni riga."""
+"""The panel's activity log (panel.log) made readable: category, user, text and details for every line."""
 import os
 import re
 from datetime import datetime
@@ -10,7 +10,7 @@ CATS = ("server", "login", "console", "settings", "players", "backup", "map", "s
 _TS = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)  (.*)$")
 _WHO = r"(?P<who>[a-z0-9_.-]+(?: \([^)]*\))?)"
 _VERB = {v: k for k, v in VERBS.items()}
-_EMPTY = re.compile(r"^empty for (\d+) minutes$")   # motivo dello spegnimento automatico (panel.py)
+_EMPTY = re.compile(r"^empty for (\d+) minutes$")   # reason of the automatic stop (panel.py)
 
 
 def _reason(r):
@@ -21,7 +21,7 @@ def _reason(r):
 _PLAYER_TXT = {"wl_add": "added %s to the whitelist", "wl_remove": "removed %s from the whitelist", "op": "made %s an operator",
                "deop": "removed %s as operator", "ban": "banned %s", "pardon": "unbanned %s", "kick": "kicked %s"}
 
-# (regex, categoria, livello, testo) - il testo e' una funzione dei gruppi; le frasi sono quelle scritte da log() in panel.py
+# (regex, category, level, text) - text is a function of the groups; the phrases are the ones log() writes in panel.py
 _RULES = [
     (_WHO + r" logged in from (?P<from>.+)$", "login", "info", lambda g: (t("logged in to the panel"), t("from %s") % g["from"])),
     (r"login failed for '(?P<u>.*)' from (?P<from>.+)$", "login", "warn",
@@ -81,11 +81,11 @@ def parse(line):
 
 
 MAX_LINES = 20000
-_CACHE = {}   # path -> (mtime, size, voci): si riclassifica solo quando il file cambia
+_CACHE = {}   # path -> (mtime, size, entries): parsed again only when the file changes
 
 
 def read(path):
-    """Le ultime MAX_LINES voci, la piu' recente per prima; "i" = numero di riga (chiave univoca)."""
+    """The last MAX_LINES entries, newest first; "i" = line number (unique key)."""
     try:
         st = os.stat(path)
     except OSError:
@@ -111,7 +111,7 @@ def read(path):
 
 
 def query(entries, cat=None, user=None, q=None, offset=0, limit=100):
-    """(pagina di voci, totale filtrato, conteggi per categoria con gli altri filtri applicati)."""
+    """(page of entries, filtered total, counts per category with the other filters applied)."""
     cats = set(cat.split(",")) if cat else None
     ql = (q or "").lower().strip()
     counts = dict.fromkeys(CATS, 0)

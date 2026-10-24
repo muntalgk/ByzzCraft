@@ -1,15 +1,15 @@
-"""Ogni frase che panel.py scrive in panel.log deve finire nella categoria giusta del Registro.
-Se cambi un log(...) in panel.py, aggiorna la riga qui: se il test fallisce, il Registro la mostrerebbe come testo grezzo."""
+"""Every phrase panel.py writes to panel.log must land in the right category of the activity log.
+If you change a log(...) in panel.py, update the line here: if this test fails, the Log tab would show it as raw text."""
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # cartella pannello
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # panel folder
 import i18n  # noqa: E402
 import activity as R  # noqa: E402
 from access import VERBS  # noqa: E402
 
 TS = "2026-10-21 17:00:00  "
-# (riga di panel.log, categoria, utente, inizio del testo)
+# (panel.log line, category, user, start of the text)
 CASES = [
     ("admin logged in from admin@example.com", "login", "admin", "logged in"),
     ("login failed for 'admin' from 100.1.2.3", "login", None, "Login failed for «admin»"),
@@ -49,7 +49,7 @@ CASES = [
     ("invalid request /api/x: ValueError", "system", None, "Invalid request"),
     ("map: 3 tiles not updated this round, retrying in 5 minutes", "system", None, "Map:"),
 ]
-# tutte le azioni del tab Accessi, con le frasi prese da accessi.VERBS come fa panel.py
+# every action of the Access tab, with the phrases from access.VERBS as panel.py does
 CASES += [("admin %s Notch" % v, "players", "admin", "") for v in VERBS.values()]
 CASES += [("admin banned Notch (griefing)", "players", "admin", "banned Notch")]
 
@@ -65,12 +65,12 @@ d = R.parse(TS + "admin changed view-distance: 24 -> 32")["detail"]
 assert d == {"key": "view-distance", "old": "24", "new": "32"}, d
 assert R.parse(TS + "admin banned Notch (griefing)")["detail"] == "griefing"
 assert R.parse("riga senza data") is None
-# query: filtri e conteggi
+# query: filters and counts
 es = [R.parse(TS + l) for l, *_ in CASES]
 items, total, counts = R.query(es, cat="players", user="admin")
 assert total == len(VERBS) + 1 and counts["login"] == 4, (total, counts)
 assert R.query(es, q="NOTCH", limit=2)[0][0]["cat"] == "players"
-# in italiano le stesse righe escono tradotte
+# in Italian the same lines come out translated
 i18n.load("it")
 assert R.parse(TS + "admin logged in from x")["text"] == "è entrato nel pannello"
 assert R.parse(TS + "admin opped Notch")["text"] == "ha reso operatore Notch"

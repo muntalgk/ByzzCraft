@@ -1,14 +1,14 @@
-"""ByzzCraft: pannello web self-hosted per un server Minecraft (solo libreria standard di Python, Windows e Linux).
+"""ByzzCraft: self-hosted web panel for a Minecraft server (Python standard library only, Windows and Linux).
 
-Avvio:            python3 panel.py    al primo avvio stampa il link (con un codice) per configurarlo da un altro PC
-Setup da shell:   python3 panel.py setup CARTELLA --admin NOME [--lang it] [--network] [--accept-eula] [--new-server] [--no-java]
-Servizio:         python3 panel.py service       (unit systemd su Linux, avvio automatico su Windows)
-Java:             python3 panel.py java          (scarica la versione chiesta dal jar del server)
-Utenti:           python panel.py adduser NOME [--admin]
-                  python panel.py passwd NOME
-                  python panel.py deluser NOME
+Start:            python3 panel.py    the first time it prints a link (with a code) to set it up from another PC
+Setup from shell: python3 panel.py setup FOLDER --admin NAME [--lang it] [--network] [--accept-eula] [--new-server] [--no-java]
+Service:          python3 panel.py service       (systemd unit on Linux, start at login on Windows)
+Java:             python3 panel.py java          (downloads the version the server jar asks for)
+Users:            python panel.py adduser NAME [--admin]
+                  python panel.py passwd NAME
+                  python panel.py deluser NAME
                   python panel.py users
-Asset:            python panel.py assets [VERSIONE]   (texture e traduzioni scaricate da Mojang)
+Assets:           python panel.py assets [VERSION]   (textures and translations downloaded from Mojang)
 """
 import base64, getpass, hashlib, hmac, html, json, logging, logging.handlers, os, queue, re, secrets, shlex, shutil, socket, struct, subprocess, sys, threading, time, urllib.request
 from collections import deque
@@ -36,30 +36,30 @@ from paths import CACHE, DATA, LOGS, ASSETS as MOJANG  # noqa: E402
 CONFIG_PATH = os.environ.get("PANEL_CONFIG", os.path.join(DATA, "panel-config.json"))
 DEFAULTS = {
     "server_dir": os.path.dirname(HERE),
-    "start_script": "",           # vuoto = il pannello avvia Java da solo; altrimenti uno script nella cartella del server
-    "server_jar": "",             # jar da avviare; vuoto = riconosciuto da solo (Fabric, Paper, vanilla server.jar)
-    "ram": "",                    # RAM del server, es. "6G"; vuoto = automatica (meta' della macchina, da 1 a 4 GB)
-    "java_args": "",              # flag Java in piu', dopo quelli standard
-    "backup_on_start": True,      # backup del mondo prima di ogni avvio (solo senza start_script: uno script fa il suo)
-    "auto_restart": True,         # riavvia il server dopo un crash (al massimo 3 volte in 10 minuti)
+    "start_script": "",           # empty = the panel starts Java itself; otherwise a script in the server folder
+    "server_jar": "",             # jar to start; empty = found by itself (Fabric, Paper, vanilla server.jar)
+    "ram": "",                    # server RAM, e.g. "6G"; empty = automatic (half of the machine, 1 to 4 GB)
+    "java_args": "",              # extra Java flags, after the standard ones
+    "backup_on_start": True,      # world backup before each start (only without start_script: a script does its own)
+    "auto_restart": True,         # restart the server after a crash (at most 3 times in 10 minutes)
     "listen": "127.0.0.1",
     "port": 8765,
-    "auto_stop_minutes": 30,      # spegne il server se resta vuoto per N minuti (0 = mai)
-    "hide_console": True,         # avvio dal pannello senza finestre: log e comandi stanno nella dashboard
+    "auto_stop_minutes": 30,      # stop the server after N minutes with nobody on (0 = never)
+    "hide_console": True,         # start from the panel without windows: log and commands are in the dashboard
     "start_timeout_seconds": 240,
     "title": "ByzzCraft",
-    "lang": "en",                 # lingua dell'interfaccia: en, it
+    "lang": "en",                 # interface language: en, it
     "users_file": "panel-users.json",
     "log_file": "panel.log",
     "mc_address": "",
-    "user_mc": {},                # utente del pannello -> nick Minecraft (faccia nella barra laterale)
-    "update_check": True,         # una volta al giorno chiede a GitHub se c'e' una versione nuova
+    "user_mc": {},                # panel user -> Minecraft name (face in the sidebar)
+    "update_check": True,         # once a day ask GitHub whether there is a new release
 }
-SESSION_SECONDS = 30 * 86400   # 30 giorni dall'ultimo uso: dal telefono non si rifa' il login ogni giorno
+SESSION_SECONDS = 30 * 86400   # 30 days from the last use: no daily login on the phone
 PBKDF2_ROUNDS = 240_000
 MAX_FAILS, FAIL_WINDOW, LOCK_SECONDS = 5, 600, 900
 SAMPLE_SECONDS = 2
-HISTORY_POINTS = 300          # 10 minuti a 2 s
+HISTORY_POINTS = 300          # 10 minutes at 2 s
 LOCKED_KEYS = {"server-port", "enable-rcon", "rcon.port", "rcon.password", "management-server-secret",
                "management-server-tls-keystore-password"}
 SECRET_KEYS = {"rcon.password", "management-server-secret", "management-server-tls-keystore-password"}
@@ -69,7 +69,7 @@ def load_config():
     cfg = dict(DEFAULTS)
     if os.path.exists(CONFIG_PATH):
         cfg.update(json.load(open(CONFIG_PATH, encoding="utf-8")))
-    if os.environ.get("BYZZ_LISTEN"):   # Docker: dentro il container si ascolta su tutte le interfacce
+    if os.environ.get("BYZZ_LISTEN"):   # Docker: inside the container listen on every interface
         cfg["listen"] = os.environ["BYZZ_LISTEN"]
     for k in ("users_file", "log_file"):
         if not os.path.isabs(cfg[k]):
@@ -115,14 +115,14 @@ AUDIT = deque(maxlen=60)
 
 
 LOG_DIR = LOGS
-L = logging.getLogger("byzzcraft")   # log tecnico (logs/byzzcraft.log + stderr/journalctl); log() e' il registro "chi ha fatto cosa"
+L = logging.getLogger("byzzcraft")   # technical log (logs/byzzcraft.log + stderr/journalctl); log() is the "who did what" activity log
 
 
 def setup_logging():
     os.makedirs(LOG_DIR, exist_ok=True)
     fmt = logging.Formatter("%(asctime)s %(levelname)s [%(threadName)s] %(message)s", "%Y-%m-%d %H:%M:%S")
     handlers = [logging.handlers.RotatingFileHandler(os.path.join(LOG_DIR, "byzzcraft.log"), maxBytes=1_000_000, backupCount=5, encoding="utf-8")]
-    if sys.stderr:   # pythonw non ha console
+    if sys.stderr:   # pythonw has no console
         handlers.append(logging.StreamHandler())
     for h in handlers:
         h.setFormatter(fmt)
@@ -131,7 +131,7 @@ def setup_logging():
 
 
 def worker(fn):
-    """Thread di lavoro: se muore lo si legge nel log, con il traceback."""
+    """Worker thread: if it dies, the log says so, with the traceback."""
     def run():
         try:
             fn()
@@ -141,11 +141,11 @@ def worker(fn):
     return run
 
 
-JOBS = {}   # download in corso o falliti: nome -> "running" | messaggio d'errore
+JOBS = {}   # downloads running or failed: name -> "running" | error message
 
 
 def job(name, fn):
-    """Lavoro lungo in background (download di Java, asset); lo stato finisce nei controlli di salute."""
+    """Long background job (Java, assets download); its state shows up in the health checks."""
     if JOBS.get(name) == "running":
         return
 
@@ -173,7 +173,7 @@ def tail(path, n=300):
 
 
 def log(msg):
-    msg = re.sub(r"[\r\n\x00-\x1f]+", " ", str(msg))   # niente righe false nel registro
+    msg = re.sub(r"[\r\n\x00-\x1f]+", " ", str(msg))   # no forged lines in the activity log
     L.info(msg)
     line = "%s  %s" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), msg)
     with LOCK:
@@ -187,8 +187,8 @@ _LOOP_ERR = {}
 
 
 def loop_error(where, e):
-    """Errore di un ciclo di lavoro: nel log tecnico, una volta finche' non cambia. Non nel registro "chi ha fatto cosa",
-    dove si ripeterebbe ogni pochi secondi (es. cartella del server su un disco smontato)."""
+    """Error of a background loop: in the technical log, once until it changes. Not in the "who did what" activity
+    log, where it would repeat every few seconds (e.g. a server folder on an unmounted disk)."""
     msg = "%s: %s" % (type(e).__name__, e)
     if _LOOP_ERR.get(where) != msg:
         _LOOP_ERR[where] = msg
@@ -230,12 +230,12 @@ def hash_pw(pw, salt=None, rounds=PBKDF2_ROUNDS):
     return salt.hex(), hashlib.pbkdf2_hmac("sha256", pw.encode(), salt, rounds).hex(), rounds
 
 
-USER_RE = re.compile(r"^[a-z0-9_.-]{1,32}$")   # stessi caratteri che registro.py riconosce nei log
+USER_RE = re.compile(r"^[a-z0-9_.-]{1,32}$")   # same characters activity.py recognises in the log
 RESERVED = {"panel", "init"}
 
 
 def mc_names():
-    """utente del pannello -> nick Minecraft (faccia nella barra laterale): dal file utenti, poi da user_mc in config."""
+    """panel user -> Minecraft name (face in the sidebar): from the users file, then from user_mc in the config."""
     return {**(CFG.get("user_mc") or {}), **{n: u["mc"] for n, u in load_users().items() if u.get("mc")}}
 
 
@@ -247,7 +247,7 @@ def set_password(users, name, pw):
 def check_pw(user, pw):
     u = load_users().get(user)
     if not u:
-        hash_pw(pw)  # stesso tempo di risposta anche per utenti inesistenti
+        hash_pw(pw)  # same response time for users that do not exist
         return None
     _, h, _ = hash_pw(pw, bytes.fromhex(u["salt"]), u["rounds"])
     return u if hmac.compare_digest(h, u["hash"]) else None
@@ -291,7 +291,7 @@ def write_props(changes, who):
                 done.append((k, v, changes[k]))
                 line = "%s=%s" % (k, changes[k])
         out.append(line)
-    for k in changes:   # chiave assente (server.properties nuovo o incompleto): Minecraft la tiene
+    for k in changes:   # missing key (new or incomplete server.properties): Minecraft keeps it
         if k not in seen:
             done.append((k, "", changes[k]))
             out.append("%s=%s" % (k, changes[k]))
@@ -329,7 +329,7 @@ def _read_varint(sock):
 
 
 def ping(port):
-    """Server List Ping: None se spento, altrimenti (online, max, [nomi])."""
+    """Server List Ping: None if off, otherwise (online, max, [names])."""
     try:
         with socket.create_connection(("127.0.0.1", port), timeout=3) as s:
             host = b"127.0.0.1"
@@ -350,7 +350,7 @@ def ping(port):
 
 
 class Rcon:
-    """Una sola connessione RCON riusata (evita righe 'RCON Client started' a ogni comando)."""
+    """One RCON connection, reused (no 'RCON Client started' line for every command)."""
 
     def __init__(self):
         self.sock = None
@@ -383,9 +383,9 @@ class Rcon:
         return rid, body.decode("utf-8", "replace")
 
     def command_long(self, text):
-        """Come command(), ma per risposte oltre 4096 byte, che il server spezza in piu' pacchetti
-        da 4096 byte mandati di seguito: si continua a leggere finche' un pezzo e' pieno.
-        (Niente pacchetto segnaposto: il server legge un solo pacchetto per volta e lo perderebbe.)"""
+        """Like command(), but for answers over 4096 bytes, which the server splits into several 4096-byte
+        packets sent one after the other: reading goes on while a piece is full.
+        (No placeholder packet: the server reads one packet at a time and would lose it.)"""
         with self.lock:
             for attempt in (1, 2):
                 try:
@@ -399,7 +399,7 @@ class Rcon:
                         try:
                             rid, body = self._recv_raw()
                         except socket.timeout:
-                            if parts:      # risposta lunga esattamente un multiplo di 4096: finita
+                            if parts:      # answer exactly a multiple of 4096 long: done
                                 break
                             raise
                         finally:
@@ -450,7 +450,7 @@ class Rcon:
                             self.sock.settimeout(5)
                     return body
                 except socket.timeout:
-                    self._close()   # niente secondo invio: il comando potrebbe essere ancora in esecuzione
+                    self._close()   # no second send: the command may still be running
                     raise
                 except (OSError, ConnectionError):
                     self._close()
@@ -466,7 +466,7 @@ class Rcon:
 RCON = Rcon()
 
 
-# ---------------------------------------------------------------- tail di latest.log e gc.log
+# ---------------------------------------------------------------- tail of latest.log and gc.log
 class Tailer:
     def __init__(self, path, initial_lines=0):
         self.path = path; self.pos = None; self.rest = b""; self.initial = initial_lines
@@ -476,7 +476,7 @@ class Tailer:
             st = os.stat(self.path)
         except FileNotFoundError:
             if self.pos is not None:
-                self.pos = 0  # file ruotato: il prossimo si legge dall'inizio
+                self.pos = 0  # file rotated: the next one is read from the start
             return []
         if self.pos is None or st.st_size < self.pos:
             first = self.pos is None and self.initial
@@ -514,7 +514,7 @@ def parse_gc(line):
             "total": int(m.group(5)), "ms": float(m.group(6))}
 
 
-# ---------------------------------------------------------------- controllo del server
+# ---------------------------------------------------------------- server control
 class ServerControl:
     def __init__(self):
         self.state = "off"          # off | starting | on | stopping
@@ -524,13 +524,13 @@ class ServerControl:
         self.info = None
         self.restart_pending = False
         self.proc_started = None
-        self.last_pid = None        # PID di java: finche' e' vivo il mondo e' ancora in uso
-        self.props_mtime_on = None  # data di server.properties quando il server e' risultato acceso
-        self.start_error = None     # perche' l'ultimo avvio non e' riuscito (mostrato in dashboard)
-        self.preparing = False      # "starting", ma ancora nel backup prima dell'avvio
-        self.stop_requested = False # spegnimento voluto (pannello, /stop, "Stopping the server" nel log): non e' un crash
+        self.last_pid = None        # java PID: while it is alive the world is still in use
+        self.props_mtime_on = None  # server.properties mtime when the server was found on
+        self.start_error = None     # why the last start failed (shown on the dashboard)
+        self.preparing = False      # "starting", but still in the backup before the start
+        self.stop_requested = False # wanted stop (panel, /stop, "Stopping the server" in the log): not a crash
         self.on_since = 0
-        self.crashes = []           # quando e' crashato negli ultimi 10 minuti
+        self.crashes = []           # when it crashed in the last 10 minutes
 
     def port(self):
         return int(server_props().get("server-port", 25565))
@@ -541,7 +541,7 @@ class ServerControl:
         pending = False
         if self.state == "on" and self.props_mtime_on:
             try:
-                # Minecraft riscrive server.properties all'avvio: conta solo cio' che cambia dopo che e' acceso
+                # Minecraft rewrites server.properties when it starts: only changes after it is on count
                 pending = os.path.getmtime(props_path()) > self.props_mtime_on + 0.5
             except OSError:
                 pass
@@ -570,10 +570,10 @@ class ServerControl:
                         self.state = "off"
                         self.start_error = start_failure(gone, self.proc.returncode if self.proc else None)
                 elif self.state in ("on", "stopping"):
-                    # la porta si chiude prima che java finisca di salvare: resta "stopping" finche' il processo vive
+                    # the port closes before java finishes saving: it stays "stopping" while the process lives
                     self.state = "stopping" if pid_alive(self.last_pid) else "off"
             if self.proc is not None:
-                self.proc.poll()   # raccoglie lo script finito: niente processi zombie
+                self.proc.poll()   # reaps the finished script: no zombie processes
             changed = prev != self.state
             crashed = changed and self.state == "off" and prev in ("on", "stopping") and not self.stop_requested
             if changed and self.state == "on":
@@ -590,7 +590,7 @@ class ServerControl:
             self.restart_pending = False
             ok, _ = self.start("panel (restart)")
             if not ok and backup_busy():
-                self.restart_pending = True   # riprova a fine backup
+                self.restart_pending = True   # retried when the backup is done
 
         return changed
 
@@ -620,13 +620,13 @@ class ServerControl:
         return True, t("Starting: world backup and loading.") if self.preparing else t("Starting.")
 
     def _launch(self, script, jar, java):
-        """Backup del mondo (con il controllo dello spazio) e poi Java. In un thread: la pagina vede l'avanzamento del backup
-        e il tempo massimo di avvio parte dopo il backup."""
+        """World backup (with the disk space check), then Java. In a thread: the page sees the backup progress and the
+        start timeout counts from the end of the backup."""
         if self.preparing:
             try:
                 BACKUPS.world_dir = world_dir()
                 BACKUPS.create("startup")
-            except Exception as e:  # noqa: BLE001  (si parte lo stesso, come faceva lo script)
+            except Exception as e:  # noqa: BLE001  (start anyway, as the start script did)
                 log("panel: backup before start failed (%s)" % e)
                 HUB.publish("notice", {"ok": False, "message": t("World backup before the start failed: %s") % e})
         with LOCK:
@@ -635,14 +635,14 @@ class ServerControl:
                 return
             env = dict(os.environ, NOPAUSE="1", PYTHON=sys.executable, SERVER_JAR=jar or "server.jar")
             if java:
-                env["JAVA"] = java   # gli script d'esempio lo usano; uno script proprio puo' ignorarlo
+                env["JAVA"] = java   # the example scripts use it; a custom script may ignore it
             if script:
                 cmd = ["cmd.exe", "/c", script] if os.name == "nt" else ["sh", script]
             else:
                 cmd = launch_cmd(jar, java)
                 os.makedirs(os.path.join(CFG["server_dir"], "logs"), exist_ok=True)
             os.makedirs(LOG_DIR, exist_ok=True)
-            out = open(START_LOG, "wb")   # solo l'ultimo avvio: e' quello che serve per capire perche' non parte
+            out = open(START_LOG, "wb")   # only the last start: that is what tells why it does not start
             out.write(("--- %s: %s\n" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), " ".join(cmd))).encode())
             out.flush()
             io = dict(cwd=CFG["server_dir"], env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT)
@@ -651,21 +651,21 @@ class ServerControl:
                     flags = subprocess.CREATE_NO_WINDOW if CFG.get("hide_console") else subprocess.CREATE_NEW_CONSOLE
                     self.proc = subprocess.Popen(cmd, creationflags=flags, **io)
                 else:
-                    # sessione propria: il server non si ferma se il pannello viene riavviato
+                    # own session: the server keeps running when the panel restarts
                     self.proc = subprocess.Popen(cmd, start_new_session=True, **io)
-            except OSError as e:   # Java non trovato
+            except OSError as e:   # Java not found
                 out.write(str(e).encode())
                 out.close()
                 self.state = "off"
                 self.start_error = start_failure(True)
                 HUB.publish("status", self.snapshot())
                 return
-            out.close()   # il figlio ha la sua copia
+            out.close()   # the child has its own copy
             self.started_at = time.time()
         HUB.publish("status", self.snapshot())
 
     def on_crash(self):
-        """Spento senza che nessuno l'abbia chiesto: motivo dal crash report, avviso e riavvio automatico."""
+        """Off without anybody asking: reason from the crash report, a notice and the automatic restart."""
         why = crash_reason(self.on_since)
         msg = t("The server crashed: %s") % why if why else t("The server stopped without being asked: see the Console.")
         log("panel: the server crashed (%s)" % (why or "no crash report"))
@@ -679,11 +679,11 @@ class ServerControl:
             self.start_error = msg + (" " + t("Not restarted: it crashed 3 times in 10 minutes.") if CFG.get("auto_restart", True) else "")
 
     def kill(self, who):
-        """Forza arresto: per un server bloccato che non risponde a RCON o non finisce di spegnersi."""
+        """Force stop: for a server that hangs, does not answer RCON or never finishes stopping."""
         with LOCK:
-            # last_pid solo se acceso: durante l'avvio e' quello della volta prima, e il PID potrebbe essere di un altro processo
+            # last_pid only if on: while starting it is the previous run's, and the PID may now belong to another process
             java = self.last_pid if self.state in ("on", "stopping") and pid_alive(self.last_pid) else None
-            child = self.proc.pid if self.proc and self.proc.poll() is None else None   # java, o lo script con il suo java
+            child = self.proc.pid if self.proc and self.proc.poll() is None else None   # java, or the script with its java
             if self.state == "off" or not (java or child):
                 return False, t("The server is not running.")
             self.stop_requested, self.restart_pending = True, False
@@ -696,7 +696,7 @@ class ServerControl:
                     if os.name == "nt":
                         subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, timeout=20)
                     elif group:
-                        os.killpg(pid, 9)   # sessione propria (start_new_session): script e java insieme
+                        os.killpg(pid, 9)   # own session (start_new_session): script and java together
                     else:
                         os.kill(pid, 9)
                 except (OSError, subprocess.SubprocessError) as e:
@@ -710,7 +710,7 @@ class ServerControl:
             if self.state != "on":
                 return False, t("The server is not on.")
             busy = BACKUPS.status()["busy"]
-            if busy and busy["op"] == "backup":   # lo spegnimento a meta' copia darebbe un backup incoerente
+            if busy and busy["op"] == "backup":   # stopping halfway through the copy would give an inconsistent backup
                 return False, t("Wait a few seconds: backup in progress.")
             self.state = "stopping"
             self.restart_pending, self.stop_requested = restart, True
@@ -727,7 +727,7 @@ class ServerControl:
 
 
 START_LOG = os.path.join(LOG_DIR, "server-start.log")
-# Aikar's flags (https://docs.papermc.io/paper/aikars-flags): G1 tarato per i server Minecraft
+# Aikar's flags (https://docs.papermc.io/paper/aikars-flags): G1 tuned for Minecraft servers
 AIKAR = ("-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC "
          "-XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 "
          "-XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 "
@@ -737,8 +737,8 @@ RAM_RE = re.compile(r"^(\d{3,6})M$|^(\d{1,3})G$")
 
 
 def auto_ram():
-    """Meta' della RAM della macchina, da 1 a 4 GB, e non oltre l'80% di quella libera adesso: con -Xms = -Xmx e
-    AlwaysPreTouch Java la occupa tutta subito, e se non c'e' il sistema uccide il server mentre parte."""
+    """Half of the machine's RAM, 1 to 4 GB, and never above 80% of what is free now: with -Xms = -Xmx and
+    AlwaysPreTouch Java takes all of it at once, and if it is not there the system kills the server while starting."""
     free, total = system_memory()
     return "%dM" % max(1024, min(4096, int(total / 2), int(free * 0.8)))
 
@@ -749,11 +749,11 @@ def ram_mb(ram):
 
 
 def launch_cmd(jar, java):
-    """Riga di comando di Java quando non c'e' uno script di avvio. gc.log serve al grafico della memoria."""
+    """Java command line when there is no start script. gc.log feeds the heap chart."""
     ram = CFG.get("ram") or auto_ram()
     return ([java or "java", "-Xms" + ram, "-Xmx" + ram] + AIKAR + ["-Xlog:gc:file=logs/gc.log:time,uptime:filecount=3,filesize=10M"]
             + shlex.split(CFG.get("java_args") or "", posix=os.name != "nt") + ["-jar", jar, "nogui"])
-START_HINTS = (   # (testo nell'output dello script, spiegazione per l'utente)
+START_HINTS = (   # (text in the start output, explanation for the user)
     (r"java: (command )?not found|'java' is not recognized|java.exe.*(not found|cannot find)|No such file or directory.*java|WinError 2\]",
      "Java is not installed: download it from the Dashboard checks."),
     (r"UnsupportedClassVersionError|has been compiled by a more recent version", "Java is too old for this Minecraft version: download the right one from the Dashboard checks."),
@@ -765,7 +765,7 @@ START_HINTS = (   # (testo nell'output dello script, spiegazione per l'utente)
 
 
 def crash_reason(since):
-    """'Description:' del crash report piu' recente, se e' stato scritto dopo l'accensione."""
+    """'Description:' of the newest crash report, if it was written after the server came on."""
     d = os.path.join(CFG["server_dir"], "crash-reports")
     try:
         f = max((os.path.join(d, n) for n in os.listdir(d) if n.endswith(".txt")), key=os.path.getmtime)
@@ -778,11 +778,11 @@ def crash_reason(since):
 
 
 def start_failure(exited, code=None):
-    """Il server non e' partito: motivo leggibile dall'output dello script, nel log, in console e in un avviso."""
+    """The server did not start: a readable reason from the start output, in the log, the console and a notice."""
     lines = [x for x in tail(START_LOG, 40) if x.strip()]
     text = "\n".join(lines)
     hint = next((h for rx, h in START_HINTS if re.search(rx, text, re.I)), None)
-    if not hint and code in (-9, 137):   # SIGKILL senza un messaggio: quasi sempre il kernel per memoria esaurita
+    if not hint and code in (-9, 137):   # SIGKILL without a message: almost always the kernel, out of memory
         hint = "The system killed the server, probably out of memory: lower RAM in the start script."
     msg = t(hint) if hint else (t("The server stopped while starting: see logs/server-start.log.") if exited
                                 else t("The server did not answer in time: see logs/server-start.log."))
@@ -858,10 +858,10 @@ def sampler():
 
 
 TLINE = TL.Timeline(CFG["server_dir"], CACHE, CFG["log_file"])
-MAP_SEM = threading.BoundedSemaphore(2)     # massimo 2 tile generate insieme: non rubare CPU al server
+MAP_SEM = threading.BoundedSemaphore(2)     # at most 2 tiles rendered at once: do not steal CPU from the server
 MARKERS_FILE = os.path.join(DATA, "markers.json")
-WORLD_BUSY = threading.Event()              # ripristino in corso: niente letture del mondo (mappa)
-OP_PENDING = threading.Event()              # backup/ripristino chiesto dal web, thread non ancora partito: niente avvii
+WORLD_BUSY = threading.Event()              # restore running: no reads of the world (map)
+OP_PENDING = threading.Event()              # backup/restore asked from the web, thread not started yet: no starts
 BACKUPS = BK.Backups(CFG["server_dir"], os.path.join(CACHE, "backups-state.json"),
                      on_change=lambda: HUB.publish("backups", BACKUPS.status(), admin_only=True))
 
@@ -870,9 +870,9 @@ WORLD = {}
 
 
 def world_watcher():
-    """Ora del giorno, fase lunare e meteo, via RCON e solo a server acceso. 26.x: le ore sono la timeline
-    minecraft:day ("is at N ticks"), la luna la timeline minecraft:moon. Fino alla 1.21: "time query daytime"
-    da' i tick del giorno e "time query day" i giorni passati ("The time is N")."""
+    """Time of day, moon phase and weather, over RCON and only with the server on. 26.x: the hours are the
+    minecraft:day timeline ("is at N ticks"), the moon the minecraft:moon timeline. Up to 1.21: "time query daytime"
+    gives the ticks of the day and "time query day" the days passed ("The time is N")."""
     global WORLD
     num = lambda out: int(re.search(r"(?:is at|time is) (\d+)", out).group(1))  # noqa: E731
     while True:
@@ -886,20 +886,20 @@ def world_watcher():
                 rain = "passed" in RCON.command('execute if predicate {type:"minecraft:weather_check",raining:true}')
                 thunder = rain and "passed" in RCON.command('execute if predicate {type:"minecraft:weather_check",thundering:true}')
                 info = SRV.info
-                # col server vuoto il mondo e' in pausa (pause-when-empty-seconds): l'ora non avanza
+                # with nobody on the world is paused (pause-when-empty-seconds): time does not move
                 WORLD = {"day": day % 24000, "moon": (moon // 24000) % 8, "rain": rain, "thunder": thunder,
                          "t": int(time.time() * 1000), "running": bool(info and info[0] > 0)}
                 HUB.publish("world", WORLD)
             elif WORLD:
                 WORLD = {}
                 HUB.publish("world", WORLD)
-        except Exception:  # noqa: BLE001  (RCON non pronto, risposta inattesa: si riprova al giro dopo)
+        except Exception:  # noqa: BLE001  (RCON not ready, unexpected answer: retried next round)
             pass
         time.sleep(15)
 
 
 def access_action(who, action, name, reason):
-    """Whitelist / op / ban / kick. Ritorna (ok, messaggio)."""
+    """Whitelist / op / ban / kick. Returns (ok, message)."""
     st = SRV.state
     if st in ("starting", "stopping") or (st == "off" and pid_alive(SRV.last_pid)):
         return False, t("The server is starting or stopping: try again shortly.")
@@ -908,7 +908,7 @@ def access_action(who, action, name, reason):
             out = re.sub(r"§.", "", RCON.command(AC.command(action, name, reason))).strip()
         except Exception as e:  # noqa: BLE001
             return False, t("RCON unavailable: %s") % e
-        # risposte del server in inglese: "Added X to the whitelist", "Made X a server operator", ...
+        # the server answers in English: "Added X to the whitelist", "Made X a server operator", ...
         if not re.match(r"^(Added|Removed|Made|Banned|Unbanned|Kicked)\b", out):
             for rx, it in ((r"isn't banned|not banned", "%s is not banned"), (r"not an operator", "%s is not an operator"),
                            (r"already an operator", "%s is already an operator"), (r"already whitelisted", "%s is already whitelisted"),
@@ -921,7 +921,7 @@ def access_action(who, action, name, reason):
     else:
         try:
             prof = AC.resolve(CFG["server_dir"], action, name, known={p["uuid"]: p["name"] for p in roster()})
-            with LOCK:   # start() prende lo stesso LOCK: il server non puo' partire mentre scriviamo i file
+            with LOCK:   # start() takes the same LOCK: the server cannot start while we write the files
                 if SRV.state != "off" or pid_alive(SRV.last_pid):
                     return False, t("The server has just started: try again, the change now goes through the server.")
                 msg = AC.apply_offline(CFG["server_dir"], action, name, reason, who, profile=prof) + "."
@@ -939,12 +939,12 @@ def backup_busy():
 
 
 def backup_rcon(cmd):
-    # save-all flush scrive tutto il mondo su disco: puo' metterci ben piu' dei 5 s normali
+    # save-all flush writes the whole world to disk: it can take far more than the usual 5 s
     return RCON.command(cmd, timeout=180 if cmd.startswith("save-all") else 15)
 
 
 def backup_scheduler():
-    """Backup programmati e pulizia dei vecchi (le regole stanno in cache/backups-state.json)."""
+    """Scheduled backups and cleanup of old ones (the rules are in cache/backups-state.json)."""
     time.sleep(30)
     while True:
         st = SRV.state
@@ -956,8 +956,8 @@ def backup_scheduler():
 
 
 def backup_job(who, what, fn, done_msg, fail_msg):
-    """Le operazioni lunghe girano in un thread: l'esito arriva alla pagina come evento.
-    Chi chiama ha gia' impostato OP_PENDING (sotto LOCK, insieme ai controlli sullo stato del server)."""
+    """Long operations run in a thread: the result reaches the page as an event.
+    The caller has already set OP_PENDING (under LOCK, together with the server state checks)."""
     def run():
         try:
             r = fn()
@@ -975,10 +975,10 @@ def backup_job(who, what, fn, done_msg, fail_msg):
 def do_restore(bid):
     WORLD_BUSY.set()
     try:
-        with MAP_SEM, MAP_SEM:   # aspetta che nessuna tile stia leggendo il mondo
+        with MAP_SEM, MAP_SEM:   # wait until no tile is reading the world
             pass
         r = BACKUPS.restore(bid, server_on=SRV.state != "off" or pid_alive(SRV.last_pid))
-        shutil.rmtree(os.path.join(CACHE, "map"), ignore_errors=True)   # tile del mondo vecchio
+        shutil.rmtree(os.path.join(CACHE, "map"), ignore_errors=True)   # tiles of the old world
         return r
     finally:
         WORLD_BUSY.clear()
@@ -998,7 +998,7 @@ def save_markers(m):
 
 
 def map_warmer():
-    """Tiene aggiornata la cache delle tile, una alla volta e con calma (la mappa resta veloce da aprire)."""
+    """Keeps the tile cache up to date, one at a time and slowly (so the map opens fast)."""
     time.sleep(20)
     while True:
         errors = 0
@@ -1010,7 +1010,7 @@ def map_warmer():
             for rx, rz, _mt in regions:
                 if WORLD_BUSY.is_set():
                     break
-                try:   # un errore su una tile (es. PNG aperto da una richiesta) non ferma le altre
+                try:   # an error on one tile (e.g. PNG open by a request) does not stop the others
                     with MAP_SEM:
                         if not WORLD_BUSY.is_set():
                             mapgen.get_tile(world_dir(), os.path.join(CACHE, "map"), dim, rx, rz)
@@ -1030,13 +1030,13 @@ def publish_timeline(evs):
 def tailers():
     logs = Tailer(os.path.join(CFG["server_dir"], "logs", "latest.log"), initial_lines=200)
     gc = Tailer(os.path.join(CFG["server_dir"], "logs", "gc.log"), initial_lines=400)
-    tl_ready = False   # la prima refresh() restituisce tutto lo storico: non va spedito come "nuovo"
+    tl_ready = False   # the first refresh() returns the whole history: it must not be sent as "new"
     last_tl = 0
     while True:
         try:
             lines = logs.read()
-            if tl_ready and any("Stopping the server" in l or "Stopping server" in l for l in lines):   # non le righe vecchie lette all'avvio
-                SRV.stop_requested = True   # /stop dal gioco o dalla console: non e' un crash
+            if tl_ready and any("Stopping the server" in l or "Stopping server" in l for l in lines):   # not the old lines read at start-up
+                SRV.stop_requested = True   # /stop from the game or the console: not a crash
             console_push(lines)
             if lines or time.time() - last_tl > 5:
                 last_tl = time.time()
@@ -1054,8 +1054,8 @@ def tailers():
         time.sleep(0.5)
 
 
-# ---------------------------------------------------------------- giocatori
-LIVE = {}            # uuid -> {"t": epoch, "data": dati normalizzati letti via RCON}
+# ---------------------------------------------------------------- players
+LIVE = {}            # uuid -> {"t": epoch, "data": normalised data read over RCON}
 ROSTER_SENT = None
 DATA_SENT = {}
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
@@ -1066,7 +1066,7 @@ def world_dir():
 
 
 def known_players():
-    """uuid -> nome, da usercache.json + file dei giocatori nel mondo."""
+    """uuid -> name, from usercache.json + the player files in the world."""
     names = {}
     try:
         for e in json.load(open(os.path.join(CFG["server_dir"], "usercache.json"), encoding="utf-8")):
@@ -1092,7 +1092,7 @@ def hardcore_world():
 
 
 def player_data(uuid, name):
-    """Dati live se online (aggiornati via RCON), altrimenti l'ultimo salvataggio su disco."""
+    """Live data if online (refreshed over RCON), otherwise the last save on disk."""
     live = LIVE.get(uuid)
     if name in online_names() and live and time.time() - live["t"] < 15:
         return {"live": True, "saved": live["t"], **live["data"]}
@@ -1135,13 +1135,13 @@ def player_watcher():
                     data = PL.normalize(PL.snbt(out.split("entity data:", 1)[1].strip()))
                     LIVE[uuid] = {"t": time.time(), "data": data}
                     payload = {"uuid": uuid, "name": name, "online": True, "live": True, "saved": time.time(), **data}
-                    key = json.dumps({k: v for k, v in data.items() if k not in ("pos", "yaw")}, sort_keys=True)  # la posizione viaggia in "positions"
+                    key = json.dumps({k: v for k, v in data.items() if k not in ("pos", "yaw")}, sort_keys=True)  # the position travels in "positions"
                     if DATA_SENT.get(uuid) != key:
                         DATA_SENT[uuid] = key
                         HUB.publish("player", payload)
-                except Exception:  # noqa: BLE001 - un errore su un giocatore non ferma gli altri
+                except Exception:  # noqa: BLE001 - an error on one player does not stop the others
                     pass
-            for name in was_online - on:  # appena uscito: il server salva il file, lo rileggo
+            for name in was_online - on:  # just left: the server saves the file, read it again
                 uuid = by_name.get(name.lower())
                 if uuid:
                     LIVE.pop(uuid, None); time.sleep(1.5)
@@ -1162,8 +1162,8 @@ def player_watcher():
         time.sleep(3)
 
 
-# ---------------------------------------------------------------- sessioni / limiti tentativi
-SESSIONS = {}        # sha256(token) -> sessione; su disco solo l'hash, mai il token
+# ---------------------------------------------------------------- sessions / login limits
+SESSIONS = {}        # sha256(token) -> session; only the hash on disk, never the token
 SESS_FILE = os.path.join(CACHE, "sessions.json")
 
 
@@ -1188,7 +1188,7 @@ def save_sessions():
 
 
 def drop_sessions(user, keep=None):
-    """Chiude le sessioni di un utente (password cambiata, utente eliminato), tranne keep."""
+    """Closes a user's sessions (password changed, user deleted), except keep."""
     for k in [k for k, v in list(SESSIONS.items()) if v["user"] == user and k != keep]:
         SESSIONS.pop(k, None)
     save_sessions()
@@ -1206,7 +1206,7 @@ LOCKED = {}
 def client_id(handler):
     ip = handler.client_address[0]
     if ip not in LOOPBACK:
-        return ip   # header di proxy validi solo da un proxy locale (tailscale serve, nginx): altrimenti falsificabili
+        return ip   # proxy headers count only from a local proxy (tailscale serve, nginx): otherwise they could be forged
     return handler.headers.get("Tailscale-User-Login") or handler.headers.get("X-Forwarded-For") or ip
 
 
@@ -1215,7 +1215,7 @@ PROXY_HEADERS = ("X-Forwarded-For", "X-Real-IP", "Forwarded", "X-Forwarded-Host"
 
 
 def is_local(handler):
-    """Browser aperto su questa macchina. Tailscale Serve e nginx arrivano anche loro da 127.0.0.1, ma con i loro header."""
+    """Browser open on this machine. Tailscale Serve and nginx also come from 127.0.0.1, but with their headers."""
     return handler.client_address[0] in LOOPBACK and not any(handler.headers.get(h) for h in PROXY_HEADERS)
 
 
@@ -1233,7 +1233,7 @@ def note_fail(keys):
             LOCKED[k] = now + LOCK_SECONDS; FAILS[k] = []
 
 
-# ---------------------------------------------------------------- pagine
+# ---------------------------------------------------------------- pages
 LOGIN_CSS = """
 :root{--bg:#0f1115;--card:#171a20;--line:#272b33;--text:#f0efec;--mute:#9a9ea6;--accent:#3fb950}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(1200px 600px at 50% -10%,#1d2a1f 0,var(--bg) 60%);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
@@ -1253,8 +1253,8 @@ button{width:100%;padding:13px;border:0;border-radius:10px;font-size:16px;font-w
 
 with open(os.path.join(HERE, "assets", "logo.svg"), encoding="utf-8") as _f:
     LOGO_SVG = _f.read().strip()
-# PNG e non SVG: Safari (anche sulla schermata Home dell'iPhone) non usa le icone SVG
-# manifest e meta: dalla schermata Home del telefono si apre come un'app, senza la barra del browser
+# PNG, not SVG: Safari (also on the iPhone Home screen) does not use SVG icons
+# manifest and meta: from the phone's Home screen it opens like an app, without the browser bar
 LOGO_ICON = ("<link rel=icon type=image/png href=/favicon.ico><link rel=apple-touch-icon href=/apple-touch-icon.png>"
              "<link rel=manifest href=/manifest.webmanifest><meta name=theme-color content='#0d0f13'>"
              "<meta name=apple-mobile-web-app-capable content=yes><meta name=mobile-web-app-capable content=yes>")
@@ -1289,7 +1289,7 @@ SETUP_TOKEN_FILE = os.path.join(CACHE, "setup-token")
 
 
 def setup_token():
-    """Codice per configurare da un altro PC: uguale tra un riavvio e l'altro, cancellato a setup fatto."""
+    """Code to set up from another PC: the same across restarts, deleted once the setup is done."""
     try:
         with open(SETUP_TOKEN_FILE, encoding="utf-8") as f:
             return f.read().strip()
@@ -1302,7 +1302,7 @@ def setup_token():
 
 
 def setup_allowed(handler, token):
-    """Setup dal browser di questa macchina, oppure da remoto con il codice stampato all'avvio."""
+    """Setup from the browser of this machine, or remotely with the code printed at start-up."""
     if is_local(handler):
         return True
     keys = ["c:" + client_id(handler)]
@@ -1317,7 +1317,7 @@ def setup_allowed(handler, token):
 def lan_ip():
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as so:
-            so.connect(("8.8.8.8", 80))   # UDP senza inviare nulla: serve solo a sapere quale interfaccia esce
+            so.connect(("8.8.8.8", 80))   # UDP, nothing is sent: only to learn which interface goes out
             return so.getsockname()[0]
     except OSError:
         return "SERVER-IP"
@@ -1366,7 +1366,7 @@ def setup_remote_page():
 
 
 def save_config(changes):
-    """Aggiorna panel-config.json (le chiavi che non tocca restano) e la config in memoria."""
+    """Updates panel-config.json (keys it does not touch stay) and the config in memory."""
     cfg = {}
     if os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH, encoding="utf-8") as fh:
@@ -1391,7 +1391,7 @@ PANEL_KEYS = ("ram", "java_args", "backup_on_start", "auto_stop_minutes", "mc_ad
 
 
 def save_panel_settings(data, who):
-    """Impostazioni del pannello dalla pagina Impostazioni. ValueError con il messaggio da mostrare."""
+    """Panel settings from the Settings page. ValueError with the message to show."""
     ram = str(data.get("ram", "")).strip().upper()
     if ram and not RAM_RE.match(ram):
         raise ValueError(t("RAM: write it like 4G or 3072M, or leave it empty for automatic."))
@@ -1401,7 +1401,7 @@ def save_panel_settings(data, who):
     if len(args) > 500 or "\n" in args or "\r" in args or re.search(r"(^|\s)-(jar|Xmx|Xms)", args):
         raise ValueError(t("Java flags: one line, without -jar, -Xms or -Xmx (RAM has its own field)."))
     try:
-        shlex.split(args)   # anche su Windows: qui conta solo trovare le virgolette non chiuse
+        shlex.split(args)   # on Windows too: here it only has to find unclosed quotes
     except ValueError:
         raise ValueError(t("Java flags: a quote is not closed."))
     try:
@@ -1423,7 +1423,7 @@ def save_panel_settings(data, who):
 
 
 def do_setup(f):
-    """Prima configurazione, dalla pagina web o da `panel.py setup`. Ritorna l'errore da mostrare, o None."""
+    """First setup, from the web page or `panel.py setup`. Returns the error to show, or None."""
     sd = os.path.abspath(os.path.expanduser(f.get("server_dir", "").strip().strip('"')))
     name, pw = f.get("user", "").strip().lower(), f.get("password", "")
     if not USER_RE.match(name) or name in RESERVED:
@@ -1440,7 +1440,7 @@ def do_setup(f):
             return t("Could not download the Minecraft server: %s") % e
     cfg = save_config({"server_dir": sd, "port": CFG["port"], "lang": f.get("lang") if f.get("lang") in ("en", "it") else "en",
                        "listen": "0.0.0.0" if f.get("network") == "1" else "127.0.0.1", "java_auto": f.get("java") == "1"})
-    i18n.load(cfg["lang"])   # la prima pagina la serve ancora questo processo, prima del riavvio
+    i18n.load(cfg["lang"])   # this process still serves the first page, before the restart
     prepare_server(sd, f.get("eula") == "1")
     users = {}
     set_password(users, name, pw)
@@ -1456,8 +1456,8 @@ def do_setup(f):
 
 
 def port_free(port):
-    """Nessuno risponde su 127.0.0.1 e la porta si prende su tutte le interfacce. Il solo bind non basta su Windows:
-    un programma in ascolto su 127.0.0.1 senza SO_EXCLUSIVEADDRUSE non blocca un bind su 0.0.0.0."""
+    """Nobody answers on 127.0.0.1 and the port can be taken on every interface. A bind alone is not enough on
+    Windows: a program listening on 127.0.0.1 without SO_EXCLUSIVEADDRUSE does not block a bind on 0.0.0.0."""
     try:
         socket.create_connection(("127.0.0.1", port), timeout=0.5).close()
         return False
@@ -1476,13 +1476,13 @@ def free_port(start):
 
 
 def prepare_server(sd, accept_eula):
-    """Cartella del server pronta per il pannello: RCON attivo, EULA se accettata, script di avvio d'esempio."""
+    """Server folder ready for the panel: RCON on, EULA if accepted, example start script if configured."""
     props = os.path.join(sd, "server.properties")
     if not os.path.exists(props):
-        open(props, "w").close()   # server mai avviato: Minecraft completa il file al primo avvio
+        open(props, "w").close()   # server never started: Minecraft fills in the file at its first start
     p = server_props()
     ch = {}
-    if "server-port" not in p and not port_free(25565):   # server nuovo su una macchina che ne ha gia' uno acceso
+    if "server-port" not in p and not port_free(25565):   # new server on a machine that already runs one
         ch["server-port"] = str(free_port(25566))
     if p.get("enable-rcon") != "true" or not p.get("rcon.password"):
         ch.update({"enable-rcon": "true", "rcon.port": p.get("rcon.port") or str(free_port(25575)),
@@ -1493,7 +1493,7 @@ def prepare_server(sd, accept_eula):
     if accept_eula and "eula=true" not in (open(eula, encoding="utf-8").read() if os.path.exists(eula) else ""):
         with open(eula, "w", encoding="utf-8") as f:
             f.write("# accepted in the ByzzCraft setup (https://aka.ms/MinecraftEULA)\neula=true\n")
-    if CFG.get("start_script"):   # il pannello avvia Java da solo: lo script serve solo se configurato
+    if CFG.get("start_script"):   # the panel starts Java itself: the script is needed only if configured
         script = os.path.join(sd, CFG["start_script"])
         example = os.path.join(HERE, "examples", CFG["start_script"])
         if not os.path.exists(script) and os.path.exists(example):
@@ -1501,13 +1501,13 @@ def prepare_server(sd, accept_eula):
 
 
 def restart_soon():
-    """Dopo il primo avvio si riparte con la nuova config (cartella del server, lingua, thread di lavoro)."""
+    """After the first setup, start again with the new config (server folder, language, worker threads)."""
     time.sleep(1)
     os.environ["BYZZ_RESTART"] = "1"
     if os.name == "nt":
-        subprocess.Popen([sys.executable] + sys.argv, cwd=os.getcwd())   # il nuovo processo riprova la porta finche' questo esce
+        subprocess.Popen([sys.executable] + sys.argv, cwd=os.getcwd())   # the new process retries the port until this one exits
         os._exit(0)
-    os.execv(sys.executable, [sys.executable] + sys.argv)   # stesso PID: systemd non se ne accorge
+    os.execv(sys.executable, [sys.executable] + sys.argv)   # same PID: systemd does not notice
 
 
 def download_assets():
@@ -1538,7 +1538,7 @@ SERVICE_HINT = ('"%s" panel.py service' % sys.executable if os.name == "nt" else
 
 
 def service():
-    """Linux: stampa l'unit systemd (da passare a sudo tee). Windows: avvio automatico all'accesso, senza admin."""
+    """Linux: prints the systemd unit (to pipe into sudo tee). Windows: start at login, no admin needed."""
     panel = os.path.join(HERE, "panel.py")
     if os.name == "nt":
         pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
@@ -1567,9 +1567,9 @@ WantedBy=multi-user.target
 
 
 def health():
-    """Cosa manca per far partire il server, con la soluzione (pulsante `fix` o comando)."""
+    """What is missing to start the server, with the fix (a `fix` button or a command)."""
     sd = CFG["server_dir"]
-    if not os.path.isdir(sd):   # disco smontato, cartella spostata: gli altri controlli non avrebbero senso
+    if not os.path.isdir(sd):   # unmounted disk, moved folder: the other checks would make no sense
         return [{"id": "server_dir", "text": t("Server folder %s not found: is the disk mounted? Otherwise change server_dir in panel-config.json.") % sd,
                  "fix": None, "cmd": None}]
     p = server_props()
@@ -1581,7 +1581,7 @@ def health():
     script = CFG.get("start_script") and os.path.join(sd, CFG["start_script"])
     checks = [
         ("server", bool(jar), t("No Minecraft server (.jar) in %s.") % sd, None),
-        # uno script proprio sceglie il suo Java (es. quello del launcher): si controlla solo con gli script d'esempio
+        # a custom script picks its own Java (e.g. the launcher's): checked only for the built-in start and the examples
         ("java", bool(java) or not need or CFG.get("start_script") not in ("", "start.sh", "start.bat"),
          t("Java %s is not installed (found: %s).") % (need, found or t("none")), "java"),
         ("eula", eula, t("The Minecraft EULA is not accepted yet: the server will not start."), "eula"),
@@ -1589,13 +1589,13 @@ def health():
         ("script", not script or os.path.exists(script), t("Start script %s not found.") % script,
          "script" if script and os.path.exists(os.path.join(HERE, "examples", CFG["start_script"])) else None),
         ("assets", AS.present(), t("Map textures and item icons are not downloaded yet."), "assets"),
-        # systemd imposta INVOCATION_ID; su Windows pythonw (senza console) vuol dire avvio automatico, non da terminale
+        # systemd sets INVOCATION_ID; on Windows pythonw (no console) means started at login, not from a terminal
         ("service", bool(os.environ.get("INVOCATION_ID")) or os.path.exists("/.dockerenv") or os.name == "nt" and (os.path.exists(STARTUP_CMD) or not sys.stdout),
          t("The panel does not start by itself after a reboot."), None),
     ]
     sizes = [e["size"] for e in BACKUPS.list() if e.get("folder") == "backups"]
     free = shutil.disk_usage(sd).free
-    if sizes and free < max(1073741824, 3 * max(sizes)):   # meno di tre backup grandi come il piu' grande
+    if sizes and free < max(1073741824, 3 * max(sizes)):   # less than three backups as big as the biggest one
         checks.append(("disk", False, t("Little disk space left: %s free, the biggest backup is %s. Delete old backups or lower how many to keep.")
                        % (BK._mb(free), BK._mb(max(sizes))), None))
     if UPDATE.get("newer"):
@@ -1611,7 +1611,7 @@ def health():
     return out
 
 
-UPDATE = {}   # ultima versione pubblicata su GitHub: {"latest": "0.2.0", "newer": True}
+UPDATE = {}   # latest release on GitHub: {"latest": "1.1.0", "newer": True}
 UPDATE_HINT = (("cd %s && git pull && " % HERE + ("sudo systemctl restart byzzcraft" if os.environ.get("INVOCATION_ID") else "restart the panel"))
                if os.path.isdir(os.path.join(HERE, ".git")) else "https://github.com/%s/releases/latest" % REPO)
 
@@ -1621,7 +1621,7 @@ def _vtuple(v):
 
 
 def update_checker():
-    """Una volta al giorno: c'e' una release piu' nuova su GitHub? Solo una richiesta GET, nessun dato inviato."""
+    """Once a day: is there a newer release on GitHub? One GET request, no data sent."""
     time.sleep(60)
     while True:
         if CFG.get("update_check", True):
@@ -1634,7 +1634,7 @@ def update_checker():
                 if UPDATE["newer"]:
                     L.info("ByzzCraft %s is available (running %s)", tag, VERSION)
                     HUB.publish("health", {})
-            except Exception as e:  # noqa: BLE001  (offline, nessuna release ancora: si riprova domani)
+            except Exception as e:  # noqa: BLE001  (offline, no release yet: retried tomorrow)
                 L.info("update check: %s", e)
         time.sleep(86400)
 
@@ -1665,14 +1665,14 @@ def app_page(sess):
             "version": VERSION, "latest": UPDATE.get("latest") if UPDATE.get("newer") else None, "repo": REPO}
     tpl = tpl.replace("{{TITLE}}", html.escape(CFG["title"])).replace("{{LANG}}", i18n.LANG)
     tpl = tpl.replace("{{LOGO}}", LOGO_SVG).replace("{{ICON}}", LOGO_ICON)
-    # {{testo}} nell'HTML statico: tradotto qui; nel JavaScript si usa t("testo")
+    # {{text}} in the static HTML: translated here; JavaScript uses _t("text")
     tpl = re.sub(r"\{\{([^{}]+)\}\}", lambda m: m.group(0) if m.group(1) == "BOOT" else html.escape(t(m.group(1))), tpl)
     return tpl.replace("{{BOOT}}", json.dumps(boot).replace("</", "<\\/")).encode()
 
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "byzzcraft"
-    timeout = 120   # una connessione ferma non tiene occupato un thread per sempre (gli eventi mandano un ping ogni 15 s)
+    timeout = 120   # a stuck connection does not hold a thread forever (the event stream pings every 15 s)
     sys_version = ""
 
     def log_message(self, fmt, *args):
@@ -1728,7 +1728,7 @@ class Handler(BaseHTTPRequestHandler):
         s = SESSIONS.get(key) if key else None
         if s and s["exp"] > time.time():
             u = load_users().get(s["user"])
-            if u:  # utente ancora esistente: aggiorna anche il ruolo se e' cambiato
+            if u:  # user still exists: also refresh the role if it changed
                 s["admin"] = bool(u.get("admin"))
                 if s["exp"] < time.time() + SESSION_SECONDS - 86400:
                     s["exp"] = time.time() + SESSION_SECONDS
@@ -1743,7 +1743,7 @@ class Handler(BaseHTTPRequestHandler):
             n = int(self.headers.get("Content-Length", 0) or 0)
         except ValueError:
             n = 0
-        n = max(0, min(n, 65536))   # mai negativo: read(-1) leggerebbe fino alla chiusura
+        n = max(0, min(n, 65536))   # never negative: read(-1) would read until the connection closes
         return self.rfile.read(n).decode("utf-8", "replace") if n else ""
 
     def do_GET(self):
@@ -1753,7 +1753,7 @@ class Handler(BaseHTTPRequestHandler):
         self.safe(self._do_POST)
 
     def safe(self, fn):
-        """Una richiesta malformata riceve un 400 invece di chiudere la connessione senza risposta."""
+        """A malformed request gets a 400 instead of a connection closed without an answer."""
         try:
             fn()
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
@@ -1767,7 +1767,7 @@ class Handler(BaseHTTPRequestHandler):
             L.exception("request %s %s failed", self.command, self.path[:200])
 
     def cookie(self, value, max_age):
-        # Secure solo se il browser parla HTTPS con un proxy locale: su http://IP-di-casa il cookie verrebbe scartato
+        # Secure only if the browser speaks HTTPS to a local proxy: on http://home-IP the cookie would be dropped
         h = self.headers
         https = self.client_address[0] in LOOPBACK and (h.get("X-Forwarded-Proto", "").lower() == "https" or bool(h.get("Tailscale-User-Login")))
         secure = "; Secure" if https else ""
@@ -1788,7 +1788,7 @@ class Handler(BaseHTTPRequestHandler):
             _, s = self.session()
             if not s:
                 return self.send(200, login_page())
-            tok = SimpleCookie(self.headers.get("Cookie", ""))["sess"].value   # anche il cookie riparte da 30 giorni
+            tok = SimpleCookie(self.headers.get("Cookie", ""))["sess"].value   # the cookie starts again from 30 days too
             return self.send(200, app_page(s), headers={"Set-Cookie": self.cookie(tok, SESSION_SECONDS)})
         if path == "/manifest.webmanifest":
             return self.send(200, json.dumps({"name": CFG["title"], "short_name": CFG["title"], "start_url": "/", "display": "standalone",
@@ -1831,7 +1831,7 @@ class Handler(BaseHTTPRequestHandler):
             spawn = None
             try:
                 d = PL.read_nbt_file(os.path.join(world_dir(), "level.dat"))["Data"]
-                sp = d.get("spawn") or ({"pos": [d["SpawnX"], d["SpawnY"], d["SpawnZ"]]} if "SpawnX" in d else {})   # fino alla 1.21
+                sp = d.get("spawn") or ({"pos": [d["SpawnX"], d["SpawnY"], d["SpawnZ"]]} if "SpawnX" in d else {})   # up to 1.21
                 if sp.get("pos") and PL.strip_ns(sp.get("dimension", "overworld")) == dim:
                     spawn = list(sp["pos"])
             except (OSError, KeyError, ValueError, struct.error, EOFError):
@@ -1851,11 +1851,11 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 fresh = False
             try:
-                if fresh:          # gia' pronta: niente attesa dietro le tile in generazione
+                if fresh:          # already rendered: no waiting behind the tiles being rendered
                     p = tile
                 else:
                     with MAP_SEM:
-                        if WORLD_BUSY.is_set():   # ripristino partito mentre aspettavamo
+                        if WORLD_BUSY.is_set():   # a restore started while we were waiting
                             return self.send(503, b"", "image/png", {"Retry-After": "5"})
                         p = mapgen.get_tile(world_dir(), cache, dim, rx, rz)
                 data = open(p, "rb").read() if p else None
@@ -1895,7 +1895,7 @@ class Handler(BaseHTTPRequestHandler):
             items, total, counts = ACT.query(entries, cat=q.get("cat", [""])[0] or None,
                                             user=q.get("user", [""])[0] or None, q=q.get("q", [""])[0][:80],
                                             offset=qint(q, "offset", 0, 0, 10 ** 7), limit=qint(q, "limit", 100, 1, 500))
-            return self.json(200, {"entries": items, "total": total, "counts": counts,   # utenti dal log: anche i cancellati
+            return self.json(200, {"entries": items, "total": total, "counts": counts,   # users from the log: deleted ones too
                                    "users": sorted({e["user"] for e in entries if e["user"]}), "mc": mc_names()})
         if path == "/api/backups":
             return self.json(200, {"items": BACKUPS.list(), "disk": BACKUPS.disk(), "status": BACKUPS.status()})
@@ -1930,11 +1930,11 @@ class Handler(BaseHTTPRequestHandler):
             admin0 = s["admin"]
             init = {"status": SRV.snapshot(), "metrics": list(METRICS), "heap": list(HEAP), "audit": list(AUDIT) if admin0 else [],
                     "console": list(CONSOLE) if admin0 else [], "timeline": recent,
-                    # age: quanto e' vecchia la lettura, cosi' il browser non deve confrontare il suo orologio col nostro
+                    # age: how old the reading is, so the browser does not compare its clock with ours
                     "world": (lambda w: dict(w, age=int(time.time() * 1000) - w["t"]) if w else {})(WORLD)}
             self.wfile.write(("retry: 3000\nevent: init\ndata: %s\n\n" % json.dumps(init, separators=(",", ":"))).encode())
             self.wfile.flush()
-            # se l'utente viene cancellato o cambia ruolo si chiude: il browser si ricollega con i permessi nuovi
+            # if the user is deleted or changes role it closes: the browser reconnects with the new permissions
             while s["exp"] > time.time() and tok in SESSIONS and bool((load_users().get(s["user"]) or {"admin": None}).get("admin")) == admin0 \
                     and s["user"] in load_users():
                 try:
@@ -2107,7 +2107,7 @@ class Handler(BaseHTTPRequestHandler):
                 clean[k] = v
             done = write_props(clean, s["user"])
             if data.get("restart") and SRV.state == "on" and done:
-                SRV.stop(s["user"], "nuove impostazioni", restart=True)
+                SRV.stop(s["user"], "new settings", restart=True)
             HUB.publish("status", SRV.snapshot())
             n = len(done)
             return self.json(200, {"ok": True, "message": (t("%d settings saved") % n) if n else t("No changes")})
@@ -2120,7 +2120,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if op == "create":
                 note = str(data.get("note", "")).strip()[:80]
-                with LOCK:   # stato del server e prenotazione insieme: start() non puo' infilarsi in mezzo
+                with LOCK:   # server state and booking together: start() cannot slip in between
                     if busy or OP_PENDING.is_set():
                         return self.json(200, {"ok": False, "message": t("Wait: %s in progress.") % (busy or t("operation")).lower()})
                     st = SRV.state
@@ -2169,7 +2169,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
     def save_user(self, tok, s, data):
-        """Crea o modifica un utente (solo admin). Password vuota in modifica = invariata."""
+        """Creates or edits a user (admins only). Empty password when editing = unchanged."""
         name = str(data.get("name", "")).strip().lower()
         pw, mc, new = str(data.get("password", "")), str(data.get("mc", "")).strip(), bool(data.get("new"))
         if not USER_RE.match(name) or name in RESERVED:
@@ -2194,7 +2194,7 @@ class Handler(BaseHTTPRequestHandler):
         return self.json(200, {"ok": True, "message": (t("User %s created.") if new else t("User %s saved.")) % name})
 
     def first_setup(self):
-        """Primo avvio: solo senza utenti, dal browser di questa macchina o con il codice di setup."""
+        """First setup: only with no users, from the browser of this machine or with the setup code."""
         f = {k: v[0] for k, v in parse_qs(self.body()).items()}
         if load_users() or not setup_allowed(self, f.get("token", "")):
             return self.send(403, setup_remote_page())
@@ -2214,7 +2214,7 @@ class Handler(BaseHTTPRequestHandler):
 
 class Server(ThreadingHTTPServer):
     daemon_threads = True
-    # su Windows SO_REUSEADDR lascia a due processi la stessa porta: un secondo pannello ruberebbe le richieste al primo
+    # on Windows SO_REUSEADDR lets two processes share a port: a second panel would steal the first one's requests
     allow_reuse_address = os.name != "nt"
 
     def server_bind(self):
@@ -2253,7 +2253,7 @@ def cli(args):
         if not os.environ.get("PANEL_PASSWORD") and pw != getpass.getpass("Repeat the password: "):
             sys.exit("passwords do not match")
         setup_logging()
-        if not port_free(CFG["port"]):   # come il primo avvio web: porta occupata da un altro servizio
+        if not port_free(CFG["port"]):   # like the first web start: port taken by another service
             CFG["port"] = free_port(CFG["port"] + 1)
             L.warning("port in use, the panel will use %d", CFG["port"])
         err = do_setup({"server_dir": a.server_dir, "user": a.admin, "password": pw, "lang": a.lang, "network": "1" if a.network else "",
@@ -2325,11 +2325,11 @@ def main():
         if need and not java and CFG.get("java_auto"):
             download_java()
     else:
-        listen = "0.0.0.0"   # finche' non c'e' un admin si configura anche da un altro PC, ma solo col codice
-    # primo avvio: se la porta e' occupata (un altro servizio) se ne prende una vicina, salvata poi dal setup
+        listen = "0.0.0.0"   # until there is an admin, setup works from another PC too, but only with the code
+    # first run: if the port is taken (another service) a nearby one is used, saved later by the setup
     ports = [port] if load_users() else list(range(port, port + 11))
     srv, err = None, None
-    for attempt in range(10 if os.environ.pop("BYZZ_RESTART", None) else 1):   # al riavvio il processo vecchio puo' tenerla ancora un attimo
+    for attempt in range(10 if os.environ.pop("BYZZ_RESTART", None) else 1):   # on restart the old process may hold it a moment longer
         for pt in ports:
             try:
                 srv, port = Server((listen, pt), Handler), pt
@@ -2346,7 +2346,7 @@ def main():
         L.warning("port %d is in use, using %d", CFG["port"], port)
         CFG["port"] = port
     log("panel started on http://%s:%d" % (listen, port))
-    if not load_users():   # solo dopo aver preso la porta: il link deve funzionare davvero
+    if not load_users():   # only after taking the port: the link must really work
         fw = ("Windows may ask to let Python through the firewall: allow it on private networks." if os.name == "nt" else
               "The firewall may block the port: sudo ufw allow %d/tcp" % port)
         L.info("ByzzCraft is not set up yet.\n  From your computer open:  http://%s:%d/?setup=%s\n  On this machine:          http://127.0.0.1:%d\n"

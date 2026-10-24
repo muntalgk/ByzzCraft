@@ -1,6 +1,6 @@
-"""Java per il server Minecraft: trova quello installato o ne scarica uno (Eclipse Temurin) nella cartella del pannello.
+"""Java for the Minecraft server: finds the installed one or downloads one (Eclipse Temurin) into the panel's data.
 
-Uso:  python panel.py java      (scarica la versione che chiede il jar del server)
+Usage:  python panel.py java      (downloads the version the server jar asks for)
 """
 import hashlib
 import json
@@ -20,18 +20,18 @@ EXE = "java.exe" if os.name == "nt" else "java"
 
 
 def _open(url):
-    # l'API Adoptium risponde 403 allo User-Agent predefinito di Python
+    # the Adoptium API answers 403 to Python's default User-Agent
     return urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "byzzcraft (+https://github.com/muntalgk/byzzcraft)"}), timeout=60)
 
 
 def required(server_dir, jar=None):
-    """Versione di Java chiesta dal jar del server (vanilla, Paper, launcher di Fabric), None se non si sa."""
-    import assets   # qui e non in cima: assets carica mapgen, che a runtime.py da solo non serve
+    """Java version the server jar asks for (vanilla, Paper, Fabric launcher), None if unknown."""
+    import assets   # here and not at the top: assets loads mapgen, which runtime.py alone does not need
     return assets.jar_info(server_dir, jar or assets.find_jar(server_dir))[1]
 
 
 def parse_version(text):
-    """Versione principale da `java -version`: 'openjdk version "25.0.1"' -> 25, 'java version "1.8.0_401"' -> 8."""
+    """Major version from `java -version`: 'openjdk version "25.0.1"' -> 25, 'java version "1.8.0_401"' -> 8."""
     m = re.search(r'version "(\d+)(?:\.(\d+))?', text)
     if not m:
         return None
@@ -48,7 +48,7 @@ def version_of(java):
 
 
 def bundled(major):
-    """java scaricato dal pannello per questa versione, se c'e'."""
+    """java downloaded by the panel for this version, if there is one."""
     for root, _, files in os.walk(os.path.join(RUNTIME, "java-%d" % major)):
         if EXE in files and os.path.basename(root) == "bin":
             return os.path.join(root, EXE)
@@ -56,7 +56,7 @@ def bundled(major):
 
 
 def java_for(major):
-    """(java da usare o None, versione trovata nel PATH o None)."""
+    """(java to use or None, version found in PATH or None)."""
     if major and bundled(major):
         return bundled(major), major
     v = version_of("java")
@@ -72,7 +72,7 @@ def _platform():
 
 
 def _extract(path, dest):
-    """Estrae tar.gz o zip in dest senza uscirne (niente percorsi assoluti, .. o link verso fuori)."""
+    """Extracts a tar.gz or zip into dest without leaving it (no absolute paths, .. or links pointing outside)."""
     root = os.path.realpath(dest)
 
     def safe(name):
@@ -86,7 +86,7 @@ def _extract(path, dest):
             z.extractall(root)
         return
     with tarfile.open(path) as tf:
-        if hasattr(tarfile, "data_filter"):   # Python 3.12 e 3.11.4+
+        if hasattr(tarfile, "data_filter"):   # Python 3.12 and 3.11.4+
             tf.extractall(root, filter="data")
             return
         for m in tf.getmembers():
@@ -97,7 +97,7 @@ def _extract(path, dest):
 
 
 def install(major, log=print):
-    """Scarica Java `major` in runtime/java-<major>/ e ritorna il percorso dell'eseguibile."""
+    """Downloads Java `major` into runtime/java-<major>/ and returns the path of the executable."""
     osn, arch = _platform()
     with _open(API % (major, osn, arch)) as r:
         builds = json.loads(r.read())

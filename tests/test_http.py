@@ -1,5 +1,5 @@
-"""Il pannello vero, in un processo a parte: login, cookie, CSRF, ruoli, blocco dei tentativi.
-Nessuna rete e nessun Minecraft: jar finto, asset finti, setup da shell senza Java."""
+"""The real panel, in a separate process: login, cookie, CSRF, roles, login lock.
+No network and no Minecraft: fake jar, fake assets, setup from the shell without Java."""
 import http.client, json, os, re, shutil, socket, subprocess, sys, tempfile, time, zipfile
 
 PANEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
@@ -15,7 +15,7 @@ data, srv = os.path.join(root, "data"), os.path.join(root, "srv")
 os.makedirs(srv)
 with zipfile.ZipFile(os.path.join(srv, "server.jar"), "w") as z:
     z.writestr("version.json", json.dumps({"id": "26.3", "java_version": 25}))
-for d in ("block", "item", "hud", "skin"):            # asset "gia' scaricati": niente download da Mojang
+for d in ("block", "item", "hud", "skin"):            # assets "already downloaded": no download from Mojang
     os.makedirs(os.path.join(data, "assets", d))
 for f in ("lang.json", "texcolors.json"):
     open(os.path.join(data, "assets", f), "w").write("{}")
@@ -26,11 +26,11 @@ run = lambda *a: subprocess.run([sys.executable, os.path.join(PANEL, "panel.py")
 proc = None
 try:
     r = run("setup", srv, "--admin", "admin", "--no-java")
-    check("setup da shell", r.returncode == 0, r.stderr[-500:])
+    check("setup from shell", r.returncode == 0, r.stderr[-500:])
     r = run("adduser", "bob")
     check("adduser", r.returncode == 0, r.stderr[-300:])
-    check("adduser non sovrascrive", run("adduser", "bob").returncode != 0)
-    check("deluser non toglie l'ultimo admin", run("deluser", "admin").returncode != 0)
+    check("adduser does not overwrite", run("adduser", "bob").returncode != 0)
+    check("deluser keeps the last admin", run("deluser", "admin").returncode != 0)
     with socket.socket() as so:
         so.bind(("127.0.0.1", 0)); port = so.getsockname()[1]
     cfg_path = os.path.join(data, "panel-config.json")
@@ -52,39 +52,39 @@ try:
         except OSError:
             time.sleep(0.2)
     st, body, _ = req("GET", "/")
-    check("pagina di login", st == 200 and "password" in body)
+    check("login page", st == 200 and "password" in body)
     form = {"Content-Type": "application/x-www-form-urlencoded"}
 
     def login(user, pw):
         return req("POST", "/login", "user=%s&password=%s" % (user, pw), form)
-    check("password sbagliata", login("admin", "sbagliata")[0] == 401)
+    check("wrong password", login("admin", "sbagliata")[0] == 401)
     st, _, h = login("admin", PW)
     ck = h.get("set-cookie", "")
     check("login", st == 303 and ck.startswith("sess="), (st, ck))
-    check("cookie HttpOnly e SameSite, niente Secure in http", "HttpOnly" in ck and "SameSite=Strict" in ck and "Secure" not in ck, ck)
+    check("cookie HttpOnly and SameSite, no Secure on http", "HttpOnly" in ck and "SameSite=Strict" in ck and "Secure" not in ck, ck)
     cookie = {"Cookie": ck.split(";")[0]}
     st, body, h = req("GET", "/", headers=cookie)
     csrf = re.search(r'"csrf": "([^"]+)"', body)
-    check("pagina dell'app", st == 200 and csrf and "Max-Age=2592000" in h.get("set-cookie", ""), h.get("set-cookie"))
+    check("app page", st == 200 and csrf and "Max-Age=2592000" in h.get("set-cookie", ""), h.get("set-cookie"))
     csrf = csrf.group(1) if csrf else ""
     js = dict(cookie, **{"Content-Type": "application/json"})
-    check("POST senza CSRF", req("POST", "/api/command", "{}", js)[0] == 403)
+    check("POST without CSRF", req("POST", "/api/command", "{}", js)[0] == 403)
     st, body, _ = req("POST", "/api/command", '{"command": "list"}', dict(js, **{"X-CSRF": csrf}))
-    check("POST con CSRF", st == 200 and json.loads(body)["ok"] is False, body)   # server spento: risposta, non errore
+    check("POST with CSRF", st == 200 and json.loads(body)["ok"] is False, body)   # server off: an answer, not an error
     st, body, _ = req("GET", "/api/health", headers=cookie)
-    check("salute (admin)", st == 200 and isinstance(json.loads(body)["checks"], list), body[:200])
-    check("API senza login", req("GET", "/api/health")[0] == 401)
-    check("manifest pubblico", req("GET", "/manifest.webmanifest")[0] == 200)
+    check("health (admin)", st == 200 and isinstance(json.loads(body)["checks"], list), body[:200])
+    check("API without login", req("GET", "/api/health")[0] == 401)
+    check("public manifest", req("GET", "/manifest.webmanifest")[0] == 200)
     st, _, h = login("bob", PW)
     bob = {"Cookie": h.get("set-cookie", "").split(";")[0]}
-    check("giocatore: niente salute", req("GET", "/api/health", headers=bob)[0] == 403)
+    check("player: no health", req("GET", "/api/health", headers=bob)[0] == 403)
     bcsrf = re.search(r'"csrf": "([^"]+)"', req("GET", "/", headers=bob)[1]).group(1)
     st, body, _ = req("POST", "/api/users/save", '{"name": "eve", "password": "0123456789", "new": true, "admin": true}',
                       dict(bob, **{"Content-Type": "application/json", "X-CSRF": bcsrf}))
-    check("giocatore: non crea admin", st == 403, body)
-    # in fondo: blocca anche l'indirizzo 127.0.0.1
+    check("player: cannot create admin", st == 403, body)
+    # last: it also locks the address 127.0.0.1
     codes = [login("nessuno", "x")[0] for _ in range(6)]
-    check("blocco dopo 5 tentativi", codes == [401] * 4 + [429] * 2, codes)   # il primo sbagliato e' quello di admin, sopra
+    check("lock after 5 attempts", codes == [401] * 4 + [429] * 2, codes)   # the first wrong one is admin's, above
 finally:
     if proc:
         proc.kill(); proc.wait()

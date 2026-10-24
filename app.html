@@ -243,7 +243,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 /* ---------- map ---------- */
 .wm{position:relative;overflow:hidden;background:#0b0d10;border-radius:12px;border:1px solid var(--line);touch-action:none;cursor:grab;user-select:none}
 .wm:active{cursor:grabbing}
-.wm-world{position:absolute;left:0;top:0;transform-origin:0 0}/* niente will-change: il browser ridisegnerebbe a una sola scala (tile mancanti, testo sfocato con lo zoom) */
+.wm-world{position:absolute;left:0;top:0;transform-origin:0 0}/* no will-change: the browser would paint at one scale only (missing tiles, blurry text when zoomed) */
 .wm-world img{position:absolute;width:512px;height:512px;image-rendering:auto}
 .wm.px .wm-world img{image-rendering:pixelated}
 .wm-mk{position:absolute;transform-origin:0 0;transform:scale(var(--inv,1)) translate(-50%,-50%);pointer-events:auto}
@@ -331,7 +331,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
 @media (max-width:1100px){.bk-top{grid-template-columns:1fr 1fr}.bk-now{grid-column:1/-1}.bk-wrap{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:520px){.bk-top{grid-template-columns:1fr}.bk .acts .ib{width:28px}}
-/* ---------- mondo: ora e meteo ---------- */
+/* ---------- world: time and weather ---------- */
 .wc{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:18px;align-items:center;overflow:hidden;position:relative;transition:background 2s}
 .wc.day{background:linear-gradient(120deg,#1b3550,#1a2433 55%,var(--card))}.wc.dusk{background:linear-gradient(120deg,#4a2738,#261d2e 55%,var(--card))}
 .wc.night{background:linear-gradient(120deg,#0e1430,#141a2b 55%,var(--card))}.wc.dawn{background:linear-gradient(120deg,#4d3a24,#2a2420 55%,var(--card))}
@@ -346,7 +346,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .wchip small{color:var(--mute);font-size:12px}
 .wchip.sleep{color:#b8f5c4;border-color:#2f6b3a}.wchip.warn{color:#ffd18a;border-color:#6b5222}
 @media (max-width:760px){.wc{grid-template-columns:auto minmax(0,1fr)}.wchips{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;align-items:center}}
-/* ---------- accessi ---------- */
+/* ---------- access ---------- */
 .ac-top{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
 .ac-top .search{flex:1;min-width:180px}
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:4px 10px;border-radius:999px;border:1px solid var(--line2);color:var(--text2)}
@@ -372,7 +372,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .sb.red{color:#ff9b94;border-color:#5a2a28;background:transparent}.sb.red:hover{background:#2a1514}.sb.ask{color:#ffb4ae;background:#3a1715;border-color:#6b2a26}
 .sb:disabled{opacity:.4;cursor:default}
 @media (max-width:620px){.acr{flex-wrap:wrap}.acr .acts{width:100%;justify-content:flex-start}}
-/* ---------- registro ---------- */
+/* ---------- activity log ---------- */
 .rg-tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 .rg-tools .search{flex:1;min-width:180px}
 .rg .day{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:16px 0 6px}
@@ -469,7 +469,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
       <div class="card adm-only"><div class="head" style="display:flex;justify-content:space-between;margin-bottom:10px"><b>Console</b><button class="btn" style="padding:5px 12px" data-go="console">{{Open console}}</button></div><div class="con" id="con-mini"></div></div>
     </section>
 
-    <!-- METRICHE -->
+    <!-- METRICS -->
     <section id="v-metrics" class="grid" hidden>
       <div class="grid k-grid">
         <div class="card kpi"><div class="lab"><i style="background:var(--s-pc)"></i>{{PC CPU}}</div><div class="val" id="k-pc">-</div><div class="hint" id="k-pc-h"> </div></div>
@@ -563,7 +563,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
     </section>
 
     <!-- AUDIT -->
-    <!-- ACCESSI -->
+    <!-- ACCESS -->
     <section id="v-access" hidden>
       <div class="ac-top"><input class="search" id="ac-name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="{{Minecraft name, e.g. NewFriend}}">
         <button class="btn primary" id="ac-add">{{Add to whitelist}}</button></div>
@@ -591,7 +591,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
       <p class="note" id="version" style="margin-top:16px"></p>
     </section>
 
-    <!-- REGISTRO -->
+    <!-- ACTIVITY LOG -->
     <section id="v-audit" hidden>
       <div class="chips-f" id="rg-mode" style="margin-bottom:12px"><button data-m="" class="on">{{Activity}}</button><button data-m="panel">{{Technical log}}</button><button data-m="start">{{Server start output}}</button></div>
       <div class="con" id="rg-sys" hidden style="height:calc(100vh - 230px);min-height:320px"></div>
@@ -848,7 +848,7 @@ function renderRoster(){const box=$("#pl-list");const keep=new Set();
   if(!P.roster.length)$("#pl-detail").innerHTML="<div class=card style='color:var(--mute)'>"+_t("No players recorded on this world yet.")+"</div>"}
 async function selectPlayer(uuid,quiet){P.sel=uuid;renderRoster();try{const r=await fetch("/api/player?uuid="+encodeURIComponent(uuid));if(!r.ok)return;
   const d=await r.json();if(P.sel!=uuid)return;const first=!P.cur||P.cur.uuid!=uuid;P.cur=d;P.hardcore=d.hardcore;renderPlayer(first)}catch(e){}}
-/* -- skin 3D in CSS: ogni parte e' una scatola con 6 facce che pescano dalla texture 64x64 -- */
+/* -- 3D skin in CSS: every part is a box with 6 faces taken from the 64x64 texture -- */
 const SS=7;
 function skinParts(slim){const aw=slim?3:4;return [
   ["head",[8,8,8],[0,-10,0],[0,0],[32,0],.5,null],["body",[8,12,4],[0,0,0],[16,16],[16,32],.25,null],
@@ -914,14 +914,14 @@ function renderPlayer(first){const d=P.cur;if(!d)return;const box=$("#pl-detail"
     .map(([v,l])=>"<div class=stat><div class=v>"+v+"</div><div class=l>"+l+"</div></div>").join("")+"</div><div class=tops>"+
     topList(_t("Most killed"),d.stats.killed.map(r=>[r[0],r[1],r[2]+"_spawn_egg"]))+topList(_t("Most mined"),d.stats.mined)+topList(_t("Killed by"),d.stats.killed_by.map(r=>[r[0],r[1],r[2]+"_spawn_egg"]))+"</div>"}
   if(P.skinFor!=d.uuid)buildSkin(d.uuid,d.slim)}
-/* tooltip stile Minecraft */
+/* Minecraft-style tooltip */
 const TIP=document.createElement("div");TIP.className="mctip";TIP.hidden=true;document.body.append(TIP);
 document.addEventListener("mousemove",e=>{const s=e.target.closest&&e.target.closest("[data-tip]");if(!s){TIP.hidden=true;return}
   const t=JSON.parse(decodeURIComponent(s.dataset.tip));TIP.innerHTML="<div class='n"+(t.g?" e":"")+"'>"+esc(t.n)+(t.c>1?" ×"+t.c:"")+"</div>"+t.e.map(x=>"<div class=e>"+esc(x[0])+" "+esc(x[1])+"</div>").join("")+
     (t.m?"<div class=d>"+_t("Durability: %s / %s",t.m-t.d,t.m)+"</div>":"")+"<div class=id>minecraft:"+esc(t.id)+"</div>";
   TIP.hidden=false;const w=TIP.offsetWidth,h=TIP.offsetHeight;TIP.style.left=Math.min(e.clientX+14,innerWidth-w-8)+"px";TIP.style.top=Math.max(8,e.clientY-h-10)+"px"});
 
-/* ---------------- volti, eventi, giocatori online ---------------- */
+/* ---------------- faces, events, players online ---------------- */
 function faceStyle(uuid,w){return "background-image:url(/skin/"+uuid+".png);background-size:"+w*8+"px "+w*8+"px;background-position:-"+w+"px -"+w+"px;--hat:-"+5*w+"px -"+w+"px"}
 function uuidOf(name){const r=(P.roster||[]).find(p=>p.name==name);return r?r.uuid:null}
 const EVI={death:"☠️",join:"➜",leave:"⟵",advancement:"🏆",chat:"💬",server_start:"⏻",server_ready:"✅",server_stop:"⏹",panel:"⚙️"};
@@ -945,7 +945,7 @@ function onTimeline(e){S.timeline=S.timeline||[];S.timeline.unshift(e);S.timelin
 async function loadRoster(){try{const r=await fetch("/api/players");if(!r.ok)return;const j=await r.json();P.roster=j.players;P.hardcore=j.hardcore;renderOnline();renderRoster();TLV.fillPlayers();MAPF.drawMarkers();MAPM.drawMarkers();renderDashFeed();
   if(TLV.opened){TLV.renderSessions();TLV.render()}}catch(e){}}
 
-/* ---------------- mappa ---------------- */
+/* ---------------- map ---------------- */
 const DIMNAMES={overworld:_t("Overworld"),the_nether:"Nether",the_end:"End"};
 const ICONS=[["pin",_t("Marker")],["home",_t("Home")],["portal",_t("Portal")],["star",_t("Important")],["danger",_t("Danger")]];
 class WorldMap{
@@ -960,11 +960,11 @@ class WorldMap{
   visible(){return this.el.offsetParent!==null&&this.el.clientWidth>0}
   async show(){if(!this.loaded)await this.load(this.dim);this.apply();if(!this.mini)this.legend()}
   async load(dim,keep){this.want=dim;const r=await fetch("/api/map?dim="+dim);if(!r.ok)return;const j=await r.json();
-    if(this.want!=dim)return;   // risposta vecchia arrivata dopo un cambio di dimensione
+    if(this.want!=dim)return;   // stale answer that arrived after a dimension change
     if(dim!=this.dim){this.tiles.innerHTML="";this.imgs.clear();this.dim=dim;this.centered=false;this.pl.forEach(x=>x.remove());this.pl.clear()}
     this.regions=new Map(j.regions.map(([rx,rz,mt])=>[rx+","+rz,mt]));this.spawn=j.spawn;this.markers=j.markers;this.loaded=true;
     for(const [k,img] of this.imgs){const mt=this.regions.get(k);
-      if(mt&&img.dataset.v!=mt){img.dataset.v=mt;img.src=this.url(k,mt)}else if(mt&&img.style.visibility=="hidden")img.src=this.url(k,mt)+"&r="+Date.now()}   // tile fallita: riprova a ogni aggiornamento
+      if(mt&&img.dataset.v!=mt){img.dataset.v=mt;img.src=this.url(k,mt)}else if(mt&&img.style.visibility=="hidden")img.src=this.url(k,mt)+"&r="+Date.now()}   // failed tile: retried at every update
     this.empty.textContent=this.regions.size?"":_t("No explored area in this dimension.");
     if(!this.mini){const sel=this.el.querySelector(".dimsel");if(sel)sel.value=this.dim}
     this.drawMarkers();this.setPlayers(P.positions||[]);if(!this.centered&&this.visible()){this.centered=true;this.home()}this.apply()}
@@ -1118,7 +1118,7 @@ const BK={items:null,disk:null,st:null,f:"",dirty:false,
     $("#bk-err").classList.toggle("on",!!st.last_error);$("#bk-err").textContent=st.last_error||"";
     const on=S.status.state=="on";$("#bk-now-hint").textContent=on?_t("The server stays on: saving pauses only for the few seconds of the copy."):_t("Server off: direct copy of the world.");
     const c=st.schedule,parts=[];if(c.every_hours)parts.push((c.every_hours==1?_t("every hour"):_t("every %s hours",c.every_hours))+" "+(c.only_when_online?_t("while playing"):_t("with the server on")));if(c.daily_at)parts.push(_t("every day at %s",c.daily_at));
-    // l'intervallo conta solo se il server è acceso (e, se richiesto, c'è qualcuno); il giornaliero gira sempre
+    // the interval counts only while the server is on (and, if asked, someone is playing); the daily one always runs
     const now=Date.now()/1000,active=c.every_hours&&S.status.state=="on"&&(S.status.online>0||!c.only_when_online);
     const iv=active?(st.last_scheduled?st.last_scheduled+c.every_hours*3600:st.next_scheduled):null;
     let dn=null;if(c.daily_at){const [h,m]=c.daily_at.split(":").map(Number),d=new Date();d.setHours(h,m,0,0);if(d/1000<=now)d.setDate(d.getDate()+1);dn=d/1000}
@@ -1154,16 +1154,16 @@ $("#bk-create").onclick=()=>BK.create();$("#bk-note").onkeydown=e=>{if(e.key=="E
 $(".sched").addEventListener("input",()=>{BK.dirty=true;$("#bk-daily").disabled=!$("#bk-daily-on").checked});
 if(BOOT.admin)BK.load();
 
-/* ---------------- mondo: ora del giorno, luna, meteo ---------------- */
+/* ---------------- world: time of day, moon, weather ---------------- */
 const MOONS=[["🌕",_t("Full moon"),_t("more slimes, better-equipped mobs")],["🌖",_t("Waning gibbous"),""],["🌗",_t("Last quarter"),""],["🌘",_t("Waning crescent"),""],
   ["🌑",_t("New moon"),_t("darkest night, no swamp slimes")],["🌒",_t("Waxing crescent"),""],["🌓",_t("First quarter"),""],["🌔",_t("Waxing gibbous"),_t("full moon tomorrow")]];
 const SUNSVG='<svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="10.5" fill="#ffd76a"/><g stroke="#ffd76a" stroke-width="3" stroke-linecap="round">'+
   [0,45,90,135,180,225,270,315].map(a=>{const r=a*Math.PI/180,c=Math.cos(r),s=Math.sin(r);return '<line x1="'+(26+c*16)+'" y1="'+(26+s*16)+'" x2="'+(26+c*21)+'" y2="'+(26+s*21)+'"/>'}).join("")+'</g></svg>';
 const MOONSVG='<svg viewBox="0 0 52 52"><path d="M31 8a18 18 0 1 0 13 28A15 15 0 0 1 31 8z" fill="#dfe6ff"/><circle cx="22" cy="30" r="2.5" fill="#c3cbe6"/><circle cx="17" cy="21" r="1.6" fill="#c3cbe6"/></svg>';
 const WV={w:null,
-  // rx: istante di arrivo misurato col nostro orologio (meno l'età della lettura), mai col timestamp del server
+  // rx: arrival time by our own clock (minus the age of the reading), never by the server timestamp
   set(w){this.w=w&&w.t?w:null;if(this.w)this.w.rx=performance.now()-(w.age||0);$("#world").hidden=!this.w;this.draw()},
-  // l'ora arriva ogni 15 s: in mezzo la si fa avanzare a 20 tick al secondo (se il mondo non è in pausa)
+  // the time arrives every 15 s: in between it advances at 20 ticks a second (unless the world is paused)
   ticks(){const w=this.w;return ((w.day+(w.running?(performance.now()-w.rx)/50:0))%24000+24000)%24000},
   draw(){const w=this.w;if(!w)return;const t=this.ticks();
     const h=Math.floor((t/1000+6)%24),m=Math.floor(t%1000*.06);$("#w-clock").textContent=String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
@@ -1179,7 +1179,7 @@ const WV={w:null,
       +(sleep?"<span class='wchip sleep'>🛏️ "+_t("You can sleep")+"</span>":"")}};
 setInterval(()=>{if(WV.w&&CUR=="dash")WV.draw()},1000);
 
-/* ---------------- accessi: whitelist, operatori, ban ---------------- */
+/* ---------------- access: whitelist, operators, bans ---------------- */
 const ACV={d:null,
   async load(){try{const r=await fetch("/api/access");if(!r.ok)return;this.d=await r.json();this.render()}catch(e){}},
   people(){const d=this.d,m=new Map(),get=(n,u)=>{const k=n.toLowerCase();if(!m.has(k))m.set(k,{name:n,uuid:u||null});const p=m.get(k);if(u&&!p.uuid)p.uuid=u;return p};
@@ -1215,14 +1215,14 @@ $("#ac-add").onclick=async()=>{const n=$("#ac-name").value.trim();if(!n)return;c
   b.disabled=false;toast(j.message,j.ok?"good":"bad");if(j.ok)$("#ac-name").value="";ACV.load()};
 $("#ac-name").onkeydown=e=>{if(e.key=="Enter")$("#ac-add").click()};
 
-/* ---------------- registro del pannello ---------------- */
+/* ---------------- panel activity log ---------------- */
 const RCAT={server:["Server","#3fb950",'<path d="M12 3v8M6.3 7.3a8 8 0 1 0 11.4 0"/>'],login:["Login","#3987e5",'<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/>'],
   console:["Console","#9085e9",'<path d="M4 17l6-5-6-5M12 19h8"/>'],settings:[_t("Settings"),"#d4a017",'<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>'],
   players:[_t("Players"),"#d55181",'<path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6z"/>'],backup:["Backup","#199e70",'<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/>'],
   map:[_t("Map"),"#c98500",'<path d="M12 21s-6-5.7-6-11a6 6 0 0 1 12 0c0 5.3-6 11-6 11z"/><circle cx="12" cy="10" r="2"/>'],system:[_t("System"),"#8b8f98",'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>']};
 const RGV={items:[],total:0,counts:{},cat:"",user:"",q:"",loaded:false,mc:{},
   async load(more){const p=new URLSearchParams({limit:100,offset:more?this.items.length:0});if(this.cat)p.set("cat",this.cat);if(this.user)p.set("user",this.user);if(this.q)p.set("q",this.q);
-    const req=this.req=(this.req||0)+1;   // vale solo la risposta all'ultima richiesta (ricerca mentre si scrive)
+    const req=this.req=(this.req||0)+1;   // only the answer to the latest request counts (search while typing)
     try{const r=await fetch("/api/audit?"+p);if(!r.ok)return;const j=await r.json();if(req!=this.req)return;
       const key=x=>x.i!=null?"i"+x.i:x.t+x.raw,seen=new Set(this.items.map(key));this.items=more?this.items.concat(j.entries.filter(x=>!seen.has(key(x)))):j.entries;this.total=j.total;this.counts=j.counts;this.mc=j.mc||{};
       if(!this.loaded){$("#rg-user").innerHTML="<option value=''>"+_t("All")+"</option>"+j.users.map(u=>"<option>"+esc(u)+"</option>").join("")}this.loaded=true;this.render()}catch(e){}},
@@ -1245,7 +1245,7 @@ $("#rg-user").onchange=e=>{RGV.user=e.target.value;RGV.load()};
 $("#rg-q").oninput=e=>{clearTimeout(RGV._t);RGV._t=setTimeout(()=>{RGV.q=e.target.value.trim();RGV.load()},250)};
 $("#rg-more").onclick=()=>RGV.load(true);
 
-/* ---------------- account: password e utenti del pannello ---------------- */
+/* ---------------- account: password and panel users ---------------- */
 $("#pw-save").onclick=async()=>{const a=$("#pw-new").value;if(a!=$("#pw-new2").value)return toast(_t("The new passwords do not match."),"bad");
   const j=await api("/api/account/password",{current:$("#pw-cur").value,new:a});toast(j.message,j.ok?"good":"bad");if(j.ok)["#pw-cur","#pw-new","#pw-new2"].forEach(x=>$(x).value="")};
 const ACC={users:[],editing:null,
@@ -1268,7 +1268,7 @@ $("#us-save").onclick=()=>ACC.save();
 $("#version").innerHTML="ByzzCraft "+esc(BOOT.version)+" · "+(BOOT.latest?"<b>"+esc(_t("Version %s is available",BOOT.latest))+"</b> · ":"")
   +"<a href='https://github.com/"+esc(BOOT.repo)+"' target=_blank rel=noopener>GitHub</a>";$("#us-cancel").onclick=()=>ACC.reset();
 
-/* ---------------- controlli di salute (dashboard) e log tecnico (registro) ---------------- */
+/* ---------------- health checks (dashboard) and technical log (activity log) ---------------- */
 const HL={
   async load(){if(!BOOT.admin)return;try{const r=await fetch("/api/health");if(!r.ok)return;const c=(await r.json()).checks;$("#health").hidden=!c.length;
     $("#health-list").innerHTML=c.map(x=>"<div class='hc'><span>"+esc(x.text)+"</span>"+(x.fix?"<button class='btn' data-fix='"+esc(x.id)+"'>"+esc(HL.label(x.id))+"</button>":"")

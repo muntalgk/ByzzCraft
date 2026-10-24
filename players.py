@@ -1,4 +1,4 @@
-"""Dati dei giocatori per il pannello: NBT dei file, SNBT da RCON, statistiche, icone e skin."""
+"""Player data for the panel: NBT from the files, SNBT from RCON, statistics, icons and skins."""
 import base64, gzip, json, os, re, struct, threading, time, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -6,7 +6,7 @@ from paths import ASSETS, CACHE  # noqa: E402
 UA = "byzzcraft (+https://github.com/muntalgk/byzzcraft)"
 
 
-# ---------------------------------------------------------------- NBT binario (file .dat)
+# ---------------------------------------------------------------- binary NBT (.dat files)
 def nbt_parse(buf):
     pos = [0]
 
@@ -48,7 +48,7 @@ def read_nbt_file(path):
     return nbt_parse(gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw)
 
 
-# ---------------------------------------------------------------- SNBT (output di /data get)
+# ---------------------------------------------------------------- SNBT (output of /data get)
 _NUM = re.compile(r"^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?([us]?[bslfdBSLFD])?$")
 
 
@@ -127,7 +127,7 @@ def snbt(text):
     return SNBT(text).value()
 
 
-# ---------------------------------------------------------------- nomi e tabelle
+# ---------------------------------------------------------------- names and tables
 _LANG = None
 
 
@@ -141,13 +141,13 @@ def lang():
     return _LANG
 
 
-# ---------------------------------------------------------------- dove stanno i file del mondo
+# ---------------------------------------------------------------- where the world files are
 _OLD_DIM = {"overworld": "", "the_nether": "DIM-1", "the_end": "DIM1"}
 
 
 def dim_dir(world, dim):
-    """Cartella di una dimensione: 26.x <world>/dimensions/minecraft/<dim>; fino alla 1.21 <world>, <world>/DIM-1, <world>/DIM1;
-    Paper e Spigot tengono Nether ed End in <world>_nether/DIM-1 e <world>_the_end/DIM1."""
+    """Folder of a dimension: 26.x <world>/dimensions/minecraft/<dim>; up to 1.21 <world>, <world>/DIM-1, <world>/DIM1;
+    Paper and Spigot keep the Nether and the End in <world>_nether/DIM-1 and <world>_the_end/DIM1."""
     new = os.path.join(world, "dimensions", "minecraft", dim)
     if os.path.isdir(new) or os.path.isdir(os.path.join(world, "dimensions")):
         return new
@@ -158,7 +158,7 @@ def dim_dir(world, dim):
 
 
 def player_dir(world, kind):
-    """kind: data, stats, advancements. 26.x: <world>/players/<kind>; prima <world>/playerdata, stats, advancements."""
+    """kind: data, stats, advancements. 26.x: <world>/players/<kind>; before, <world>/playerdata, stats, advancements."""
     new = os.path.join(world, "players", kind)
     if os.path.isdir(new):
         return new
@@ -225,13 +225,13 @@ def item(it):
 
 
 def normalize(d):
-    """Dati del giocatore (da file o da RCON) in un formato semplice per la pagina."""
+    """Player data (from the file or from RCON) in a simple shape for the page."""
     inv = [x for x in (item(i) for i in d.get("Inventory", [])) if x]
     eq = {}
     raw_eq = d.get("equipment") or {}
     for slot in ("head", "chest", "legs", "feet", "offhand"):
         eq[slot] = item(raw_eq.get(slot)) if raw_eq.get(slot) else None
-    for x in list(inv):  # formato vecchio: armatura negli slot 100-103 e mano sinistra in -106
+    for x in list(inv):  # old format: armour in slots 100-103 and the off hand in -106
         legacy = {100: "feet", 101: "legs", 102: "chest", 103: "head", -106: "offhand"}.get(x["slot"])
         if legacy:
             eq[legacy] = x; inv.remove(x)
@@ -259,7 +259,7 @@ def normalize(d):
             "last_death_dim": strip_ns((d.get("LastDeathLocation") or {}).get("dimension", "overworld"))}
 
 
-# ---------------------------------------------------------------- statistiche e progressi
+# ---------------------------------------------------------------- statistics and advancements
 def stats(world, uuid):
     out = {}
     try:
@@ -288,7 +288,7 @@ def stats(world, uuid):
     return out
 
 
-# ---------------------------------------------------------------- icone
+# ---------------------------------------------------------------- icons
 _ICON_CACHE = {}
 _SUFFIX = re.compile(r"_(stairs|slab|wall|fence_gate|fence|pressure_plate|button|door|trapdoor|wall_sign|sign|hanging_sign|carpet|pane)$")
 
@@ -367,12 +367,12 @@ def _icon_lookup(iid):
     return None
 
 
-# ---------------------------------------------------------------- skin (Mojang, in cache 6 ore)
+# ---------------------------------------------------------------- skins (Mojang, cached for 6 hours)
 _SKIN_LOCK = threading.Lock()
 
 
 def skin(uuid):
-    """(png_bytes, slim) - scarica da Mojang se serve, altrimenti Steve/Alex."""
+    """(png_bytes, slim) - downloaded from Mojang when needed, otherwise Steve/Alex."""
     os.makedirs(os.path.join(CACHE, "skins"), exist_ok=True)
     png = os.path.join(CACHE, "skins", uuid + ".png"); meta = os.path.join(CACHE, "skins", uuid + ".json")
     with _SKIN_LOCK:
@@ -387,7 +387,7 @@ def skin(uuid):
                 data = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": UA}), timeout=6).read()
                 open(png, "wb").write(data)
                 json.dump({"slim": (tex.get("metadata") or {}).get("model") == "slim"}, open(meta, "w"))
-            except Exception:  # noqa: BLE001 - offline o profilo senza skin: si usa quella di default
+            except Exception:  # noqa: BLE001 - offline or a profile without a skin: the default one is used
                 if not os.path.exists(png):
                     slim = int(uuid.replace("-", "")[-1], 16) % 2 == 1
                     default = os.path.join(ASSETS, "skin", "slim_alex.png" if slim else "wide_steve.png")

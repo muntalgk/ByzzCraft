@@ -1,7 +1,7 @@
-"""Timeline del server Minecraft: eventi + sessioni di gioco ricostruiti dai log.
+"""Minecraft server timeline: events and play sessions rebuilt from the logs.
 
-Solo libreria standard (Python 3.11). I log vengono solo letti.
-Uso CLI di prova:  python -I timeline.py <server_dir> <cache_dir>
+Standard library only. The logs are only read.
+Test CLI:  python -I timeline.py <server_dir> <cache_dir>
 """
 import datetime
 import gzip
@@ -16,7 +16,7 @@ import activity as ACT
 import i18n
 from i18n import t as tr
 
-CACHE_NAME = "timeline-cache-%s.json"   # %s = lingua: i testi degli eventi sono gia' tradotti
+CACHE_NAME = "timeline-cache-%s.json"   # %s = language: the event texts are already translated
 CACHE_VERSION = 1
 TYPES = ("server_start", "server_ready", "server_stop", "join", "leave",
          "death", "advancement", "chat", "panel")
@@ -83,7 +83,7 @@ class _DeathMatcher:
                 pats.append((literal, key, re.compile("^" + "".join(parts) + "$"), val))
             except re.error:
                 continue
-        pats.sort(key=lambda x: -x[0])  # i modelli piu' specifici prima
+        pats.sort(key=lambda x: -x[0])  # most specific patterns first
         self.patterns = pats
 
     def match(self, text, known):
@@ -106,7 +106,7 @@ class Timeline:
         self.cache_path = os.path.join(cache_dir, CACHE_NAME % i18n.LANG)
         self._lock = threading.RLock()
         self._deaths = _DeathMatcher(os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "lang.json"))
-        self._gz = {}       # nome -> {"size": int, "events": [...]}
+        self._gz = {}       # name -> {"size": int, "events": [...]}
         self._latest = {"pos": 0, "head": "", "cur_day": None, "last_secs": None, "events": []}
         self._panel = {"size": -1, "events": []}
         self._players = set()
@@ -115,7 +115,7 @@ class Timeline:
         self._sessions = None
         self._load_cache()
         self._load_usercache()
-        self._rebuild()   # eventi gia' in cache: sono "noti" solo dopo il primo refresh
+        self._rebuild()   # events already cached: they count as "known" only after the first refresh
         self._keys = set()
 
     # ------------------------------------------------------------ cache
@@ -155,7 +155,7 @@ class Timeline:
 
     # ------------------------------------------------------------ parsing
     def _parse_text(self, t, text, out):
-        """Trasforma il testo di una riga del server in eventi (appende a out)."""
+        """Turns the text of a server log line into events (appended to out)."""
         raw = text
         if text.startswith(_SYS):
             text = text[len(_SYS):]
@@ -203,7 +203,7 @@ class Timeline:
                            tr("%s made the advancement [%s]") % (m.group(1), m.group(3)),
                            {"name": m.group(3), "kind": kind}))
             return
-        # morti: la frase inizia col nome di un giocatore noto
+        # deaths: the phrase starts with the name of a known player
         first = text.split(" ", 1)[0]
         if first in self._players and raw.startswith(_SYS):
             r = self._deaths.match(text, self._players)
@@ -241,7 +241,7 @@ class Timeline:
     def _decode_lines(data):
         return [b.decode("utf-8", "replace").rstrip("\r") for b in data.split(b"\n")]
 
-    # ------------------------------------------------------------ fonti
+    # ------------------------------------------------------------ sources
     def _read_gz(self):
         changed = False
         try:
@@ -267,7 +267,7 @@ class Timeline:
                 with gzip.open(p, "rb") as f:
                     data = f.read()
             except (OSError, EOFError):
-                continue  # gz incompleto/in scrittura: riprova al prossimo giro
+                continue  # gz incomplete or being written: retry next round
             evs, _day, _last = self._parse_lines(self._decode_lines(data), datetime.date(y, mo, d))
             self._gz[n] = {"size": size, "events": evs}
             changed = True
@@ -291,11 +291,11 @@ class Timeline:
             return False
         cut = data.rfind(b"\n")
         if cut < 0:
-            return False  # nessuna riga completa
+            return False  # no complete line
         chunk = data[:cut + 1]
         lines = self._decode_lines(chunk)
         if reset:
-            # data iniziale dedotta da mtime e dai salti di mezzanotte
+            # start date worked out from mtime and the midnight jumps
             times = []
             for ln in lines:
                 m = _LINE.match(ln)
@@ -344,7 +344,7 @@ class Timeline:
             e = ACT.parse(ln)
             if not e or (e["cat"] == "login" and e["level"] == "warn") or "passw" in e["raw"].lower():
                 continue
-            who = tr("panel") if e["user"] == "panel" else e["user"]   # utente di sistema
+            who = tr("panel") if e["user"] == "panel" else e["user"]   # system user
             txt = (who + " " if who else "") + e["text"]
             evs.append(_mk(e["t"], "panel", None, txt, {"cat": e["cat"]}))
         self._panel = {"size": size, "events": evs}
@@ -358,12 +358,12 @@ class Timeline:
             allv.extend(self._gz[n]["events"])
         allv.extend(self._latest.get("events", []))
         allv.extend(self._panel.get("events", []))
-        allv.sort(key=lambda e: e["t"])  # stabile
+        allv.sort(key=lambda e: e["t"])  # stable
         self._all = allv
         self._sessions = None
 
     def refresh(self):
-        """Legge solo il nuovo; ritorna gli eventi nuovi (la prima volta: tutti quelli noti)."""
+        """Reads only what is new; returns the new events (the first time: all the known ones)."""
         with self._lock:
             ch = self._read_gz()
             ch = self._read_latest() or ch
@@ -400,7 +400,7 @@ class Timeline:
     def _build_sessions(self):
         sessions = []
         cur = None
-        online = {}   # nome -> entry
+        online = {}   # name -> entry
         prev_t = None
 
         def close(end):
@@ -419,7 +419,7 @@ class Timeline:
             if ty == "panel":
                 continue
             if ty == "server_start" and cur is not None:
-                close(prev_t if prev_t is not None else t)   # crash/spegnimento senza log
+                close(prev_t if prev_t is not None else t)   # crash or stop without a log line
             if ty == "server_stop" and cur is not None:
                 close(t)
             elif ty == "join":
@@ -428,7 +428,7 @@ class Timeline:
                            "deaths": [], "advancements": [], "events": 0}
                     sessions.append(cur)
                 name = e["player"]
-                if name in online:   # doppio join: chiudi il precedente
+                if name in online:   # double join: close the previous one
                     old = online.pop(name)
                     old["left"] = t
                     old["online_s"] = max(0, (t - old["joined"]) // 1000)
@@ -455,7 +455,7 @@ class Timeline:
                     and t - sessions[-1]["end"] <= 0:
                 sessions[-1]["events"] += 1
             prev_t = t
-        if cur is not None:   # in corso
+        if cur is not None:   # still running
             now_ms = int(time.time() * 1000)
             for en in online.values():
                 en["online_s"] = max(0, (now_ms - en["joined"]) // 1000)
@@ -469,7 +469,7 @@ class Timeline:
             res = self._sessions[::-1]
             if limit:
                 res = res[:limit]
-            return json.loads(json.dumps(res))   # copia: il chiamante non altera lo stato
+            return json.loads(json.dumps(res))   # copy: the caller cannot change the state
 
 
 # ---------------------------------------------------------------- CLI

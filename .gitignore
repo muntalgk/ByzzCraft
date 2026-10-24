@@ -1,4 +1,4 @@
-# dati locali dell'istanza: dalla 1.0 tutti in data/, gli altri nomi sono delle installazioni precedenti
+# instance data: since 1.0 all in data/; the other names are from installs made before
 data/
 panel-config.json
 panel-users.json
@@ -11,16 +11,11 @@ logs/
 runtime/
 __pycache__/
 
-# asset di Mojang: si scaricano con `python panel.py assets`, non si ridistribuiscono
+# Mojang assets: downloaded with `python panel.py assets`, never redistributed
 assets/block/
 assets/item/
 assets/hud/
 assets/skin/
 assets/lang.json
 assets/texcolors.json
-
-# script personali / di analisi
-crea-utenti.bat
-attiva-pannello.ps1
-assets/riferimento_*.py
 assets.download-tmp/

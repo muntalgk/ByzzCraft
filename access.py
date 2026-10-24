@@ -1,7 +1,7 @@
-"""Whitelist, operatori e ban del server (solo libreria standard).
+"""Server whitelist, operators and bans (standard library only).
 
-A server acceso le modifiche passano da RCON (il server aggiorna i suoi file); a server spento si
-scrivono direttamente whitelist.json / ops.json / banned-players.json, con l'UUID chiesto a Mojang.
+With the server on, changes go through RCON (the server updates its own files); with the server off they are
+written straight to whitelist.json / ops.json / banned-players.json, with the UUID asked to Mojang.
 """
 import json
 import os
@@ -16,17 +16,17 @@ from i18n import t
 NAME_RE = re.compile(r"^[A-Za-z0-9_]{3,16}$")
 FILES = {"whitelist": "whitelist.json", "ops": "ops.json", "bans": "banned-players.json", "ipbans": "banned-ips.json"}
 ACTIONS = ("wl_add", "wl_remove", "op", "deop", "ban", "pardon", "kick")
-# frasi del registro ("admin <verbo> Nick"): registro.py le riconosce da qui, quindi si cambiano solo qui
+# activity log phrases ("admin <verb> Nick"): activity.py recognises them from here, so change them only here
 VERBS = {"wl_add": "whitelisted", "wl_remove": "unwhitelisted", "op": "opped",
          "deop": "deopped", "ban": "banned", "pardon": "pardoned", "kick": "kicked"}
-# esito mostrato all'utente (online via RCON e offline sui file)
+# result shown to the user (online via RCON and offline on the files)
 DONE = {"wl_add": "%s added to the whitelist", "wl_remove": "%s removed from the whitelist", "op": "%s is now an operator",
         "deop": "%s is no longer an operator", "ban": "%s banned", "pardon": "%s is no longer banned", "kick": "%s kicked"}
 
 
 def _read(server_dir, key, strict=False):
-    """strict=True (prima di riscrivere il file): solo un file assente vale come lista vuota; un file
-    illeggibile o rovinato e' un errore, altrimenti lo si sovrascriverebbe perdendo tutte le voci."""
+    """strict=True (before rewriting the file): only a missing file counts as an empty list; an unreadable or
+    damaged file is an error, otherwise it would be overwritten and every entry lost."""
     try:
         with open(os.path.join(server_dir, FILES[key]), encoding="utf-8-sig") as f:
             data = json.load(f)
@@ -61,7 +61,7 @@ def _find(lst, name):
 
 
 def lookup(name):
-    """(uuid con trattini, nome esatto) da Mojang, None se il nome non esiste."""
+    """(dashed uuid, exact name) from Mojang, None if the name does not exist."""
     req = urllib.request.Request("https://api.mojang.com/users/profiles/minecraft/" + name,
                                  headers={"User-Agent": "byzzcraft"})
     try:
@@ -78,7 +78,7 @@ def lookup(name):
 
 
 def _profile(server_dir, name, known):
-    """UUID dai file del server o dai giocatori gia' visti, altrimenti da Mojang."""
+    """UUID from the server files or from players already seen, otherwise from Mojang."""
     for key in ("whitelist", "ops", "bans"):
         e = _find(_read(server_dir, key), name)
         if e and e.get("uuid"):
@@ -96,23 +96,23 @@ def _profile(server_dir, name, known):
 
 
 def command(action, name, reason=""):
-    """Comando RCON equivalente (server acceso)."""
+    """Equivalent RCON command (server on)."""
     reason = re.sub(r"[\r\n\x00-\x1f]+", " ", reason).strip()[:100]
     base = {"wl_add": "whitelist add ", "wl_remove": "whitelist remove ", "op": "op ", "deop": "deop ",
             "ban": "ban ", "pardon": "pardon ", "kick": "kick "}[action] + name
-    # concatenato, non con %: un motivo come "100% sicuro" non deve rompere il comando
+    # concatenated, not with %: a reason like "100% sure" must not break the command
     return base + (" " + reason if reason and action in ("ban", "kick") else "")
 
 
 def resolve(server_dir, action, name, known=None):
-    """UUID e nome esatto per le azioni che aggiungono (fuori da ogni lock: Mojang puo' metterci secondi)."""
+    """UUID and exact name for the actions that add someone (outside any lock: Mojang can take seconds)."""
     return _profile(server_dir, name, known) if action in ("wl_add", "op", "ban") else None
 
 
 def apply_offline(server_dir, action, name, reason="", who="panel", profile=None):
-    """Modifica i file a server spento. Ritorna il messaggio per l'utente.
-    Chi chiama tiene il LOCK del pannello (niente modifiche in parallelo, niente avvio del server a meta').
-    profile: (uuid, nome) gia' risolto con resolve(), per non chiamare Mojang qui dentro."""
+    """Changes the files with the server off. Returns the message for the user.
+    The caller holds the panel LOCK (no parallel changes, no server start halfway through).
+    profile: (uuid, name) already resolved with resolve(), so Mojang is not called in here."""
     reason = re.sub(r"[\r\n\x00-\x1f]+", " ", reason).strip()[:100]
     if action == "kick":
         raise ValueError(t("The server is off: nobody to kick"))
