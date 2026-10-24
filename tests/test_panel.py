@@ -86,6 +86,9 @@ try:
             f.write("server-ip=%s\n" % ip)
         check("mc_host %r" % ip, panel.mc_host() == want, panel.mc_host())
 
+    # icons: the URL carries the version, so a new logo is not hidden by the browser cache
+    check("favicon URL versioned", ("/favicon.ico?v=%s" % panel.ICON_V).encode() in panel.login_page() and len(panel.ICON_V) == 8)
+
     # start script: run directly only with a shebang (an executable without one gives ENOEXEC)
     for name, body in (("bash.sh", "#!/bin/bash\n"), ("plain.sh", "java -jar server.jar\n")):
         p = j(srv_dir, name)
