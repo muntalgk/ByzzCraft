@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = "0.1.0"
+VERSION = "1.0.0"
 REPO = "muntalgk/byzzcraft"
 sys.path.insert(0, HERE)
 import players as PL  # noqa: E402
