@@ -1,7 +1,6 @@
 """Player data for the panel: NBT from the files, SNBT from RCON, statistics, icons and skins."""
 import base64, gzip, json, os, re, shutil, struct, threading, time, urllib.request
 
-HERE = os.path.dirname(os.path.abspath(__file__))
 from paths import ASSETS, CACHE  # noqa: E402
 UA = "byzzcraft (+https://github.com/muntalgk/byzzcraft)"
 
@@ -110,6 +109,7 @@ class SNBT:
         if c in "\"'":
             return self.quoted()
         tok = self.token()
+        if not tok: raise ValueError("token vuoto a %d" % self.i)   # e.g. "[:]": would never advance
         if tok in ("true", "false"):
             return 1 if tok == "true" else 0
         m = _NUM.match(tok)
@@ -369,14 +369,16 @@ def _icon_lookup(iid):
 
 
 # ---------------------------------------------------------------- skins (Mojang, cached for 6 hours)
-_SKIN_LOCK = threading.Lock()
+_SKIN_LOCKS, _SKIN_GUARD = {}, threading.Lock()   # one lock per uuid: slow Mojang calls do not block other skins
 
 
 def skin(uuid):
     """(png_bytes, slim) - downloaded from Mojang when needed, otherwise Steve/Alex."""
     os.makedirs(os.path.join(CACHE, "skins"), exist_ok=True)
     png = os.path.join(CACHE, "skins", uuid + ".png"); meta = os.path.join(CACHE, "skins", uuid + ".json")
-    with _SKIN_LOCK:
+    with _SKIN_GUARD:
+        lock = _SKIN_LOCKS.setdefault(uuid, threading.Lock())
+    with lock:
         fresh = os.path.exists(png) and time.time() - os.path.getmtime(png) < 6 * 3600
         if not fresh:
             try:
@@ -397,8 +399,11 @@ def skin(uuid):
                 else:
                     slim = int(uuid.replace("-", "")[-1], 16) % 2 == 1
                     default = os.path.join(ASSETS, "skin", "slim_alex.png" if slim else "wide_steve.png")
-                    shutil.copyfile(default, png)
-                    json.dump({"slim": slim}, open(meta, "w"))
+                    try:
+                        shutil.copyfile(default, png)
+                        json.dump({"slim": slim}, open(meta, "w"))
+                    except OSError:   # assets from an old version have no skin/ folder: "no skin"
+                        return b"", False
         slim = False
         try:
             slim = json.load(open(meta)).get("slim", False)

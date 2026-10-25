@@ -13,7 +13,6 @@ import tarfile
 import urllib.request
 import zipfile
 
-HERE = os.path.dirname(os.path.abspath(__file__))
 from paths import RUNTIME  # noqa: E402
 API = "https://api.adoptium.net/v3/assets/latest/%d/hotspot?os=%s&architecture=%s&image_type=jre&vendor=eclipse"
 EXE = "java.exe" if os.name == "nt" else "java"
@@ -39,7 +38,24 @@ def parse_version(text):
     return int(m.group(2) or 0) if major == 1 else major
 
 
+_VER = {}   # (java path, mtime) -> major: `java -version` takes seconds, health and settings ask often
+
+
 def version_of(java):
+    exe = shutil.which(java) or java
+    try:
+        key = (exe, os.path.getmtime(exe))
+    except OSError:
+        key = None
+    if key in _VER:
+        return _VER[key]
+    v = _run_version(java)
+    if key and v:
+        _VER[key] = v
+    return v
+
+
+def _run_version(java):
     try:
         # no console window flashing on Windows when the panel runs without one (pythonw)
         r = subprocess.run([java, "-version"], capture_output=True, text=True, timeout=30,

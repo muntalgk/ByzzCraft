@@ -82,6 +82,14 @@ try:
     st, body, _ = req("POST", "/api/users/save", '{"name": "eve", "password": "0123456789", "new": true, "admin": true}',
                       dict(bob, **{"Content-Type": "application/json", "X-CSRF": bcsrf}))
     check("player: cannot create admin", st == 403, body)
+    # password change: the other session of the same user dies, the one that changed it lives
+    bob2 = {"Cookie": login("bob", PW)[2].get("set-cookie", "").split(";")[0]}
+    check("bob second session valid", req("GET", "/api/health", headers=bob2)[0] == 403)
+    st, body, _ = req("POST", "/api/account/password", json.dumps({"current": PW, "new": "nuova-password-1"}),
+                      dict(bob, **{"Content-Type": "application/json", "X-CSRF": bcsrf}))
+    check("password change", st == 200 and json.loads(body)["ok"], body)
+    check("other session of the user: 401", req("GET", "/api/health", headers=bob2)[0] == 401)
+    check("session that changed it: still valid", req("GET", "/api/health", headers=bob)[0] == 403)
     # last: it also locks the address 127.0.0.1
     codes = [login("nessuno", "x")[0] for _ in range(6)]
     check("lock after 5 attempts", codes == [401] * 4 + [429] * 2, codes)   # the first wrong one is admin's, above

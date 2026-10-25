@@ -11,6 +11,7 @@ import time
 import zipfile
 from datetime import datetime, timedelta
 
+from paths import write_json
 from i18n import t as tr   # t is used as a local variable (times)
 
 if os.name == "nt":
@@ -49,7 +50,7 @@ def _extras(world):
     return [(sfx, world + sfx) for sfx in EXTRA if os.path.isdir(world + sfx)]
 
 
-def _mb(n):
+def mb(n):
     return "%d MB" % (n // 1048576) if n < 10 * 1073741824 else "%.1f GB" % (n / 1073741824)
 
 
@@ -257,10 +258,13 @@ class Backups:
         }
         if out["last_daily"] and len(out["last_daily"]) == 10:
             out["last_daily"] += " 23:59"   # before 1.x only the day was saved: that day counts as done
-        try:
-            out["schedule"] = self._normalize_schedule(st.get("schedule") or {}, out["schedule"])
-        except ValueError:
-            pass
+        sch = st.get("schedule")
+        if isinstance(sch, dict):
+            for k, v in sch.items():   # an invalid field falls back to its default, the others stay
+                try:
+                    out["schedule"] = self._normalize_schedule({k: v}, out["schedule"])
+                except ValueError:
+                    pass
         return out
 
     def _save_state(self):
@@ -273,12 +277,7 @@ class Backups:
                 "last_scheduled": self._state["last_scheduled"],
                 "last_daily": self._state["last_daily"],
             }
-            tmp = self.state_file + ".tmp"
-            d = os.path.dirname(os.path.abspath(self.state_file))
-            os.makedirs(d, exist_ok=True)
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=1)
-            os.replace(tmp, self.state_file)
+            write_json(self.state_file, data, ensure_ascii=False, indent=1)
 
     # ------------------------------------------------------------ helpers
     def _notify(self, force=True):
@@ -297,7 +296,8 @@ class Backups:
             raise Busy(tr("Another operation is in progress"))
         with self._mu:
             self._busy = {"op": op, "label": label, "progress": 0.0, "started": time.time()}
-            self._last_error = None
+            if not (self._last_error or "").startswith(tr("WARNING")):   # only a good backup clears it
+                self._last_error = None
         self._notify()
 
     def _end(self):
@@ -331,13 +331,7 @@ class Backups:
         with self._mu:
             if key in self._size_cache:
                 return self._size_cache[key]
-        total = 0
-        for root, _d, files in os.walk(path):
-            for fn in files:
-                try:
-                    total += os.path.getsize(os.path.join(root, fn))
-                except OSError:
-                    pass
+        total = sum(self._tree_bytes(p) for p in [path] + [p for _s, p in _extras(path)])   # with _nether/_the_end
         with self._mu:
             self._size_cache[key] = total
         return total
@@ -395,7 +389,7 @@ class Backups:
         """A readable error before starting, instead of filling the disk halfway through the copy."""
         free = shutil.disk_usage(path or self.server_dir).free
         if free < need + SPACE_MARGIN:
-            raise ValueError(tr("Not enough disk space: about %s needed, %s free.") % (_mb(need + SPACE_MARGIN), _mb(free)))
+            raise ValueError(tr("Not enough disk space: about %s needed, %s free.") % (mb(need + SPACE_MARGIN), mb(free)))
 
     def disk(self):
         u = shutil.disk_usage(self.server_dir)
@@ -590,8 +584,12 @@ class Backups:
     def set_schedule(self, cfg):
         with self._mu:
             new = self._normalize_schedule(cfg, self._state["schedule"])
-            self._state["schedule"] = new
-            self._save_state()
+            old, self._state["schedule"] = self._state["schedule"], new
+            try:
+                self._save_state()
+            except BaseException:
+                self._state["schedule"] = old   # not saved: the old schedule stays active
+                raise
             res = json.loads(json.dumps(new))
         self._notify()
         return res
@@ -604,9 +602,8 @@ class Backups:
         if server_on and rcon is None:
             raise ValueError(tr("RCON is needed to back up while the server is on"))
         self._begin("backup", {"auto": tr("Scheduled backup"), "world": tr("Backup before the start")}.get(prefix, tr("Manual backup")))
-        with self._mu:
-            self._last_error = None   # the old warning does not apply to this attempt
         tmpdir = part = None
+        warned = False
         try:
             os.makedirs(self.backups_dir, exist_ok=True)
             self._clean_stale()
@@ -630,7 +627,7 @@ class Backups:
                     time.sleep(1.0)
                     done = 0
                     for arc, p in srcs:
-                        done = self._copy_world(p, os.path.join(tmpdir, arc), total, done)
+                        done = self._copy_tree(p, os.path.join(tmpdir, arc), total, done)
                 finally:
                     # always, even if save-off seems to have failed (the answer may have been lost)
                     err = None
@@ -642,7 +639,8 @@ class Backups:
                         except Exception as ex:  # noqa: BLE001
                             err = ex
                             time.sleep(2)
-                    if err is not None and save_off:
+                    if err is not None:   # also when save-off's answer was lost but the command went through
+                        warned = True
                         self._set_error(tr("WARNING: save-on failed (%s): type save-on in the Console") % err)
                 srcs = [(arc, os.path.join(tmpdir, arc)) for arc, _p in srcs]
                 base, span = 0.3, 0.7
@@ -651,6 +649,9 @@ class Backups:
             self._zip_world(srcs, part, base, span)
             os.replace(part, final)
             part = None
+            if not warned:
+                with self._mu:
+                    self._last_error = None   # a good backup retires an older save-on warning
             if tmpdir:
                 _rmtree(tmpdir)
                 tmpdir = None
@@ -700,7 +701,7 @@ class Backups:
                     pass
         return max(t, 1)
 
-    def _copy_world(self, src, dst, total, done=0):
+    def _copy_tree(self, src, dst, total, done=0, share=0.3):
         for r, dirs, files in os.walk(src):
             rel = os.path.relpath(r, src)
             tgt = dst if rel == "." else os.path.join(dst, rel)
@@ -716,14 +717,15 @@ class Backups:
                 except OSError as ex:
                     _rmfile(d)   # a backup with a missing piece must not pass for a good one
                     raise OSError(tr("unreadable file: %s (%s)") % (os.path.relpath(s, src), ex))
-                self._progress(0.3 * done / total)
+                self._progress(share * done / total)
         return done
 
     def _zip_world(self, srcs, part, base, span):
         """srcs: [(name in the zip, folder)]: world, and for Paper world_nether and world_the_end."""
         total = sum(self._tree_bytes(p) for _a, p in srcs)
         done = 0
-        with zipfile.ZipFile(part, "w", zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as zf:
+        with zipfile.ZipFile(part, "w", zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True,
+                             strict_timestamps=False) as zf:
             for arc, src in srcs:
                 done = self._zip_dir(zf, arc, src, done, total, base, span)
 
@@ -786,18 +788,23 @@ class Backups:
             if os.name == "nt":
                 try:
                     _to_recycle_bin(p, e.get("size") if p == paths[0] else None)
-                except _BinRefused:
+                except OSError:   # includes _BinRefused and an unreadable bin limit
                     # automatic backups must free space even when the bin cannot take them
                     if not (auto and e["folder"] == "backups"):
                         raise
                     os.remove(p)
+            elif auto and e["folder"] == "backups":
+                os.remove(p)   # pruned zips would fill the trash for 7 days
             else:
                 _to_trash_dir(p, os.path.join(self.server_dir, "trash"))
         with self._mu:
             self._state["pinned"].discard(e["id"])
             self._state["note"].pop(e["id"], None)
             self._state["world"].pop(e["id"], None)
-            self._save_state()
+            try:
+                self._save_state()
+            except OSError:   # the file is already gone: do not report a failure
+                pass
 
     # ------------------------------------------------------------ retention
     def prune(self):
@@ -905,30 +912,37 @@ class Backups:
                         self._extract_zip(src, tmp + sfx, top="world" + sfx)
             else:
                 self.check_space(sum(self._tree_bytes(p) for p in [src] + [p for _s, p in _extras(src)]))
-                self._copy_folder(src, tmp)
-                for sfx, p in _extras(src):
-                    self._copy_folder(p, tmp + sfx)
+                for sfx, p in [("", src)] + _extras(src):
+                    self._copy_tree(p, tmp + sfx, self._tree_bytes(p), share=1)
             if not os.path.isfile(os.path.join(tmp, "level.dat")):
                 raise ValueError(tr("The backup does not contain level.dat"))
             os.makedirs(self.old_dir, exist_ok=True)
             old = None
-            if os.path.isdir(self.world_dir):
-                old = self._unique(os.path.join(
-                    self.old_dir, "world_%s_before-restore" % datetime.now().strftime(TS_FMT)))
-                os.replace(self.world_dir, old)
+            done = []   # (from, to) of every swap, undone in reverse if one fails: all or nothing
+
+            def move(a, b):
+                os.replace(a, b)
+                done.append((a, b))
             try:
-                os.replace(tmp, self.world_dir)
+                if os.path.isdir(self.world_dir):
+                    old = self._unique(os.path.join(
+                        self.old_dir, "world_%s_before-restore" % datetime.now().strftime(TS_FMT)))
+                    move(self.world_dir, old)
+                move(tmp, self.world_dir)
+                # Paper's Nether and End: only those the backup contains are replaced, the old ones go next to the old world
+                for sfx in EXTRA:
+                    if os.path.isdir(tmp + sfx):
+                        if os.path.isdir(self.world_dir + sfx):
+                            os.makedirs(self.old_dir, exist_ok=True)
+                            move(self.world_dir + sfx, (old or self._unique(os.path.join(self.old_dir, "world"))) + sfx)
+                        move(tmp + sfx, self.world_dir + sfx)
             except Exception:
-                if old:
-                    os.replace(old, self.world_dir)
+                for a, b in reversed(done):
+                    try:
+                        os.replace(b, a)
+                    except OSError:
+                        pass
                 raise
-            # Paper's Nether and End: only those the backup contains are replaced, the old ones go next to the old world
-            for sfx in EXTRA:
-                if os.path.isdir(tmp + sfx):
-                    if os.path.isdir(self.world_dir + sfx):
-                        os.makedirs(self.old_dir, exist_ok=True)
-                        os.replace(self.world_dir + sfx, (old or self._unique(os.path.join(self.old_dir, "world"))) + sfx)
-                    os.replace(tmp + sfx, self.world_dir + sfx)
             self._notify()
             return {"moved_to": os.path.basename(old) if old else ""}
         except Exception as ex:
@@ -990,18 +1004,3 @@ class Backups:
                         d.write(b)
                         done += len(b)
                         self._progress(done / total)
-
-    def _copy_folder(self, src, dest):
-        total = self._tree_bytes(src)
-        done = 0
-        for r, _dirs, files in os.walk(src):
-            rel = os.path.relpath(r, src)
-            tgt = dest if rel == "." else os.path.join(dest, rel)
-            os.makedirs(tgt, exist_ok=True)
-            for fn in files:
-                if fn == "session.lock":
-                    continue
-                s = os.path.join(r, fn)
-                shutil.copyfile(s, os.path.join(tgt, fn))
-                done += os.path.getsize(s)
-                self._progress(done / total)

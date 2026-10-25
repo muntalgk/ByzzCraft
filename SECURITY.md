@@ -12,9 +12,12 @@ the advisory credits you unless you prefer otherwise.
 
 - Passwords: PBKDF2-SHA256, 240,000 rounds, per-user salt. Sessions: random tokens, only their hash on disk,
   `HttpOnly` and `SameSite=Strict` cookies, CSRF token on every change.
-- Logins: 5 wrong attempts lock the user and the address for 15 minutes.
-- First setup: only from the machine itself or with the one-time code printed at start-up.
-- Proxy headers (`X-Forwarded-For`, Tailscale) are trusted only from 127.0.0.1.
+- Logins: 5 wrong attempts lock the address for 15 minutes (not the user: a stranger could lock the admin out).
+  Changing or resetting a password ends the other sessions of that user.
+- First setup: only from the machine itself (opened by IP or `localhost`, same origin) or with the one-time code
+  printed at start-up.
+- Proxy headers (`X-Forwarded-For`, last hop; Tailscale) are trusted only from a proxy on the same machine.
+- Java flags from the panel: only an allowlist (no `-XX:OnError`, `-javaagent`, `@file`...).
 
 ## What it does not do
 

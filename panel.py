@@ -10,7 +10,7 @@ Users:            python panel.py adduser NAME [--admin]
                   python panel.py users
 Assets:           python panel.py assets [VERSION]   (textures and translations downloaded from Mojang)
 """
-import base64, getpass, hashlib, hmac, html, json, logging, logging.handlers, os, queue, re, secrets, shlex, shutil, signal, socket, struct, subprocess, sys, threading, time, urllib.request
+import getpass, hashlib, hmac, html, ipaddress, json, logging, logging.handlers, os, queue, re, secrets, shlex, shutil, signal, socket, struct, subprocess, sys, threading, time, urllib.request
 from collections import deque
 from datetime import datetime
 from http.cookies import SimpleCookie
@@ -32,7 +32,7 @@ import runtime as RT  # noqa: E402
 import i18n  # noqa: E402
 from i18n import t  # noqa: E402
 from sysinfo import NCPU, ProcSampler, listening_pid, pid_alive, system_memory, system_times  # noqa: E402
-from paths import CACHE, DATA, LOGS, ASSETS as MOJANG  # noqa: E402
+from paths import CACHE, DATA, LOGS, ASSETS as MOJANG, write_json  # noqa: E402
 CONFIG_PATH = os.environ.get("PANEL_CONFIG", os.path.join(DATA, "panel-config.json"))
 DEFAULTS = {
     "server_dir": os.path.dirname(HERE),
@@ -219,10 +219,7 @@ def load_users():
 
 
 def save_users(users):
-    os.makedirs(os.path.dirname(CFG["users_file"]), exist_ok=True)
-    tmp = CFG["users_file"] + ".tmp"
-    json.dump(users, open(tmp, "w", encoding="utf-8"), indent=2)
-    os.replace(tmp, CFG["users_file"])
+    write_json(CFG["users_file"], users, 0o600, indent=2)   # password hashes: only the panel's user reads them
 
 
 def hash_pw(pw, salt=None, rounds=PBKDF2_ROUNDS):
@@ -258,14 +255,23 @@ def props_path():
     return os.path.join(CFG["server_dir"], "server.properties")
 
 
+def read_props_text():
+    """UTF-8, or Windows ANSI for a server.properties saved by an old editor (written back as UTF-8, which Minecraft reads)."""
+    with open(props_path(), "rb") as f:
+        raw = f.read()
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode("cp1252", "replace")
+
+
 def server_props():
     props = {}
     try:
-        with open(props_path(), encoding="utf-8") as f:
-            for line in f:
-                if "=" in line and not line.lstrip().startswith("#"):
-                    k, v = line.rstrip("\r\n").split("=", 1)
-                    props[k.strip()] = v
+        for line in read_props_text().splitlines():
+            if "=" in line and not line.lstrip().startswith("#"):
+                k, v = line.split("=", 1)
+                props[k.strip()] = v
     except FileNotFoundError:
         pass
     return props
@@ -273,8 +279,7 @@ def server_props():
 
 def write_props(changes, who):
     path = props_path()
-    with open(path, encoding="utf-8") as f:
-        lines = f.read().splitlines()
+    lines = read_props_text().splitlines()
     bdir = os.path.join(DATA, "backup-properties")
     os.makedirs(bdir, exist_ok=True)
     with open(os.path.join(bdir, "server.properties.%s" % datetime.now().strftime("%Y%m%d-%H%M%S")), "w", encoding="utf-8") as f:
@@ -450,7 +455,10 @@ class Rcon:
                         return ""
                     self.sock.settimeout(timeout)
                     try:
-                        _, body = self._recv()
+                        while True:
+                            rid, body = self._recv()
+                            if rid == self.rid:   # leftover pieces of a long answer carry an older id
+                                break
                     finally:
                         if self.sock:
                             self.sock.settimeout(5)
@@ -562,7 +570,7 @@ class ServerControl:
             prev = self.state
             self.info = info
             if info is not None:
-                if self.state != "stopping":
+                if self.state != "stopping" or not self.stop_requested:   # a missed ping alone must not keep it "stopping"
                     self.state = "on"
                 if info[0] > 0:
                     self.empty_since = None
@@ -580,10 +588,12 @@ class ServerControl:
                     self.state = "stopping" if pid_alive(self.last_pid) else "off"
             if self.proc is not None:
                 self.proc.poll()   # reaps the finished script: no zombie processes
+            if self.state == "off" and not pid_alive(self.last_pid):
+                self.last_pid = None   # Windows reuses PIDs: a stale one would look "still shutting down" forever
             changed = prev != self.state
             crashed = changed and self.state == "off" and prev in ("on", "stopping") \
                       and (not self.stop_requested or bool(crash_reason(self.on_since)))   # a crash also logs "Stopping server"
-            if changed and self.state == "on":
+            if changed and self.state == "on" and prev != "stopping":   # back from a missed ping: the same run, keep its state
                 self.start_error, self.stop_requested, self.on_since = None, False, time.time()
                 try:
                     self.props_mtime_on = os.path.getmtime(props_path())
@@ -599,9 +609,9 @@ class ServerControl:
             if not ok and backup_busy():
                 self.restart_pending = True   # retried when the backup is done
 
-        return changed
-
     def start(self, who):
+        jar = server_jar()
+        java = RT.java_for(RT.required(CFG["server_dir"], jar))[0]   # slow (java -version, manifests): not under LOCK
         with LOCK:
             if self.state in ("starting", "on", "stopping"):
                 return False, t("The server is already on or starting.")
@@ -610,8 +620,6 @@ class ServerControl:
             busy = backup_busy()
             if busy or OP_PENDING.is_set():
                 return False, t("Wait for it to finish: %s in progress.") % (busy or t("backup operation")).lower()
-            jar = server_jar()
-            java = RT.java_for(RT.required(CFG["server_dir"], jar))[0]
             script = CFG.get("start_script")
             if script:
                 script = os.path.join(CFG["server_dir"], script)
@@ -635,7 +643,7 @@ class ServerControl:
                 BACKUPS.create("startup")
             except Exception as e:  # noqa: BLE001  (start anyway, as the start script did)
                 log("panel: backup before start failed (%s)" % e)
-                HUB.publish("notice", {"ok": False, "message": t("World backup before the start failed: %s") % e})
+                HUB.publish("notice", {"ok": False, "message": t("World backup before the start failed: %s") % e}, admin_only=True)
         with LOCK:
             self.preparing = False
             if self.state != "starting":
@@ -810,7 +818,7 @@ def start_failure(exited, code=None):
     L.error("start failed (exit code %s): %s\n%s", code, hint or ("exited" if exited else "timeout"), "\n".join(lines[-15:]))
     log("panel: start failed (%s)" % (hint or "see logs/server-start.log"))
     console_push(lines[-15:] + [msg], "err")
-    HUB.publish("notice", {"ok": False, "message": msg})
+    HUB.publish("notice", {"ok": False, "message": msg}, admin_only=True)
     return msg
 
 
@@ -834,12 +842,13 @@ def sampler():
     procs = ProcSampler()
     last_tick = 0; mspt = p95 = None
     last_sys = system_times()
+    auto_stop_retry = 0
     while True:
         t0 = time.time()
         try:
             port = SRV.port()
             info = ping(port)
-            changed = SRV.update(info)
+            SRV.update(info)
             pid = listening_pid(port) if info is not None else None
             if pid:
                 SRV.last_pid = pid
@@ -871,8 +880,10 @@ def sampler():
             HUB.publish("metrics", point)
             HUB.publish("status", SRV.snapshot())
             mins = CFG["auto_stop_minutes"]
-            if mins and info is not None and SRV.state == "on" and SRV.empty_since and time.time() - SRV.empty_since >= mins * 60:
-                SRV.stop("panel", "empty for %d minutes" % mins)
+            if mins and info is not None and SRV.state == "on" and SRV.empty_since and time.time() - SRV.empty_since >= mins * 60 \
+                    and time.time() >= auto_stop_retry:
+                if not SRV.stop("panel", "empty for %d minutes" % mins)[0]:
+                    auto_stop_retry = time.time() + 60   # RCON down: do not retry (and log) every 2 s
         except Exception as e:  # noqa: BLE001
             loop_error("sampling", e)
         time.sleep(max(0.2, SAMPLE_SECONDS - (time.time() - t0)))
@@ -1028,9 +1039,7 @@ def load_markers():
 
 
 def save_markers(m):
-    tmp = MARKERS_FILE + ".tmp"
-    json.dump(m, open(tmp, "w", encoding="utf-8"), indent=1)
-    os.replace(tmp, MARKERS_FILE)
+    write_json(MARKERS_FILE, m, indent=1)
 
 
 def map_warmer():
@@ -1063,6 +1072,10 @@ def publish_timeline(evs):
         HUB.publish("timeline", e, admin_only=e.get("type") == "panel")
 
 
+# system line only: chat has <name> after "]: " and must not stop the server
+STOPPING_RE = re.compile(r"^\[[^\]]*\](?: \[[^\]]*\])*(?:: | \([^)]*\) )Stopping (?:the )?server\s*$")   # Fabric: "] (Minecraft) Stopping"
+
+
 def tailers():
     logs = Tailer(os.path.join(CFG["server_dir"], "logs", "latest.log"), initial_lines=200)
     gc = Tailer(os.path.join(CFG["server_dir"], "logs", "gc.log"), initial_lines=400)
@@ -1071,7 +1084,7 @@ def tailers():
     while True:
         try:
             lines = logs.read()
-            if tl_ready and any("Stopping the server" in l or "Stopping server" in l for l in lines):   # not the old lines read at start-up
+            if tl_ready and any(STOPPING_RE.match(l) for l in lines):   # not the old lines read at start-up
                 SRV.stop_requested = True   # /stop from the game or the console: not a crash
             console_push(lines)
             if lines or time.time() - last_tl > 5:
@@ -1097,6 +1110,11 @@ DATA_SENT = {}
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
+def level_name_ok(v):
+    """level-name goes into a path: no separators, no .., not absolute, not empty."""
+    return bool(v.strip()) and v != "." and not v.endswith((" ", ".")) and not re.search(r"[/\\]|\.\.|^[A-Za-z]:", v) and not os.path.isabs(v)
+
+
 def world_dir():
     return os.path.join(CFG["server_dir"], server_props().get("level-name", "world") or "world")
 
@@ -1106,11 +1124,12 @@ def known_players():
     names = {}
     try:
         for e in json.load(open(os.path.join(CFG["server_dir"], "usercache.json"), encoding="utf-8")):
-            names[e["uuid"]] = e["name"]
+            if isinstance(e, dict) and UUID_RE.match(str(e.get("uuid", ""))) and e.get("name"):
+                names[e["uuid"]] = e["name"]
     except (OSError, ValueError):
         pass
     pdir = PL.player_dir(world_dir(), "data")
-    on_disk = {f[:-4] for f in os.listdir(pdir) if f.endswith(".dat")} if os.path.isdir(pdir) else set()
+    on_disk = {f[:-4] for f in os.listdir(pdir) if f.endswith(".dat") and UUID_RE.match(f[:-4])} if os.path.isdir(pdir) else set()
     return {u: names.get(u, u[:8]) for u in set(names) | on_disk if u in on_disk or names.get(u)}
 
 
@@ -1213,14 +1232,14 @@ SESS_LOCK = threading.Lock()
 def save_sessions():
     try:
         with SESS_LOCK:
-            os.makedirs(os.path.dirname(SESS_FILE), exist_ok=True)
-            live = {k: dict(v) for k, v in list(SESSIONS.items()) if v["exp"] > time.time()}
-            tmp = SESS_FILE + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(live, f)
-            os.replace(tmp, SESS_FILE)
+            write_json(SESS_FILE, {k: dict(v) for k, v in list(SESSIONS.items()) if v["exp"] > time.time()}, 0o600)
     except (OSError, RuntimeError):
         pass
+
+
+def pw_version(u):
+    """Changes with the password (new salt) or when the user is deleted and created again: read from the users file, so `panel.py passwd` counts too."""
+    return (u.get("hash") or "")[:16]
 
 
 def drop_sessions(user, keep=None):
@@ -1239,11 +1258,19 @@ FAILS = {}
 LOCKED = {}
 
 
+def from_local_proxy(handler):
+    """Peer is this machine: loopback, or its own LAN address (a proxy reaching us through it)."""
+    ip = handler.client_address[0]
+    return ip in LOOPBACK or ip == handler.connection.getsockname()[0]
+
+
 def client_id(handler):
     ip = handler.client_address[0]
-    if ip not in LOOPBACK:
+    if not from_local_proxy(handler):
         return ip   # proxy headers count only from a local proxy (tailscale serve, nginx): otherwise they could be forged
-    return handler.headers.get("Tailscale-User-Login") or handler.headers.get("X-Forwarded-For") or ip
+    # the last X-Forwarded-For hop is the one our proxy appended; no Tailscale-User-Login fallback: a client can forge it, dodging the login lock
+    xff = (handler.headers.get("X-Forwarded-For") or "").split(",")[-1].strip()
+    return xff or ip
 
 
 LOOPBACK = ("127.0.0.1", "::1", "::ffff:127.0.0.1")
@@ -1251,8 +1278,9 @@ PROXY_HEADERS = ("X-Forwarded-For", "X-Real-IP", "Forwarded", "X-Forwarded-Host"
 
 
 def is_local(handler):
-    """Browser open on this machine. Tailscale Serve and nginx also come from 127.0.0.1, but with their headers."""
-    return handler.client_address[0] in LOOPBACK and not any(handler.headers.get(h) for h in PROXY_HEADERS)
+    """Browser open on this machine. Tailscale Serve and nginx also come from 127.0.0.1, but with their headers.
+    Same machine through its LAN address (the link printed at start-up): source and destination address match."""
+    return from_local_proxy(handler) and not any(handler.headers.get(h) for h in PROXY_HEADERS)
 
 
 def locked(keys):
@@ -1311,8 +1339,7 @@ def login_page(error=""):
 <label for=p>%s</label><input id=p name=password type=password autocomplete=current-password required>
 <button type=submit>%s</button>%s</form></main>""" % (LOGO_SVG, html.escape(CFG["title"]), html.escape(t("Log in to manage the server.")),
                                                     html.escape(t("User")), html.escape(t("Password")), html.escape(t("Log in")), err)
-    return ("<!doctype html><html lang=" + i18n.LANG + "><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
-            "<title>%s</title>%s<style>%s</style></head><body>%s</body></html>" % (html.escape(CFG["title"]), LOGO_ICON, LOGIN_CSS, body)).encode()
+    return _page(body)
 
 
 def _page(body):
@@ -1343,9 +1370,26 @@ def setup_token():
         return tok
 
 
+def host_is_literal(handler):
+    """Host header is an IP or localhost: a DNS-rebinding page cannot reach the code-less setup with its own name."""
+    h = (handler.headers.get("Host") or "").strip()
+    h = h[1:].split("]")[0] if h.startswith("[") else h.split(":")[0] if h.count(":") == 1 else h
+    try:
+        ipaddress.ip_address(h)
+        return True
+    except ValueError:
+        return h.lower() == "localhost"
+
+
+def same_origin(handler):
+    """No Origin (plain navigation, curl) or the same host as the page: blocks cross-site POSTs."""
+    o = handler.headers.get("Origin")
+    return not o or o.split("://", 1)[-1] == handler.headers.get("Host")
+
+
 def setup_allowed(handler, token):
     """Setup from the browser of this machine, or remotely with the code printed at start-up."""
-    if is_local(handler):
+    if is_local(handler) and host_is_literal(handler):
         return True
     keys = ["c:" + client_id(handler)]
     if not token or locked(keys):
@@ -1415,11 +1459,7 @@ def save_config(changes):
         with open(CONFIG_PATH, encoding="utf-8") as fh:
             cfg = json.load(fh)
     cfg.update(changes)
-    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-    tmp = CONFIG_PATH + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(cfg, fh, indent=2, ensure_ascii=False)
-    os.replace(tmp, CONFIG_PATH)
+    write_json(CONFIG_PATH, cfg, indent=2, ensure_ascii=False)
     CFG.update(changes)
     return cfg
 
@@ -1441,6 +1481,12 @@ def languages():
     return ["en"] + sorted(f[:-5] for f in os.listdir(os.path.join(HERE, "i18n")) if f.endswith(".json"))
 
 
+# allowlist: -XX:OnError, -javaagent, @argfile, -cp... would run commands or code on the host
+JAVA_ARG_RE = re.compile(r"^(?:-XX:(?![+-]?(?:OnError|OnOutOfMemoryError|Flags|VMOptionsFile)\b)\S+|-D(?!com\.sun\.management|log4j|java\.security)[\w.-]+=\S*|-Xss\S+|-Xmn\S+|-Xlog:\S*"
+                         r"|--enable-native-access=\S+|--add-(?:opens|exports|modules)=\S+)$")
+JAVA_ARGS_MSG = "Java flags: one line, only -XX:, -D, -Xss, -Xmn, -Xlog:, --add-opens, --add-exports, --add-modules and --enable-native-access (RAM has its own field)."
+
+
 def save_panel_settings(data, who):
     """Panel settings from the Settings page. ValueError with the message to show."""
     ram = str(data.get("ram", "")).strip().upper()
@@ -1449,12 +1495,14 @@ def save_panel_settings(data, who):
     if ram and ram_mb(ram) > system_memory()[1] - 256:
         raise ValueError(t("RAM: this machine has %s MB in all, leave some to the system.") % round(system_memory()[1]))
     args = str(data.get("java_args", "")).strip()
-    if len(args) > 500 or "\n" in args or "\r" in args or re.search(r"(^|\s)-(jar|Xmx|Xms)", args):
-        raise ValueError(t("Java flags: one line, without -jar, -Xms or -Xmx (RAM has its own field)."))
+    if len(args) > 500 or "\n" in args or "\r" in args:
+        raise ValueError(t(JAVA_ARGS_MSG))
     try:
-        shlex.split(args)   # on Windows too: here it only has to find unclosed quotes
+        toks = shlex.split(args)   # on Windows too: here it only has to find unclosed quotes
     except ValueError:
         raise ValueError(t("Java flags: a quote is not closed."))
+    if args != (CFG.get("java_args") or "").strip() and not all(JAVA_ARG_RE.match(x) for x in toks):   # flags already in the config file: do not block saving the RAM
+        raise ValueError(t(JAVA_ARGS_MSG))
     try:
         mins = int(data.get("auto_stop_minutes", 0))
     except (TypeError, ValueError):
@@ -1662,7 +1710,7 @@ def health():
     free = shutil.disk_usage(sd).free
     if sizes and free < max(1073741824, 3 * max(sizes)):   # less than three backups as big as the biggest one
         checks.append(("disk", False, t("Little disk space left: %s free, the biggest backup is %s. Delete old backups or lower how many to keep.")
-                       % (BK._mb(free), BK._mb(max(sizes))), None))
+                       % (BK.mb(free), BK.mb(max(sizes))), None))
     if UPDATE.get("newer"):
         checks.append(("update", False, t("ByzzCraft %s is available (you have %s).") % (UPDATE["latest"], VERSION), None))
     out = []
@@ -1765,7 +1813,15 @@ class Handler(BaseHTTPRequestHandler):
                          "connect-src 'self'; img-src 'self' data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'")
 
     def send_file(self, path, name):
-        size = os.path.getsize(path)
+        try:
+            f = open(path, "rb")   # before the headers: a zip pruned meanwhile is a clean 404
+        except OSError:
+            return self.json(404, {"error": "not found"})
+        with f:
+            self.send_file_open(f, name)
+
+    def send_file_open(self, f, name):
+        size = os.fstat(f.fileno()).st_size
         self.send_response(200)
         self.send_header("Content-Type", "application/zip")
         self.send_header("Content-Length", str(size))
@@ -1774,8 +1830,7 @@ class Handler(BaseHTTPRequestHandler):
         self.security_headers()
         self.end_headers()
         try:
-            with open(path, "rb") as f:
-                shutil.copyfileobj(f, self.wfile, 1 << 20)
+            shutil.copyfileobj(f, self.wfile, 1 << 20)
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             pass
 
@@ -1795,12 +1850,14 @@ class Handler(BaseHTTPRequestHandler):
         s = SESSIONS.get(key) if key else None
         if s and s["exp"] > time.time():
             u = load_users().get(s["user"])
-            if u:  # user still exists: also refresh the role if it changed
+            if u and s.setdefault("pv", pw_version(u)) == pw_version(u):   # user still exists, password unchanged: also refresh the role
                 s["admin"] = bool(u.get("admin"))
                 if s["exp"] < time.time() + SESSION_SECONDS - 86400:
                     s["exp"] = time.time() + SESSION_SECONDS
                     save_sessions()
                 return key, s
+            if u:   # password changed: refuse, but do not drop it (a change from this very session updates pv a moment later)
+                return None, None
         if key and SESSIONS.pop(key, None):
             save_sessions()
         return None, None
@@ -1812,6 +1869,9 @@ class Handler(BaseHTTPRequestHandler):
             n = 0
         n = max(0, min(n, 65536))   # never negative: read(-1) would read until the connection closes
         return self.rfile.read(n).decode("utf-8", "replace") if n else ""
+
+    def form(self):   # an HTML form post: one value per field
+        return {k: v[0] for k, v in parse_qs(self.body()).items()}
 
     def do_GET(self):
         self.safe(self._do_GET)
@@ -1836,18 +1896,19 @@ class Handler(BaseHTTPRequestHandler):
     def cookie(self, value, max_age):
         # Secure only if the browser speaks HTTPS to a local proxy: on http://home-IP the cookie would be dropped
         h = self.headers
-        https = self.client_address[0] in LOOPBACK and (h.get("X-Forwarded-Proto", "").lower() == "https" or bool(h.get("Tailscale-User-Login")))
+        https = from_local_proxy(self) and (h.get("X-Forwarded-Proto", "").lower() == "https" or bool(h.get("Tailscale-User-Login")))
         secure = "; Secure" if https else ""
         return "sess=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=%d%s" % (value, max_age, secure)
 
     # ------------------------------------------------ GET
     def _do_GET(self):
-        path = self.path.split("?")[0]
+        path, _, qs = self.path.partition("?")
+        q = parse_qs(qs)
         if path in ICONS:
             with open(os.path.join(HERE, "assets", ICONS[path]), "rb") as f:
                 return self.send(200, f.read(), "image/png", {"Cache-Control": "public, max-age=86400"})
         if path == "/" and not load_users():
-            token = (parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}).get("setup", [""])[0]
+            token = q.get("setup", [""])[0]
             if not setup_allowed(self, token):
                 return self.send(200, setup_remote_page())
             return self.send(200, setup_page(token=token, remote=not is_local(self)))
@@ -1871,7 +1932,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/players":
             return self.json(200, {"players": roster(), "hardcore": hardcore_world()})
         if path == "/api/player":
-            uuid = (parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}).get("uuid", [""])[0]
+            uuid = q.get("uuid", [""])[0]
             names = known_players()
             if not UUID_RE.match(uuid) or uuid not in names:
                 return self.json(404, {"error": "unknown player"})
@@ -1880,7 +1941,11 @@ class Handler(BaseHTTPRequestHandler):
                                    "slim": PL.skin(uuid)[1], "hardcore": hardcore_world(), "stats": PL.stats(world_dir(), uuid), **d})
         m = re.match(r"^/skin/([0-9a-f-]{36})\.png$", path)
         if m and UUID_RE.match(m.group(1)):
+            if m.group(1) not in known_players():   # else any logged-in user could make us query Mojang for any uuid
+                return self.send(404, b"", "image/png")
             png, slim = PL.skin(m.group(1))
+            if not png:   # no skin from Mojang and no default one in the assets
+                return self.send(404, b"", "image/png")
             return self.send(200, png, "image/png", {"Cache-Control": "private, max-age=3600", "X-Skin-Slim": "1" if slim else "0"})
         m = re.match(r"^/icon/([a-z0-9_]{1,64})\.png$", path)
         if m:
@@ -1890,7 +1955,6 @@ class Handler(BaseHTTPRequestHandler):
         if m:
             p = os.path.join(MOJANG, "hud", m.group(1) + ".png")
             return self.send(200, open(p, "rb").read(), "image/png", img_cache) if os.path.exists(p) else self.send(404, b"", "image/png")
-        q = parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}
         if path == "/api/map":
             dim = q.get("dim", ["overworld"])[0]
             if dim not in mapgen.DIMS:
@@ -1912,7 +1976,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(503, b"", "image/png")
             cache = os.path.join(CACHE, "map")
             tile = os.path.join(cache, dim, "r.%d.%d.png" % (rx, rz))
-            mca = mapgen._region_path(world_dir(), dim, rx, rz)
+            mca = mapgen.region_path(world_dir(), dim, rx, rz)
             try:
                 fresh = os.path.getmtime(tile) >= os.path.getmtime(mca)
             except OSError:
@@ -1941,7 +2005,7 @@ class Handler(BaseHTTPRequestHandler):
                 evs = [e for e in evs if e["t"] <= before]
             return self.json(200, {"events": evs[:qint(q, "limit", 200, 1, 500)]})
         if path == "/api/sessions":
-            return self.json(200, {"sessions": TLINE.sessions(limit=qint(q, "limit", 30, 1, 200))})
+            return self.json(200, {"sessions": TLINE.sessions(limit=qint(q, "limit", 30, 1, 200), running=SRV.state != "off")})
         if path in ("/api/backups", "/api/backups/download", "/api/access", "/api/audit", "/api/users", "/api/health", "/api/syslog") and not s["admin"]:
             return self.json(403, {"error": "admins only"})
         if path == "/api/access":
@@ -1952,7 +2016,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/health":
             return self.json(200, {"checks": health()})
         if path == "/api/syslog":
-            which = (parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}).get("file", ["panel"])[0]
+            which = q.get("file", ["panel"])[0]
             return self.json(200, {"lines": tail(START_LOG if which == "start" else os.path.join(LOG_DIR, "byzzcraft.log"))})
         if path == "/api/users":
             return self.json(200, {"users": [{"name": n, "admin": bool(u.get("admin")), "mc": u.get("mc") or (CFG.get("user_mc") or {}).get(n, ""),
@@ -2005,7 +2069,8 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(("retry: 3000\nevent: init\ndata: %s\n\n" % json.dumps(init, separators=(",", ":"))).encode())
             self.wfile.flush()
             # if the user is deleted or changes role it closes: the browser reconnects with the new permissions
-            while s["exp"] > time.time() and tok in SESSIONS and (u := load_users().get(s["user"])) and bool(u.get("admin")) == admin0:
+            while s["exp"] > time.time() and tok in SESSIONS and (u := load_users().get(s["user"])) and bool(u.get("admin")) == admin0 \
+                    and pw_version(u) == s["pv"]:
                 try:
                     msg = q.get(timeout=15)
                 except queue.Empty:
@@ -2022,7 +2087,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/setup":
             return self.first_setup()
         if self.path == "/login":
-            f = {k: v[0] for k, v in parse_qs(self.body()).items()}
+            f = self.form()
             user = f.get("user", "").strip().lower(); keys = ["c:" + client_id(self)]   # not by name: anyone could lock out "admin"
             if locked(keys):
                 return self.send(429, login_page(t("Too many attempts: try again in 15 minutes.")))
@@ -2032,13 +2097,13 @@ class Handler(BaseHTTPRequestHandler):
                 log("login failed for '%s' from %s" % (user[:32], client_id(self)))
                 return self.send(401, login_page(t("Wrong user or password.")))
             tok = secrets.token_urlsafe(32)
-            SESSIONS[tok_key(tok)] = {"user": user, "admin": bool(u.get("admin")), "csrf": secrets.token_urlsafe(24), "exp": time.time() + SESSION_SECONDS}
+            SESSIONS[tok_key(tok)] = {"user": user, "admin": bool(u.get("admin")), "pv": pw_version(u), "csrf": secrets.token_urlsafe(24), "exp": time.time() + SESSION_SECONDS}
             save_sessions()
             log("%s logged in from %s" % (user, client_id(self)))
             return self.redirect("/", self.cookie(tok, SESSION_SECONDS))
         tok, s = self.session()
         if self.path == "/logout":
-            f = {k: v[0] for k, v in parse_qs(self.body()).items()}
+            f = self.form()
             if s and hmac.compare_digest(f.get("csrf", "") or self.headers.get("X-CSRF", ""), s["csrf"]):
                 SESSIONS.pop(tok, None)
                 save_sessions()
@@ -2065,6 +2130,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(200, {"ok": False, "message": t("Password too short: at least 10 characters.")})
             with LOCK:
                 users = load_users(); set_password(users, s["user"], pw); save_users(users)
+            s["pv"] = pw_version(load_users()[s["user"]])   # this session stays valid
             drop_sessions(s["user"], keep=tok)
             log("%s changed their password" % s["user"])
             return self.json(200, {"ok": True, "message": t("Password changed.")})
@@ -2174,7 +2240,9 @@ class Handler(BaseHTTPRequestHandler):
             clean = {}
             for k, v in changes.items():
                 v = str(v)
-                if "\n" in v or "\r" in v or len(v) > 512:
+                if re.search("[\x00-\x1f\x7f\x85  ]", v) or len(v) > 512:   # splitlines() would split on these and inject locked keys
+                    return self.json(200, {"ok": False, "message": t("Invalid value for %s") % k})
+                if k == "level-name" and not level_name_ok(v):
                     return self.json(200, {"ok": False, "message": t("Invalid value for %s") % k})
                 clean[k] = v
             done = write_props(clean, s["user"])
@@ -2281,14 +2349,16 @@ class Handler(BaseHTTPRequestHandler):
             users[name].update({"admin": bool(data.get("admin")), "mc": mc})
             save_users(users)
         if pw and not new:
+            if name == s["user"]:
+                s["pv"] = pw_version(load_users()[name])
             drop_sessions(name, keep=tok)
         log("%s %s user %s" % (s["user"], "created" if new else "updated", name))
         return self.json(200, {"ok": True, "message": (t("User %s created.") if new else t("User %s saved.")) % name})
 
     def first_setup(self):
         """First setup: only with no users, from the browser of this machine or with the setup code."""
-        f = {k: v[0] for k, v in parse_qs(self.body()).items()}
-        if load_users() or not setup_allowed(self, f.get("token", "")):
+        f = self.form()
+        if load_users() or not same_origin(self) or not setup_allowed(self, f.get("token", "")):
             return self.send(403, setup_remote_page())
         remote = not is_local(self)
         if f.get("password") != f.get("password2"):
@@ -2298,7 +2368,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, setup_page(err, f, f.get("token", ""), remote))
         name = f["user"].strip().lower()
         tok = secrets.token_urlsafe(32)
-        SESSIONS[tok_key(tok)] = {"user": name, "admin": True, "csrf": secrets.token_urlsafe(24), "exp": time.time() + SESSION_SECONDS}
+        SESSIONS[tok_key(tok)] = {"user": name, "admin": True, "pv": pw_version(load_users().get(name, {})), "csrf": secrets.token_urlsafe(24), "exp": time.time() + SESSION_SECONDS}
         save_sessions()
         self.redirect("/", self.cookie(tok, SESSION_SECONDS))
         threading.Thread(target=restart_soon, daemon=True).start()
@@ -2365,7 +2435,7 @@ def cli(args):
         return
     if cmd in ("adduser", "passwd"):
         name = args[1].strip().lower()
-        if not USER_RE.match(name) or name in RESERVED:
+        if not USER_RE.match(name) or name in RESERVED or name.startswith("-"):   # "adduser --admin" is a typo, not a user
             sys.exit("invalid user name: lowercase letters, digits, . _ -")
         if cmd == "passwd" and name not in users:
             sys.exit("no such user '%s'" % name)

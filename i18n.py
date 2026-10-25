@@ -13,7 +13,9 @@ def load(lang):
     try:
         with open(path, encoding="utf-8") as f:
             TABLE = json.load(f)
-    except OSError:
+        if not isinstance(TABLE, dict):
+            TABLE = {}
+    except (OSError, ValueError):   # missing or broken file: English
         TABLE = {}
 
 

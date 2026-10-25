@@ -1,7 +1,7 @@
 """Top-down PNG tiles of a Minecraft Java world (1.18 and newer), read from the region files (.mca).
 
 Standard library only. API used by the web panel:
-    DIMS, list_regions, render_region, get_tile, bounds
+    DIMS, list_regions, render_region, get_tile
 CLI:
     python -I mapgen.py <world_dir> <dim> <rx> <rz> <out.png>
     python -I mapgen.py <world_dir> <dim> --all <cache_dir>
@@ -11,7 +11,6 @@ import json, math, os, re, struct, sys, threading, time, zlib
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from players import ASSETS, dim_dir, nbt_parse  # noqa: E402
 
-HERE = os.path.dirname(os.path.abspath(__file__))
 DIMS = ("overworld", "the_nether", "the_end")
 SIZE = 512
 
@@ -166,7 +165,6 @@ def _biome_idx(name):
 # ------------------------------------------------------------------ anvil decoding
 _LOW = bytes(x & 15 for x in range(256))
 _HIGH = bytes(x >> 4 for x in range(256))
-_AIR_SEC = None
 
 
 def _unpack(data, bits, n):
@@ -291,7 +289,6 @@ def _chunk_top(ch, base, H, cxl, czl, nether):
     kind, col, tint = KIND, COL, TINT
 
     if nether:
-        top_s = min(7, max(secs_raw)) if secs_raw else 7
         nsec = 8
         clsb = []
         for sy in range(nsec):
@@ -396,12 +393,12 @@ def _png(img, w, h):
             chunk(b"IDAT", zlib.compress(raw, 4)) + chunk(b"IEND", b""))
 
 
-def _region_path(world_dir, dim, rx, rz):
+def region_path(world_dir, dim, rx, rz):
     return os.path.join(dim_dir(world_dir, dim), "region", "r.%d.%d.mca" % (rx, rz))
 
 
 def render_region(world_dir, dim, rx, rz):
-    path = _region_path(world_dir, dim, rx, rz)
+    path = region_path(world_dir, dim, rx, rz)
     if not os.path.isfile(path):
         return None
     nether = dim == "the_nether"
@@ -456,20 +453,12 @@ def list_regions(world_dir, dim):
     return sorted(out)
 
 
-def bounds(world_dir, dim):
-    rs = list_regions(world_dir, dim)
-    if not rs:
-        return {"min_rx": None, "max_rx": None, "min_rz": None, "max_rz": None, "count": 0}
-    xs = [r[0] for r in rs]; zs = [r[1] for r in rs]
-    return {"min_rx": min(xs), "max_rx": max(xs), "min_rz": min(zs), "max_rz": max(zs), "count": len(rs)}
-
-
 _LOCKS = {}
 _LOCKS_G = threading.Lock()
 
 
 def get_tile(world_dir, cache_dir, dim, rx, rz):
-    src = _region_path(world_dir, dim, rx, rz)
+    src = region_path(world_dir, dim, rx, rz)
     try:
         mt = os.stat(src).st_mtime
     except OSError:

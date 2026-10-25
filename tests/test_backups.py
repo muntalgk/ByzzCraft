@@ -106,6 +106,27 @@ def run():
     d = b.disk(); check("disk", d["free"] > 0 and d["total"] >= d["free"])
     check("status base", b.status()["busy"] is None and b.status()["schedule"]["every_minutes"] == 120)
 
+    # ---------- old world size counts _nether, a failed save keeps the old schedule, the save-on warning survives other operations
+    r2, s2, st2 = fresh()
+    write(os.path.join(s2, "mondi-vecchi", "w", "a.bin"), b"123")
+    write(os.path.join(s2, "mondi-vecchi", "w_nether", "b.bin"), b"4567")
+    b2 = mk(s2, st2)
+    check("old world size with _nether", [e["size"] for e in b2.list()] == [7], b2.list())
+    before = b2.status()["schedule"]
+    b2._save_state = lambda: (_ for _ in ()).throw(OSError("disk full"))
+    raises("set_schedule save fails", OSError, b2.set_schedule, {"every_hours": 7})
+    check("set_schedule: old schedule kept", b2.status()["schedule"] == before, b2.status()["schedule"])
+    del b2._save_state
+    r = Rcon(); r.fail_on = "save-on"
+    b2.create("manual", True, r)
+    check("save-on warning set", (b2.status()["last_error"] or "").startswith("WARNING"), b2.status()["last_error"])
+    b2._begin("delete", "x"); b2._end()
+    check("warning survives another operation", (b2.status()["last_error"] or "").startswith("WARNING"))
+    time.sleep(1.1)
+    b2.create("manual", False)
+    check("good backup clears the warning", b2.status()["last_error"] is None, b2.status()["last_error"])
+    shutil.rmtree(r2, ignore_errors=True)
+
     # ---------- malicious ids
     for bad in ["../x", "C:\\x", "backups/../world", "backups/..", "/etc/passwd", "backups\\x.zip",
                 "backups/nonesiste.zip", "backups/a/b.zip", "", None, "world"]:
@@ -405,6 +426,37 @@ def run():
     mkzip(os.path.join(s, "backups", "vanilla.zip"), ["world/level.dat"])
     b.restore("backups/vanilla.zip", False)
     check("paper: current nether untouched", open(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), "rb").read() == b"NETHER-NUOVO")
+
+    # restore is all or nothing: a failing extra swap brings the main world back too
+    write(os.path.join(s, "world", "level.dat"), b"CURRENT")
+    real_replace = os.replace
+    def bad_extra(a, c, *x, **k):
+        if str(a).endswith("restore-tmp_nether"):
+            raise OSError("simulated extra failure")
+        return real_replace(a, c, *x, **k)
+    os.replace = bad_extra
+    try:
+        raises("restore extra fails", OSError, b.restore, "backups/" + e["name"], False)
+    finally:
+        os.replace = real_replace
+    check("restore extra fails: main world back", open(os.path.join(s, "world", "level.dat"), "rb").read() == b"CURRENT")
+    check("restore extra fails: nether back", open(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), "rb").read() == b"NETHER-NUOVO")
+
+    # file with mtime before 1980: the zip must not fail
+    root, s, st = fresh(); b = mk(s, st)
+    os.utime(os.path.join(s, "world", "locked.dat"), (0, 0))
+    check("backup with 1970 mtime", b.create("manual", False)["kind"] == "manual")
+
+    # automatic prune deletes for good, manual delete keeps the trash
+    mkzip(os.path.join(s, "backups", "auto_2026-10-19_15-00-00.zip"), ["world/level.dat"])
+    b._recycle(b._find("backups/auto_2026-10-19_15-00-00.zip"), auto=True)
+    check("auto prune: not in trash", not os.path.exists(os.path.join(s, "trash")) and
+          not os.path.exists(os.path.join(s, "backups", "auto_2026-10-19_15-00-00.zip")))
+
+    # one invalid schedule field does not reset the others
+    with open(st, "w", encoding="utf-8") as f:
+        json.dump({"schedule": {"every_minutes": 30, "window": "bad"}}, f)
+    check("schedule per field", mk(s, st).status()["schedule"]["every_minutes"] == 30)
 
     # ---------- state file from before 1.0: Italian kind names in the retention rules
     with open(st, "w", encoding="utf-8") as f:

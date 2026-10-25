@@ -14,7 +14,6 @@ import zlib
 
 from mapgen import _png
 
-HERE = os.path.dirname(os.path.abspath(__file__))
 from paths import ASSETS, DATA  # noqa: E402
 MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
 TEX = "assets/minecraft/textures/"

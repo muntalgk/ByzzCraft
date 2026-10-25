@@ -13,8 +13,9 @@ import uuid as _uuid
 from datetime import datetime
 
 from i18n import t
+from paths import write_json
 
-NAME_RE = re.compile(r"^[A-Za-z0-9_]{3,16}$")
+NAME_RE = re.compile(r"^[A-Za-z0-9_]{3,16}\Z")
 FILES = {"whitelist": "whitelist.json", "ops": "ops.json", "bans": "banned-players.json", "ipbans": "banned-ips.json"}
 ACTIONS = ("wl_add", "wl_remove", "op", "deop", "ban", "pardon", "kick")
 # activity log phrases ("admin <verb> Nick"): activity.py recognises them from here, so change them only here
@@ -45,11 +46,7 @@ def _read(server_dir, key, strict=False):
 
 
 def _write(server_dir, key, data):
-    p = os.path.join(server_dir, FILES[key])
-    tmp = p + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    os.replace(tmp, p)
+    write_json(os.path.join(server_dir, FILES[key]), data, indent=2, ensure_ascii=False)
 
 
 def snapshot(server_dir):
@@ -98,9 +95,13 @@ def _profile(server_dir, name, known, offline=False):
     return p
 
 
+def _reason(r):   # one line: it ends up in an RCON command and in the files
+    return re.sub(r"[\r\n\x00-\x1f]+", " ", r).strip()[:100]
+
+
 def command(action, name, reason=""):
     """Equivalent RCON command (server on)."""
-    reason = re.sub(r"[\r\n\x00-\x1f]+", " ", reason).strip()[:100]
+    reason = _reason(reason)
     base = {"wl_add": "whitelist add ", "wl_remove": "whitelist remove ", "op": "op ", "deop": "deop ",
             "ban": "ban ", "pardon": "pardon ", "kick": "kick "}[action] + name
     # concatenated, not with %: a reason like "100% sure" must not break the command
@@ -116,7 +117,7 @@ def apply_offline(server_dir, action, name, reason="", who="panel", profile=None
     """Changes the files with the server off. Returns the message for the user.
     The caller holds the panel LOCK (no parallel changes, no server start halfway through).
     profile: (uuid, name) already resolved with resolve(), so Mojang is not called in here."""
-    reason = re.sub(r"[\r\n\x00-\x1f]+", " ", reason).strip()[:100]
+    reason = _reason(reason)
     if action == "kick":
         raise ValueError(t("The server is off: nobody to kick"))
     key = {"wl_add": "whitelist", "wl_remove": "whitelist", "op": "ops", "deop": "ops",

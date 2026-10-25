@@ -15,12 +15,11 @@ import time
 import activity as ACT
 import i18n
 from i18n import t as tr
-from paths import ASSETS
+from paths import ASSETS, write_json
 
 CACHE_NAME = "timeline-cache-%s.json"   # %s = language: the event texts are already translated
 CACHE_VERSION = 1
-TYPES = ("server_start", "server_ready", "server_stop", "join", "leave",
-         "death", "advancement", "chat", "panel")
+# event types: server_start, server_ready, server_stop, join, leave, death, advancement, chat, panel
 
 _LINE = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\] \[[^\]]*\]: (.*)$")
 _GZ_NAME = re.compile(r"^(\d{4})-(\d\d)-(\d\d)-(\d+)\.log\.gz$")
@@ -136,14 +135,10 @@ class Timeline:
 
     def _save_cache(self):
         try:
-            os.makedirs(self.cache_dir, exist_ok=True)
-            tmp = self.cache_path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"v": CACHE_VERSION, "gz": self._gz, "latest": self._latest,
-                           "panel": self._panel, "players": sorted(self._players),
-                           "deaths": bool(self._deaths.patterns)},
-                          f, ensure_ascii=False, separators=(",", ":"))
-            os.replace(tmp, self.cache_path)
+            write_json(self.cache_path, {"v": CACHE_VERSION, "gz": self._gz, "latest": self._latest,
+                                         "panel": self._panel, "players": sorted(self._players),
+                                         "deaths": bool(self._deaths.patterns)},
+                       ensure_ascii=False, separators=(",", ":"))
         except OSError:
             pass
 
@@ -405,7 +400,7 @@ class Timeline:
                     break
             return out
 
-    def _build_sessions(self):
+    def _build_sessions(self, running):
         sessions = []
         cur = None
         online = {}   # name -> entry
@@ -463,18 +458,21 @@ class Timeline:
                     and t - sessions[-1]["end"] <= 0:
                 sessions[-1]["events"] += 1
             prev_t = t
+        now_ms = int(time.time() * 1000)
+        if cur is not None and not running:
+            close(prev_t)   # crash or kill: no stop line, closed at the last known event
         if cur is not None:   # still running
-            now_ms = int(time.time() * 1000)
             for en in online.values():
                 en["online_s"] = max(0, (now_ms - en["joined"]) // 1000)
             cur["duration_s"] = max(0, (now_ms - cur["start"]) // 1000)
         return sessions
 
-    def sessions(self, limit=50):
+    def sessions(self, limit=50, running=True):
+        """running: the server process is up (the panel knows, the log does not after a crash)."""
         with self._lock:
-            if self._sessions is None:
-                self._sessions = self._build_sessions()
-            res = self._sessions[::-1]
+            if self._sessions is None or self._sessions[0] != running:
+                self._sessions = (running, self._build_sessions(running))
+            res = self._sessions[1][::-1]
             if limit:
                 res = res[:limit]
             return json.loads(json.dumps(res))   # copy: the caller cannot change the state

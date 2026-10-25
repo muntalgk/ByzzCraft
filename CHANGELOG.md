@@ -28,6 +28,18 @@
 - Backups: retention per world (how many and how many days per kind, plus a size cap for automatic ones),
   interval from 15 minutes with an optional time window, several daily times and weekdays, select many to
   delete or pin, a preview of what the next cleanup removes, notes editable afterwards, filter by world.
+- Setup without the code also from the server itself through its LAN address; the code-free setup is refused
+  to other web pages (cross-site posts, DNS rebinding).
+- Security: login lock no longer bypassed with forged proxy headers behind nginx/Caddy; changing a password
+  (also with `panel.py passwd`) ends that user's other sessions; Java flags from the panel only from an
+  allowlist; `level-name` cannot leave the server folder; panel-users.json readable only by its owner.
+- The server no longer stays stuck in "stopping" after one missed ping; "Stopping server" typed in chat no
+  longer turns off the crash restart.
+- Backups: automatic cleanup on Linux no longer fills `trash/`; files dated before 1980 no longer break every
+  backup; a failed restore puts the Nether and the End back too.
+- The page reconnects after a session or proxy error instead of "Reconnecting..." forever.
+- Long RCON answers no longer shift every later answer by one command; a crashed server's session is closed in
+  the timeline; missing default skins no longer break the Players page; Docker image has a health check.
 
 Upgrading a Docker install from 1.0.0:
 - stop the Minecraft server from the panel first: the old container cannot stop it cleanly yet;
