@@ -155,6 +155,7 @@ try:
     check("ram_auto while on", panel.panel_settings()["ram_auto"] == "4096M", panel.panel_settings()["ram_auto"])
     panel.SRV.state = "off"
     check("ram_auto while off", panel.panel_settings()["ram_auto"] == panel.auto_ram())
+    check("panel settings keep ram_total", panel.panel_settings().get("ram_total", 0) > 0)
     panel.SRV.ram = None
     panel.CFG["java_args"] = ""
     check("STOPPING_RE vanilla/Paper/Fabric, not chat", all(panel.STOPPING_RE.match(l) for l in (

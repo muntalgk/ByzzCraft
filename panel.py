@@ -1468,7 +1468,9 @@ def save_config(changes):
 def panel_settings():
     need = RT.required(CFG["server_dir"], server_jar())
     java = RT.java_for(need)[0]
-    return {**{k: CFG.get(k, DEFAULTS.get(k)) for k in PANEL_KEYS}, "ram_auto": SRV.ram if SRV.state != "off" and SRV.ram else auto_ram(),   # while on: what it really has, free RAM no longer counts it "ram_total": round(system_memory()[1]),
+    # ram_auto while on: what the server really got (its heap no longer counts as free RAM)
+    return {**{k: CFG.get(k, DEFAULTS.get(k)) for k in PANEL_KEYS}, "ram_auto": SRV.ram if SRV.state != "off" and SRV.ram else auto_ram(),
+            "ram_total": round(system_memory()[1]),
             "jar": server_jar(), "java": java, "java_need": need, "start_script": CFG.get("start_script") or "",
             "java_bundled": bool(java and java.startswith(RT.RUNTIME)), "langs": [[c, LANG_NAMES.get(c, c)] for c in languages()]}
 
