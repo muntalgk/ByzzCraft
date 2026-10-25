@@ -206,6 +206,9 @@ main{padding:22px 28px 60px;min-width:0}
 .slot .dur b{display:block;height:2px}
 .slot .glint{position:absolute;inset:5px;pointer-events:none;-webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
   background:linear-gradient(115deg,transparent 30%,#c48cff99 45%,#8a5cff66 55%,transparent 70%);background-size:300% 300%;animation:glint 3s linear infinite;mix-blend-mode:screen}
+/* a potion's liquid: the grey overlay multiplied by its color, as in the game */
+.slot .liq{position:absolute;inset:5px;pointer-events:none;image-rendering:pixelated;background:url('/icon/potion_overlay.png?v=5') center/contain no-repeat;background-blend-mode:multiply;
+  -webkit-mask:url('/icon/potion_overlay.png?v=5') center/contain no-repeat;mask:url('/icon/potion_overlay.png?v=5') center/contain no-repeat}
 @keyframes glint{from{background-position:120% 0}to{background-position:-120% 0}}
 .slot .fb{font:700 10px var(--mono);color:var(--text2);text-align:center;line-height:1.1;padding:2px;pointer-events:none}
 .mctip{position:fixed;z-index:20;pointer-events:none;background:#100010f2;border:2px solid #25015b;outline:1px solid #100010;border-radius:4px;padding:6px 9px;font-size:13px;max-width:280px;box-shadow:0 8px 24px #000a}
@@ -980,7 +983,8 @@ function slotHTML(it,ph,sel){if(!it)return "<div class='slot"+(sel?" sel":"")+"'
   const tip=encodeURIComponent(JSON.stringify({n:it.name,e:it.ench,g:it.glint,d:it.dmg,m:it.max,id:it.id,c:it.count}));
   const dur=it.max&&it.dmg>0?"<div class=dur><b style='width:"+(100*(1-it.dmg/it.max))+"%;background:hsl("+Math.round(120*(1-it.dmg/it.max))+",90%,45%)'></b></div>":"";
   const glint=it.glint?"<div class=glint style=\"-webkit-mask-image:url('/icon/"+esc(it.id)+".png?v=5');mask-image:url('/icon/"+esc(it.id)+".png?v=5')\"></div>":"";
-  return "<div class='slot"+(sel?" sel":"")+"' data-tip='"+tip+"'><img src='/icon/"+esc(it.id)+".png?v=5' alt='"+esc(it.name.slice(0,10))+"' onerror='icoErr(this)'>"+glint+dur+(it.count>1?"<span class=cnt>"+it.count+"</span>":"")+"</div>"}
+  const liq=it.tint?"<div class=liq style='background-color:"+esc(it.tint)+"'></div>":"";
+  return "<div class='slot"+(sel?" sel":"")+"' data-tip='"+tip+"'>"+liq+"<img src='/icon/"+esc(it.id)+".png?v=5' alt='"+esc(it.name.slice(0,10))+"' onerror='icoErr(this)'>"+glint+dur+(it.count>1?"<span class=cnt>"+it.count+"</span>":"")+"</div>"}
 /* a failed icon gets one more try (a phone can drop image loads), then its name */
 function icoErr(i){if(!i.dataset.r){i.dataset.r=1;setTimeout(()=>i.src+="&r=1",800)}else i.outerHTML="<div class=fb>"+esc(i.alt)+"</div>"}
 /* only when it changed: rewriting the same inventory on every live update reloads every icon */

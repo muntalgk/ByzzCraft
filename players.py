@@ -211,6 +211,15 @@ def enchants(comp, key):
             for k, v in (e.items() if isinstance(e, dict) else [])]
 
 
+# the liquid's color in the game, by potion (long_/strong_ stripped); water and the others: 0x385DC6
+# shortcut: the color of the potion's own effect, not the blend of a custom potion's effects; upgrade if those show up
+POTION_COLOR = {"swiftness": 0x33EBFF, "slowness": 0x8BAFE0, "strength": 0xFFC700, "healing": 0xF82423, "harming": 0xA9656A,
+                "leaping": 0xFDFF84, "regeneration": 0xCD5CAB, "fire_resistance": 0xFF9900, "water_breathing": 0x98DAC0,
+                "invisibility": 0xF6F6F6, "night_vision": 0xC2FF66, "weakness": 0x484D48, "poison": 0x87A363, "luck": 0x59C106,
+                "slow_falling": 0xF3CFB9, "turtle_master": 0x8E7EA4, "wind_charged": 0xBDC9FF, "weaving": 0x78695A,
+                "oozing": 0x99FFA3, "infested": 0x8C9B8C}
+
+
 def item(it):
     if not isinstance(it, dict) or not it.get("id"):
         return None
@@ -219,9 +228,18 @@ def item(it):
     name = text_of(comp.get("minecraft:custom_name")) or item_name(iid)
     ench = enchants(comp, "minecraft:enchantments")
     stored = enchants(comp, "minecraft:stored_enchantments")
-    return {"id": iid, "count": it.get("count", it.get("Count", 1)), "slot": it.get("Slot"), "name": name,
-            "ench": ench + stored, "glint": bool(ench or stored), "dmg": comp.get("minecraft:damage", 0) or 0,
-            "max": comp.get("minecraft:max_damage") or MAX_DMG.get(iid)}
+    out = {"id": iid, "count": it.get("count", it.get("Count", 1)), "slot": it.get("Slot"), "name": name,
+           "ench": ench + stored, "glint": bool(ench or stored), "dmg": comp.get("minecraft:damage", 0) or 0,
+           "max": comp.get("minecraft:max_damage") or MAX_DMG.get(iid)}
+    if iid in ("potion", "splash_potion", "lingering_potion"):   # the icon is an empty bottle: the page adds the liquid in this color
+        pc = comp.get("minecraft:potion_contents") or {}
+        pc = pc if isinstance(pc, dict) else {"potion": pc}       # the component can be just the potion's id
+        base = re.sub(r"^(long|strong)_", "", strip_ns(pc.get("potion", "")))
+        color = pc.get("custom_color")
+        out["tint"] = "#%06x" % ((color if isinstance(color, int) else POTION_COLOR.get(base, 0x385DC6)) & 0xFFFFFF)
+        if base and not comp.get("minecraft:custom_name"):
+            out["name"] = lang().get("item.minecraft.%s.effect.%s" % (iid, base), name)
+    return out
 
 
 def normalize(d):

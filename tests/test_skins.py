@@ -34,6 +34,11 @@ try:
     shutil.rmtree(os.path.join(P.ASSETS, "skin"))   # assets downloaded by an old version
     check("no skin/ in the assets: empty skin, no exception", P.skin("11111111-1111-4111-8111-111111111111") == (b"", False))
     check("missing icon not cached", P.icon_path("nope_item") is None and "nope_item" not in P._ICON_CACHE)
+    pot = P.item({"id": "minecraft:potion", "count": 1, "Slot": 5, "components": {"minecraft:potion_contents": {"potion": "minecraft:long_fire_resistance"}}})
+    check("potion: liquid colored by its effect", pot["tint"] == "#ff9900", pot)
+    check("potion: custom color wins", P.item({"id": "potion", "components": {"minecraft:potion_contents": {"custom_color": -16711936}}})["tint"] == "#00ff00")
+    check("potion: id-only component, water color by default", P.item({"id": "splash_potion", "components": {"minecraft:potion_contents": "minecraft:water"}})["tint"] == "#385dc6")
+    check("no tint on other items", "tint" not in P.item({"id": "glass_bottle"}))
     try:
         P.snbt("[:]"); check("snbt: empty token raises", False)
     except ValueError:
