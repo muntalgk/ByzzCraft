@@ -15,12 +15,11 @@ import time
 import activity as ACT
 import i18n
 from i18n import t as tr
-from paths import ASSETS
+from paths import ASSETS, write_json
 
 CACHE_NAME = "timeline-cache-%s.json"   # %s = language: the event texts are already translated
 CACHE_VERSION = 1
-TYPES = ("server_start", "server_ready", "server_stop", "join", "leave",
-         "death", "advancement", "chat", "panel")
+# event types: server_start, server_ready, server_stop, join, leave, death, advancement, chat, panel
 
 _LINE = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\] \[[^\]]*\]: (.*)$")
 _GZ_NAME = re.compile(r"^(\d{4})-(\d\d)-(\d\d)-(\d+)\.log\.gz$")
@@ -136,14 +135,10 @@ class Timeline:
 
     def _save_cache(self):
         try:
-            os.makedirs(self.cache_dir, exist_ok=True)
-            tmp = self.cache_path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"v": CACHE_VERSION, "gz": self._gz, "latest": self._latest,
-                           "panel": self._panel, "players": sorted(self._players),
-                           "deaths": bool(self._deaths.patterns)},
-                          f, ensure_ascii=False, separators=(",", ":"))
-            os.replace(tmp, self.cache_path)
+            write_json(self.cache_path, {"v": CACHE_VERSION, "gz": self._gz, "latest": self._latest,
+                                         "panel": self._panel, "players": sorted(self._players),
+                                         "deaths": bool(self._deaths.patterns)},
+                       ensure_ascii=False, separators=(",", ":"))
         except OSError:
             pass
 

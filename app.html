@@ -930,8 +930,8 @@ $("#p-save").onclick=()=>saveProps(false);$("#p-save-r").onclick=async()=>{if(S.
 const P={roster:[],sel:null,cur:null,hardcore:false,skinFor:null,rot:-30,drag:null,walk:0};
 const DIM={overworld:_t("Overworld"),the_nether:"Nether",the_end:"End"};
 const GM={0:"Survival",1:_t("Creative"),2:_t("Adventure"),3:_t("Spectator")};
-async function loadPlayers(){try{const r=await fetch("/api/players");if(!r.ok)return;const j=await r.json();P.roster=j.players;P.hardcore=j.hardcore;renderRoster();
-  if(!P.sel&&P.roster.length){const on=P.roster.find(p=>p.online);selectPlayer((on||P.roster[0]).uuid)}else if(P.sel)selectPlayer(P.sel,true)}catch(e){}}
+async function loadPlayers(){await loadRoster();
+  if(!P.sel&&P.roster.length){const on=P.roster.find(p=>p.online);selectPlayer((on||P.roster[0]).uuid)}else if(P.sel)selectPlayer(P.sel,true)}
 function faceCanvas(uuid,cv){const img=new Image();img.onload=()=>{const g=cv.getContext("2d");cv.width=cv.height=8;g.imageSmoothingEnabled=false;g.clearRect(0,0,8,8);
   g.drawImage(img,8,8,8,8,0,0,8,8);g.drawImage(img,40,8,8,8,0,0,8,8)};img.src="/skin/"+uuid+".png"}
 function ago(t){if(!t)return "";const s=Date.now()/1000-t;if(s<60)return _t("now");if(s<3600)return _t("%s min ago",Math.floor(s/60));if(s<86400)return _t("%s h ago",Math.floor(s/3600));

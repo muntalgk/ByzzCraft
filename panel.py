@@ -10,7 +10,7 @@ Users:            python panel.py adduser NAME [--admin]
                   python panel.py users
 Assets:           python panel.py assets [VERSION]   (textures and translations downloaded from Mojang)
 """
-import base64, getpass, hashlib, hmac, html, ipaddress, json, logging, logging.handlers, os, queue, re, secrets, shlex, shutil, signal, socket, struct, subprocess, sys, threading, time, urllib.request
+import getpass, hashlib, hmac, html, ipaddress, json, logging, logging.handlers, os, queue, re, secrets, shlex, shutil, signal, socket, struct, subprocess, sys, threading, time, urllib.request
 from collections import deque
 from datetime import datetime
 from http.cookies import SimpleCookie
@@ -32,7 +32,7 @@ import runtime as RT  # noqa: E402
 import i18n  # noqa: E402
 from i18n import t  # noqa: E402
 from sysinfo import NCPU, ProcSampler, listening_pid, pid_alive, system_memory, system_times  # noqa: E402
-from paths import CACHE, DATA, LOGS, ASSETS as MOJANG  # noqa: E402
+from paths import CACHE, DATA, LOGS, ASSETS as MOJANG, write_json  # noqa: E402
 CONFIG_PATH = os.environ.get("PANEL_CONFIG", os.path.join(DATA, "panel-config.json"))
 DEFAULTS = {
     "server_dir": os.path.dirname(HERE),
@@ -219,11 +219,7 @@ def load_users():
 
 
 def save_users(users):
-    os.makedirs(os.path.dirname(CFG["users_file"]), exist_ok=True)
-    tmp = CFG["users_file"] + ".tmp"
-    with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as f:
-        json.dump(users, f, indent=2)
-    os.replace(tmp, CFG["users_file"])
+    write_json(CFG["users_file"], users, 0o600, indent=2)   # password hashes: only the panel's user reads them
 
 
 def hash_pw(pw, salt=None, rounds=PBKDF2_ROUNDS):
@@ -608,8 +604,6 @@ class ServerControl:
             if not ok and backup_busy():
                 self.restart_pending = True   # retried when the backup is done
 
-        return changed
-
     def start(self, who):
         jar = server_jar()
         java = RT.java_for(RT.required(CFG["server_dir"], jar))[0]   # slow (java -version, manifests): not under LOCK
@@ -848,7 +842,7 @@ def sampler():
         try:
             port = SRV.port()
             info = ping(port)
-            changed = SRV.update(info)
+            SRV.update(info)
             pid = listening_pid(port) if info is not None else None
             if pid:
                 SRV.last_pid = pid
@@ -1037,9 +1031,7 @@ def load_markers():
 
 
 def save_markers(m):
-    tmp = MARKERS_FILE + ".tmp"
-    json.dump(m, open(tmp, "w", encoding="utf-8"), indent=1)
-    os.replace(tmp, MARKERS_FILE)
+    write_json(MARKERS_FILE, m, indent=1)
 
 
 def map_warmer():
@@ -1232,12 +1224,7 @@ SESS_LOCK = threading.Lock()
 def save_sessions():
     try:
         with SESS_LOCK:
-            os.makedirs(os.path.dirname(SESS_FILE), exist_ok=True)
-            live = {k: dict(v) for k, v in list(SESSIONS.items()) if v["exp"] > time.time()}
-            tmp = SESS_FILE + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(live, f)
-            os.replace(tmp, SESS_FILE)
+            write_json(SESS_FILE, {k: dict(v) for k, v in list(SESSIONS.items()) if v["exp"] > time.time()}, 0o600)
     except (OSError, RuntimeError):
         pass
 
@@ -1344,8 +1331,7 @@ def login_page(error=""):
 <label for=p>%s</label><input id=p name=password type=password autocomplete=current-password required>
 <button type=submit>%s</button>%s</form></main>""" % (LOGO_SVG, html.escape(CFG["title"]), html.escape(t("Log in to manage the server.")),
                                                     html.escape(t("User")), html.escape(t("Password")), html.escape(t("Log in")), err)
-    return ("<!doctype html><html lang=" + i18n.LANG + "><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
-            "<title>%s</title>%s<style>%s</style></head><body>%s</body></html>" % (html.escape(CFG["title"]), LOGO_ICON, LOGIN_CSS, body)).encode()
+    return _page(body)
 
 
 def _page(body):
@@ -1465,11 +1451,7 @@ def save_config(changes):
         with open(CONFIG_PATH, encoding="utf-8") as fh:
             cfg = json.load(fh)
     cfg.update(changes)
-    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-    tmp = CONFIG_PATH + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(cfg, fh, indent=2, ensure_ascii=False)
-    os.replace(tmp, CONFIG_PATH)
+    write_json(CONFIG_PATH, cfg, indent=2, ensure_ascii=False)
     CFG.update(changes)
     return cfg
 
@@ -1720,7 +1702,7 @@ def health():
     free = shutil.disk_usage(sd).free
     if sizes and free < max(1073741824, 3 * max(sizes)):   # less than three backups as big as the biggest one
         checks.append(("disk", False, t("Little disk space left: %s free, the biggest backup is %s. Delete old backups or lower how many to keep.")
-                       % (BK._mb(free), BK._mb(max(sizes))), None))
+                       % (BK.mb(free), BK.mb(max(sizes))), None))
     if UPDATE.get("newer"):
         checks.append(("update", False, t("ByzzCraft %s is available (you have %s).") % (UPDATE["latest"], VERSION), None))
     out = []
@@ -1873,6 +1855,9 @@ class Handler(BaseHTTPRequestHandler):
         n = max(0, min(n, 65536))   # never negative: read(-1) would read until the connection closes
         return self.rfile.read(n).decode("utf-8", "replace") if n else ""
 
+    def form(self):   # an HTML form post: one value per field
+        return {k: v[0] for k, v in parse_qs(self.body()).items()}
+
     def do_GET(self):
         self.safe(self._do_GET)
 
@@ -1902,12 +1887,13 @@ class Handler(BaseHTTPRequestHandler):
 
     # ------------------------------------------------ GET
     def _do_GET(self):
-        path = self.path.split("?")[0]
+        path, _, qs = self.path.partition("?")
+        q = parse_qs(qs)
         if path in ICONS:
             with open(os.path.join(HERE, "assets", ICONS[path]), "rb") as f:
                 return self.send(200, f.read(), "image/png", {"Cache-Control": "public, max-age=86400"})
         if path == "/" and not load_users():
-            token = (parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}).get("setup", [""])[0]
+            token = q.get("setup", [""])[0]
             if not setup_allowed(self, token):
                 return self.send(200, setup_remote_page())
             return self.send(200, setup_page(token=token, remote=not is_local(self)))
@@ -1931,7 +1917,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/players":
             return self.json(200, {"players": roster(), "hardcore": hardcore_world()})
         if path == "/api/player":
-            uuid = (parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}).get("uuid", [""])[0]
+            uuid = q.get("uuid", [""])[0]
             names = known_players()
             if not UUID_RE.match(uuid) or uuid not in names:
                 return self.json(404, {"error": "unknown player"})
@@ -1952,7 +1938,6 @@ class Handler(BaseHTTPRequestHandler):
         if m:
             p = os.path.join(MOJANG, "hud", m.group(1) + ".png")
             return self.send(200, open(p, "rb").read(), "image/png", img_cache) if os.path.exists(p) else self.send(404, b"", "image/png")
-        q = parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}
         if path == "/api/map":
             dim = q.get("dim", ["overworld"])[0]
             if dim not in mapgen.DIMS:
@@ -1974,7 +1959,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(503, b"", "image/png")
             cache = os.path.join(CACHE, "map")
             tile = os.path.join(cache, dim, "r.%d.%d.png" % (rx, rz))
-            mca = mapgen._region_path(world_dir(), dim, rx, rz)
+            mca = mapgen.region_path(world_dir(), dim, rx, rz)
             try:
                 fresh = os.path.getmtime(tile) >= os.path.getmtime(mca)
             except OSError:
@@ -2014,7 +1999,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/health":
             return self.json(200, {"checks": health()})
         if path == "/api/syslog":
-            which = (parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}).get("file", ["panel"])[0]
+            which = q.get("file", ["panel"])[0]
             return self.json(200, {"lines": tail(START_LOG if which == "start" else os.path.join(LOG_DIR, "byzzcraft.log"))})
         if path == "/api/users":
             return self.json(200, {"users": [{"name": n, "admin": bool(u.get("admin")), "mc": u.get("mc") or (CFG.get("user_mc") or {}).get(n, ""),
@@ -2084,7 +2069,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/setup":
             return self.first_setup()
         if self.path == "/login":
-            f = {k: v[0] for k, v in parse_qs(self.body()).items()}
+            f = self.form()
             user = f.get("user", "").strip().lower(); keys = ["c:" + client_id(self)]   # not by name: anyone could lock out "admin"
             if locked(keys):
                 return self.send(429, login_page(t("Too many attempts: try again in 15 minutes.")))
@@ -2100,7 +2085,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.redirect("/", self.cookie(tok, SESSION_SECONDS))
         tok, s = self.session()
         if self.path == "/logout":
-            f = {k: v[0] for k, v in parse_qs(self.body()).items()}
+            f = self.form()
             if s and hmac.compare_digest(f.get("csrf", "") or self.headers.get("X-CSRF", ""), s["csrf"]):
                 SESSIONS.pop(tok, None)
                 save_sessions()
@@ -2354,7 +2339,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def first_setup(self):
         """First setup: only with no users, from the browser of this machine or with the setup code."""
-        f = {k: v[0] for k, v in parse_qs(self.body()).items()}
+        f = self.form()
         if load_users() or not same_origin(self) or not setup_allowed(self, f.get("token", "")):
             return self.send(403, setup_remote_page())
         remote = not is_local(self)

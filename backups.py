@@ -11,6 +11,7 @@ import time
 import zipfile
 from datetime import datetime, timedelta
 
+from paths import write_json
 from i18n import t as tr   # t is used as a local variable (times)
 
 if os.name == "nt":
@@ -49,7 +50,7 @@ def _extras(world):
     return [(sfx, world + sfx) for sfx in EXTRA if os.path.isdir(world + sfx)]
 
 
-def _mb(n):
+def mb(n):
     return "%d MB" % (n // 1048576) if n < 10 * 1073741824 else "%.1f GB" % (n / 1073741824)
 
 
@@ -276,12 +277,7 @@ class Backups:
                 "last_scheduled": self._state["last_scheduled"],
                 "last_daily": self._state["last_daily"],
             }
-            tmp = self.state_file + ".tmp"
-            d = os.path.dirname(os.path.abspath(self.state_file))
-            os.makedirs(d, exist_ok=True)
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=1)
-            os.replace(tmp, self.state_file)
+            write_json(self.state_file, data, ensure_ascii=False, indent=1)
 
     # ------------------------------------------------------------ helpers
     def _notify(self, force=True):
@@ -334,13 +330,7 @@ class Backups:
         with self._mu:
             if key in self._size_cache:
                 return self._size_cache[key]
-        total = 0
-        for root, _d, files in os.walk(path):
-            for fn in files:
-                try:
-                    total += os.path.getsize(os.path.join(root, fn))
-                except OSError:
-                    pass
+        total = self._tree_bytes(path)
         with self._mu:
             self._size_cache[key] = total
         return total
@@ -398,7 +388,7 @@ class Backups:
         """A readable error before starting, instead of filling the disk halfway through the copy."""
         free = shutil.disk_usage(path or self.server_dir).free
         if free < need + SPACE_MARGIN:
-            raise ValueError(tr("Not enough disk space: about %s needed, %s free.") % (_mb(need + SPACE_MARGIN), _mb(free)))
+            raise ValueError(tr("Not enough disk space: about %s needed, %s free.") % (mb(need + SPACE_MARGIN), mb(free)))
 
     def disk(self):
         u = shutil.disk_usage(self.server_dir)
@@ -633,7 +623,7 @@ class Backups:
                     time.sleep(1.0)
                     done = 0
                     for arc, p in srcs:
-                        done = self._copy_world(p, os.path.join(tmpdir, arc), total, done)
+                        done = self._copy_tree(p, os.path.join(tmpdir, arc), total, done)
                 finally:
                     # always, even if save-off seems to have failed (the answer may have been lost)
                     err = None
@@ -703,7 +693,7 @@ class Backups:
                     pass
         return max(t, 1)
 
-    def _copy_world(self, src, dst, total, done=0):
+    def _copy_tree(self, src, dst, total, done=0, share=0.3):
         for r, dirs, files in os.walk(src):
             rel = os.path.relpath(r, src)
             tgt = dst if rel == "." else os.path.join(dst, rel)
@@ -719,7 +709,7 @@ class Backups:
                 except OSError as ex:
                     _rmfile(d)   # a backup with a missing piece must not pass for a good one
                     raise OSError(tr("unreadable file: %s (%s)") % (os.path.relpath(s, src), ex))
-                self._progress(0.3 * done / total)
+                self._progress(share * done / total)
         return done
 
     def _zip_world(self, srcs, part, base, span):
@@ -914,9 +904,8 @@ class Backups:
                         self._extract_zip(src, tmp + sfx, top="world" + sfx)
             else:
                 self.check_space(sum(self._tree_bytes(p) for p in [src] + [p for _s, p in _extras(src)]))
-                self._copy_folder(src, tmp)
-                for sfx, p in _extras(src):
-                    self._copy_folder(p, tmp + sfx)
+                for sfx, p in [("", src)] + _extras(src):
+                    self._copy_tree(p, tmp + sfx, self._tree_bytes(p), share=1)
             if not os.path.isfile(os.path.join(tmp, "level.dat")):
                 raise ValueError(tr("The backup does not contain level.dat"))
             os.makedirs(self.old_dir, exist_ok=True)
@@ -1007,18 +996,3 @@ class Backups:
                         d.write(b)
                         done += len(b)
                         self._progress(done / total)
-
-    def _copy_folder(self, src, dest):
-        total = self._tree_bytes(src)
-        done = 0
-        for r, _dirs, files in os.walk(src):
-            rel = os.path.relpath(r, src)
-            tgt = dest if rel == "." else os.path.join(dest, rel)
-            os.makedirs(tgt, exist_ok=True)
-            for fn in files:
-                if fn == "session.lock":
-                    continue
-                s = os.path.join(r, fn)
-                shutil.copyfile(s, os.path.join(tgt, fn))
-                done += os.path.getsize(s)
-                self._progress(done / total)
