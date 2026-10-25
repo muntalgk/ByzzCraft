@@ -17,6 +17,7 @@
 - Login lock per address only.
 - New cartoon "BC" logo and icons; README with logo, badges and a screenshot gallery; new screenshots.
 - Language can be changed from **Settings → Panel** (the panel restarts in the new language).
+- Potions in the inventory show their colored liquid and their name (they looked like empty bottles).
 - Dashboard "Latest events" no longer goes empty after many console commands; no seams between map tiles.
 - Skins: offline-mode players and a Mojang outage no longer slow the pages (default skin cached for 6 hours).
 - Timeline reads only the new lines of panel.log.
