@@ -113,7 +113,7 @@ try:
 
     # rate-limit key: the client cannot pick it through a local proxy
     check("client_id: last X-Forwarded-For hop", panel.client_id(handler("127.0.0.1", "127.0.0.1", {"X-Forwarded-For": "9.9.9.9, 1.2.3.4", "Tailscale-User-Login": "a"})) == "1.2.3.4")
-    check("client_id: tailscale login", panel.client_id(handler("127.0.0.1", "127.0.0.1", {"Tailscale-User-Login": "a@b"})) == "a@b")
+    check("client_id: tailscale login ignored", panel.client_id(handler("127.0.0.1", "127.0.0.1", {"Tailscale-User-Login": "a@b"})) == "127.0.0.1")
     check("client_id: headers ignored from another PC", panel.client_id(handler("192.168.1.30", "192.168.1.20", {"X-Forwarded-For": "1.1.1.1"})) == "192.168.1.30")
     # setup without the code: Host must be an IP or localhost, Origin the same host
     for host, want in (("127.0.0.1:8765", True), ("localhost:8765", True), ("[::1]:8765", True), ("192.168.1.20", True), ("evil.example.com:8765", False), ("", False)):
@@ -137,7 +137,8 @@ try:
         except ValueError:
             good = False
         check("java_args ok %r" % a[:30], good)
-    for a in ("-XX:OnError=calc", "-XX:+OnOutOfMemoryError=x", "-XX:Flags=f", "-XX:VMOptionsFile=f", "-javaagent:x.jar", "-agentlib:jdwp", "@args.txt", "-cp x", "-Xbootclasspath/a:x", "-jar x.jar", "-Xmx4G", "-XX:+UseG1GC"+chr(10)+"-cp x"):
+    for a in ("-XX:OnError=calc", "-XX:+OnOutOfMemoryError=x", "-XX:Flags=f", "-XX:VMOptionsFile=f", "-javaagent:x.jar", "-agentlib:jdwp", "@args.txt", "-cp x", "-Xbootclasspath/a:x", "-jar x.jar", "-Xmx4G", "-XX:+UseG1GC"+chr(10)+"-cp x",
+              "-Dcom.sun.management.jmxremote.port=9010", "-Dlog4j.configurationFile=x", "-Djava.security.manager=x"):
         try:
             save(a); good = True
         except ValueError:
@@ -156,7 +157,7 @@ try:
         "[12:00:00] [Server thread/INFO]: <bob> Stopping server", "[12:00:00] [Server thread/INFO]: System chat: Stopping the server")))
 
     # level-name goes into a path
-    for v, want in (("world", True), ("my world", True), ("", False), ("../x", False), ("a/b", False), ("a"+chr(92)+"b", False), ("/abs", False), ("C:x", False)):
+    for v, want in (("world", True), ("my world", True), ("", False), ("../x", False), ("a/b", False), ("a"+chr(92)+"b", False), ("/abs", False), ("C:x", False), (".", False), ("world ", False), ("world.", False)):
         check("level_name_ok %r" % v, panel.level_name_ok(v) == want)
 
     # session valid only while the password it was created with is the current one

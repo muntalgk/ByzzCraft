@@ -719,7 +719,7 @@ $("#logout").onclick=async e=>{const b=e.currentTarget;
 $("#srv-pill").onclick=async()=>{if(!BOOT.address)return;try{await navigator.clipboard.writeText(BOOT.address);toast(_t("Address copied: %s",BOOT.address),"good")}catch(e){toast(_t("Server address: %s",BOOT.address))}};
 
 function toast(msg,kind){if(!msg)return;const d=document.createElement("div");d.className="toast "+(kind||"");d.setAttribute("role","status");d.textContent=msg;
-  const x=document.createElement("button");x.className="x";x.textContent="×";x.title=_t("Close");x.onclick=()=>d.remove();d.append(x);$("#toasts").append(d);setTimeout(()=>d.remove(),5000)}
+  const x=document.createElement("button");x.className="x";x.textContent="×";x.title=x.ariaLabel=_t("Close");x.onclick=()=>d.remove();d.append(x);$("#toasts").append(d);setTimeout(()=>d.remove(),5000)}
 async function api(path,body){try{const r=await fetch(path,{method:"POST",headers:{"X-CSRF":BOOT.csrf,"Content-Type":"application/json"},body:JSON.stringify(body||{})});
   if(r.status==401){location.reload();return{}}const j=await r.json();return j}catch(e){return{ok:false,message:_t("Panel unreachable")}}}
 
@@ -792,10 +792,10 @@ function renderMetrics(){const m=S.metrics,last=m[m.length-1]||{};
   $("#n-cpu").textContent=last.cpu!=null?nf(last.cpu,1)+"%":"";
   const tk=last.mspt;$("#k-tick").innerHTML=tk!=null?nf(tk,1)+"<small>ms</small>":"-";
   $("#k-tick-h").textContent=tk!=null?"TPS "+nf(Math.min(20,1000/Math.max(tk,0.001)),1)+(last.p95!=null?" · P95 "+nf(last.p95,1)+" ms":""):_t("server off");$("#n-tick").textContent=tk!=null?nf(tk,1)+" ms":"";
-  if(last.sys_total){const free=last.sys_free/1024,tot=last.sys_total/1024;$("#k-sys").innerHTML=nf(free,1)+"<small>GB</small>";$("#k-sys-h").textContent=_t("of %s GB",nf(tot,0))+(last.ws?" · server "+nf(last.ws/1024,1)+" GB":"");$("#k-sys-b").style.width=(100*free/tot)+"%"}
-  if(last.pc_cpu!=null){$("#k-pc").innerHTML=nf(last.pc_cpu,1)+"<small>%</small>";$("#k-pc-h").textContent=navigatorCores()+" core"+(last.cpu!=null?" · server "+nf(last.cpu,1)+"%":"");$("#n-pc").textContent=nf(last.pc_cpu,1)+"%"}
+  if(last.sys_total){const free=last.sys_free/1024,tot=last.sys_total/1024;$("#k-sys").innerHTML=nf(free,1)+"<small>GB</small>";$("#k-sys-h").textContent=_t("of %s GB",nf(tot,0))+(last.ws?" · "+_t("server")+" "+nf(last.ws/1024,1)+" GB":"");$("#k-sys-b").style.width=(100*free/tot)+"%"}
+  if(last.pc_cpu!=null){$("#k-pc").innerHTML=nf(last.pc_cpu,1)+"<small>%</small>";$("#k-pc-h").textContent=navigatorCores()+" "+_t("core")+(last.cpu!=null?" · "+_t("server")+" "+nf(last.cpu,1)+"%":"");$("#n-pc").textContent=nf(last.pc_cpu,1)+"%"}
   if(last.sys_total){const used=(last.sys_total-last.sys_free)/1024,tot=last.sys_total/1024;cRam.o.cap=tot;$("#k-ram").innerHTML=nf(used,1)+"<small>GB</small>";$("#k-ram-h").textContent=_t("of %s GB",nf(tot,0))+" · "+nf(100*used/tot,0)+"%";$("#k-ram-b").style.width=(100*used/tot)+"%";$("#n-ram").textContent=nf(used,1)+" GB"}
-  $("#k-ws").innerHTML=last.ws?nf(last.ws/1024,2)+"<small>GB</small>":"-";$("#k-ws-h").textContent=last.ws?_t("private %s GB",nf(last.priv/1024,2))+" · heap max "+(S.heap.length?nf(S.heap[S.heap.length-1].total/1024,0)+" GB":"-"):_t("server off");$("#n-ws").textContent=last.ws?nf(last.ws/1024,2)+" GB":"";
+  $("#k-ws").innerHTML=last.ws?nf(last.ws/1024,2)+"<small>GB</small>":"-";$("#k-ws-h").textContent=last.ws?_t("private %s GB",nf(last.priv/1024,2))+" · "+_t("heap max")+" "+(S.heap.length?nf(S.heap[S.heap.length-1].total/1024,0)+" GB":"-"):_t("server off");$("#n-ws").textContent=last.ws?nf(last.ws/1024,2)+" GB":"";
   if(last.disk_total){const fr=last.disk_free/1024,tot=last.disk_total/1024;$("#k-disk").innerHTML=nf(fr,0)+"<small>"+_t("GB free")+"</small>";$("#k-disk-h").textContent=_t("of %s GB (disk of the server folder)",nf(tot,0));$("#k-disk-b").style.width=(100*(1-fr/tot))+"%"}
   cPc.set(m.map(p=>[p.t,p.pc_cpu]));cWs.set(m.map(p=>[p.t,p.ws!=null?p.ws/1024:null]),S.status.state=="on"?_t("Collecting data..."):_t("Server off"));cRam.set(m.map(p=>[p.t,p.sys_total?(p.sys_total-p.sys_free)/1024:null]));
   cCpu.set(m.map(p=>[p.t,p.cpu]),S.status.state=="on"?_t("Collecting data..."):_t("Server off"));cTick.set(m.map(p=>[p.t,p.mspt]),S.status.state=="on"?_t("Collecting data..."):_t("Server off"))}
@@ -944,7 +944,7 @@ function renderRoster(){const box=$("#pl-list");const keep=new Set();
     b.querySelector("span").textContent=p.dead?_t("dead"):p.online?_t("online")+(p.health!=null?" · "+nf(p.health/2,1)+" ❤":""):_t("offline")+" · "+ago(p.saved)});
   [...box.children].forEach(c=>{if(!keep.has(c.dataset.u))c.remove()});
   if(!P.roster.length)$("#pl-detail").innerHTML="<div class=card style='color:var(--mute)'>"+_t("No players recorded on this world yet.")+"</div>"}
-async function selectPlayer(uuid,quiet){P.sel=uuid;renderRoster();try{const r=await fetch("/api/player?uuid="+encodeURIComponent(uuid));if(!r.ok)return;
+async function selectPlayer(uuid,quiet){P.sel=uuid;renderRoster();try{const r=await GET("/api/player?uuid="+encodeURIComponent(uuid));if(!r)return;
   const d=await r.json();if(P.sel!=uuid)return;const first=!P.cur||P.cur.uuid!=uuid;P.cur=d;P.hardcore=d.hardcore;renderPlayer(first)}catch(e){}}
 /* -- 3D skin in CSS: every part is a box with 6 faces taken from the 64x64 texture -- */
 const SS=7;
@@ -979,8 +979,8 @@ const SLOT_PH={head:"empty_armor_slot_helmet",chest:"empty_armor_slot_chestplate
 function slotHTML(it,ph,sel){if(!it)return "<div class='slot"+(sel?" sel":"")+"'>"+(ph?"<img class=ph src='/icon/"+ph+".png?v=5' onerror=\"this.remove()\">":"")+"</div>";
   const tip=encodeURIComponent(JSON.stringify({n:it.name,e:it.ench,g:it.glint,d:it.dmg,m:it.max,id:it.id,c:it.count}));
   const dur=it.max&&it.dmg>0?"<div class=dur><b style='width:"+(100*(1-it.dmg/it.max))+"%;background:hsl("+Math.round(120*(1-it.dmg/it.max))+",90%,45%)'></b></div>":"";
-  const glint=it.glint?"<div class=glint style=\"-webkit-mask-image:url('/icon/"+it.id+".png?v=5');mask-image:url('/icon/"+it.id+".png?v=5')\"></div>":"";
-  return "<div class='slot"+(sel?" sel":"")+"' data-tip='"+tip+"'><img src='/icon/"+it.id+".png?v=5' alt='"+esc(it.name.slice(0,10))+"' onerror='icoErr(this)'>"+glint+dur+(it.count>1?"<span class=cnt>"+it.count+"</span>":"")+"</div>"}
+  const glint=it.glint?"<div class=glint style=\"-webkit-mask-image:url('/icon/"+esc(it.id)+".png?v=5');mask-image:url('/icon/"+esc(it.id)+".png?v=5')\"></div>":"";
+  return "<div class='slot"+(sel?" sel":"")+"' data-tip='"+tip+"'><img src='/icon/"+esc(it.id)+".png?v=5' alt='"+esc(it.name.slice(0,10))+"' onerror='icoErr(this)'>"+glint+dur+(it.count>1?"<span class=cnt>"+it.count+"</span>":"")+"</div>"}
 /* a failed icon gets one more try (a phone can drop image loads), then its name */
 function icoErr(i){if(!i.dataset.r){i.dataset.r=1;setTimeout(()=>i.src+="&r=1",800)}else i.outerHTML="<div class=fb>"+esc(i.alt)+"</div>"}
 /* only when it changed: rewriting the same inventory on every live update reloads every icon */
@@ -996,7 +996,7 @@ function renderPlayer(first){const d=P.cur;if(!d)return;const box=$("#pl-detail"
     "<div class=card style='margin-top:16px'><p class=sec-title>"+_t("Statistics")+"</p><div id=pl-stats></div></div>";
     buildSkin(d.uuid,d.slim);const v=$("#viewer");
     v.onpointerdown=e=>{P.drag={x:e.clientX,r:P.rot};v.setPointerCapture(e.pointerId)};v.onpointermove=e=>{if(P.drag)P.rot=P.drag.r+(e.clientX-P.drag.x)*.6};v.onpointerup=v.onpointercancel=()=>P.drag=null}
-  $("#pl-name").innerHTML=esc(d.name)+(d.dead?" <span class='badge dead'>"+_t("DEAD")+"</span>":d.live?" <span class='badge live'>"+_t("LIVE")+"</span>":d.online?" <span class='badge live'>ONLINE</span>":" <span class=badge>OFFLINE</span>");
+  $("#pl-name").innerHTML=esc(d.name)+(d.dead?" <span class='badge dead'>"+_t("DEAD")+"</span>":d.live?" <span class='badge live'>"+_t("LIVE")+"</span>":d.online?" <span class='badge live'>"+_t("ONLINE")+"</span>":" <span class=badge>"+_t("OFFLINE")+"</span>");
   $("#pl-meta").textContent=(GM[d.gamemode]||"")+" · "+(d.live?_t("updated %s",ago(d.saved)):_t("last saved %s",ago(d.saved)))+(d.stats&&d.stats.summary?" · "+(d.stats.summary.deaths?_t("last death %s of play ago",dur2(d.stats.summary.since_death)):_t("never died")):"");
   $("#pl-pos").innerHTML=(DIM[d.dim]||d.dim)+"<br><b>"+(d.pos||[]).map(v=>Math.floor(v)).join("  ")+"</b>"+(d.last_death?"<br><span style='color:var(--mute)'>"+_t("last death %s",d.last_death.join(" "))+"</span>":"");
   const fx=(d.effects||[]).map(e=>"<span class='chip plain'>"+esc(e.name)+(e.amp?" "+["","II","III","IV","V"][e.amp]||"":"")+" · "+(e.dur<0?"∞":Math.floor(e.dur/1200)+":"+String(Math.floor(e.dur/20)%60).padStart(2,"0"))+"</span>").join("");
@@ -1031,7 +1031,7 @@ function dayLabel(t){const d=new Date(t),n=new Date();const k=x=>x.toDateString(
   return d.toLocaleDateString(LOC,{weekday:"long",day:"numeric",month:"long"})}
 function evHTML(e,compact){const u=e.player&&uuidOf(e.player);const face=u&&["join","leave","chat"].includes(e.type);
   const ic=face?"<span class=fc style='"+faceStyle(u,compact?24:30)+"'></span>":"<span class=ic>"+(EVI[e.type]||"•")+"</span>";
-  return "<div class='ev "+e.type+"'>"+ic+"<div class=tx>"+esc(e.text)+"</div><time>"+(compact?hhmm(e.t):hhmmss(e.t))+"</time></div>"}
+  return "<div class='ev "+esc(e.type)+"'>"+ic+"<div class=tx>"+esc(e.text)+"</div><time>"+(compact?hhmm(e.t):hhmmss(e.t))+"</time></div>"}
 const feedEv=e=>e.type!="chat"&&(e.type!="panel"||(e.detail||{}).cat=="server");   /* events the dashboard feed shows */
 function renderDashFeed(){const box=$("#dash-feed");const evs=(S.timeline||[]).filter(feedEv).slice(0,8);
   box.innerHTML=evs.length?evs.map(e=>evHTML(e,true)).join(""):"<div style='color:var(--mute);font-size:14px'>"+_t("No events yet.")+"</div>"}
@@ -1055,7 +1055,7 @@ class WorldMap{
     this.markers=[];this.spawn=null;this.follow=null;this.loaded=false;this.centered=false;
     el.innerHTML="<div class=wm-world><div class=wm-tiles></div><div class=wm-marks></div><div class=wm-players></div></div><div class=wm-empty></div>"+(mini?"":
       "<div class='wm-ui wm-dims' style='left:10px;top:10px'>"+Object.entries(DIMNAMES).map(([k,v])=>"<button data-dim="+k+">"+v+"</button>").join("")+"</div>"+
-      "<div class='wm-ui wm-zoom' style='right:10px;top:10px'><button data-a=home title='"+_t("Center")+"'>⌂</button><button data-a=zin title='"+_t("Zoom in")+"'>+</button><button data-a=zout title='"+_t("Zoom out")+"'>−</button></div><div class=wm-coord>"+(matchMedia("(pointer:coarse)").matches?_t("Drag to move, pinch to zoom"):_t("move the mouse over the map"))+"</div><div class=wm-legend></div>");
+      "<div class='wm-ui wm-zoom' style='right:10px;top:10px'><button data-a=home title='"+_t("Center")+"' aria-label='"+_t("Center")+"'>⌂</button><button data-a=zin title='"+_t("Zoom in")+"' aria-label='"+_t("Zoom in")+"'>+</button><button data-a=zout title='"+_t("Zoom out")+"' aria-label='"+_t("Zoom out")+"'>−</button></div><div class=wm-coord>"+(matchMedia("(pointer:coarse)").matches?_t("Drag to move, pinch to zoom"):_t("move the mouse over the map"))+"</div><div class=wm-legend></div>");
     this.world=el.querySelector(".wm-world");this.tiles=el.querySelector(".wm-tiles");this.marks=el.querySelector(".wm-marks");this.players=el.querySelector(".wm-players");this.empty=el.querySelector(".wm-empty");
     if(mini)el.addEventListener("click",()=>go("map"));else this.bind();
     new ResizeObserver(()=>this.apply()).observe(el)}
@@ -1192,7 +1192,7 @@ function when(t){const d=new Date(t*1000),n=new Date(),tm=d.toLocaleTimeString(L
   const day=x=>new Date(x.getFullYear(),x.getMonth(),x.getDate()).getTime(),dd=Math.round((day(d)-day(n))/86400000);
   return dd==0?_t("today %s",tm):dd==1?_t("tomorrow %s",tm):dd==-1?_t("yesterday %s",tm):d.toLocaleDateString(LOC,{day:"numeric",month:"short"})+" "+tm}
 const BK={items:null,disk:null,st:null,f:"",w:"",sel:new Set(),shown:[],doomed:new Set(),world:"",times:[],dirty:false,
-  async load(){clearTimeout(this._t);try{const r=await fetch("/api/backups");if(!r.ok)return;const j=await r.json();
+  async load(){clearTimeout(this._t);try{const r=await GET("/api/backups");if(!r)return;const j=await r.json();
     this.items=j.items;this.disk=j.disk;this.st=j.status;this.doomed=new Set(j.doomed||[]);this.world=j.world||"";this.render();this.renderStatus();this.fillSched();if(CUR=="backups")setSub()}catch(e){}},
   loadSoon(){clearTimeout(this._t);this._t=setTimeout(()=>this.load(),400)},
   onStatus(st){const was=this.st&&this.st.busy;this.st=st;this.renderStatus();if(!st.busy&&(was||this.items))this.loadSoon()},
@@ -1208,10 +1208,10 @@ const BK={items:null,disk:null,st:null,f:"",w:"",sel:new Set(),shown:[],doomed:n
         +(ws.length>1&&e.world?"<span class='kb wd'>"+esc(e.world)+"</span>":"")+(this.doomed.has(e.id)?"<span class='kb dm'>"+_t("next cleanup")+"</span>":"")
         +new Date(e.mtime*1000).toLocaleString(LOC,{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})+" · "+bkAgo(e.mtime)+" · "+gb(e.size)
         +(e.note?" · <span style='opacity:.8'>"+esc(e.name)+"</span>":"")+"</small></div>"
-        +"<div class='acts'><button class='ib' data-a='note' data-id='"+id+"' title='"+_t("Edit note")+"'>"+BI.ed+"</button><button class='ib"+(e.pinned?" pinned":"")+"' data-a='pin' data-id='"+id+"' title='"+(e.pinned?_t("Unpin"):_t("Pin: it will never be deleted automatically"))+"'>"+(e.pinned?BI.starF:BI.star)+"</button>"
-        +(zip?"<a class='ib' href='/api/backups/download?id="+encodeURIComponent(e.id)+"' download title='"+_t("Download the zip")+"'>"+BI.dl+"</a>":"")
-        +"<button class='ib' data-a='rs' data-id='"+id+"' title='"+_t("Restore this world")+"'"+(busy?" disabled":"")+">"+BI.rs+"</button>"
-        +"<button class='ib del' data-a='del' data-id='"+id+"' title='"+(e.pinned?_t("Unpin it first"):_t("Move to the trash"))+"'"+(e.pinned||busy?" disabled":"")+">"+BI.del+"</button></div></div>"}).join("")
+        +"<div class='acts'><button class='ib' data-a='note' data-id='"+id+"' title='"+_t("Edit note")+"' aria-label='"+_t("Edit note")+"'>"+BI.ed+"</button><button class='ib"+(e.pinned?" pinned":"")+"' data-a='pin' data-id='"+id+"' title='"+(e.pinned?_t("Unpin"):_t("Pin: it will never be deleted automatically"))+"' aria-label='"+(e.pinned?_t("Unpin"):_t("Pin: it will never be deleted automatically"))+"'>"+(e.pinned?BI.starF:BI.star)+"</button>"
+        +(zip?"<a class='ib' href='/api/backups/download?id="+encodeURIComponent(e.id)+"' download title='"+_t("Download the zip")+"' aria-label='"+_t("Download the zip")+"'>"+BI.dl+"</a>":"")
+        +"<button class='ib' data-a='rs' data-id='"+id+"' title='"+_t("Restore this world")+"' aria-label='"+_t("Restore this world")+"'"+(busy?" disabled":"")+">"+BI.rs+"</button>"
+        +"<button class='ib del' data-a='del' data-id='"+id+"' title='"+(e.pinned?_t("Unpin it first"):_t("Move to the trash"))+"' aria-label='"+(e.pinned?_t("Unpin it first"):_t("Move to the trash"))+"'"+(e.pinned||busy?" disabled":"")+">"+BI.del+"</button></div></div>"}).join("")
       :"<div style='color:var(--mute);padding:14px'>"+_t("No backups.")+"</div>";
     const n=rows.filter(e=>this.sel.has(e.id)).length;$("#bk-all").checked=!!rows.length&&n==rows.length;$("#bk-all").indeterminate=n>0&&n<rows.length;$("#bk-selc").textContent=_t("%s backups",rows.length);
     $("#bk-bulk").classList.toggle("on",this.sel.size>0);$("#bk-bulk-n").textContent=_t("%s selected",this.sel.size)+" · "+gb(it.filter(e=>this.sel.has(e.id)).reduce((a,e)=>a+e.size,0));$("#bk-bulk [data-b=del]").disabled=busy;
@@ -1239,7 +1239,7 @@ const BK={items:null,disk:null,st:null,f:"",w:"",sel:new Set(),shown:[],doomed:n
     $("#bk-days").innerHTML=dn.map((n,i)=>"<button type='button' data-d='"+i+"' class='"+(c.days.includes(i)?"on":"")+"'>"+esc(n)+"</button>").join("");
     ["startup","scheduled","manual"].forEach(k=>{$("#bk-k-"+k).value=c.keep[k];$("#bk-d-"+k).value=c.max_days[k]});$("#bk-gb").value=c.max_gb;this.sync();this.prev()},
   sync(){const w=$("#bk-win-on").checked;$("#bk-win-from").disabled=$("#bk-win-to").disabled=!w},
-  dtimes(){$("#bk-dchips").innerHTML=this.times.map(t=>"<button type='button' data-t='"+esc(t)+"' title='"+_t("Remove")+"'>"+esc(t)+" ×</button>").join("");$("#bk-dadd").disabled=this.times.length>=6},
+  dtimes(){$("#bk-dchips").innerHTML=this.times.map(t=>"<button type='button' data-t='"+esc(t)+"' title='"+_t("Remove")+"' aria-label='"+_t("Remove")+"'>"+esc(t)+" ×</button>").join("");$("#bk-dadd").disabled=this.times.length>=6},
   touch(){this.dirty=true;this.sync();this.prev()},
   form(){const n=id=>+$(id).value;return{every_minutes:n("#bk-every"),only_when_online:$("#bk-online").checked,window:$("#bk-win-on").checked?{from:$("#bk-win-from").value,to:$("#bk-win-to").value}:null,
     daily_at:this.times,days:$$("#bk-days .on").map(b=>+b.dataset.d),keep:{startup:n("#bk-k-startup"),scheduled:n("#bk-k-scheduled"),manual:n("#bk-k-manual")},
@@ -1313,7 +1313,7 @@ setInterval(()=>{if(WV.w&&CUR=="dash")WV.draw()},1000);
 
 /* ---------------- access: whitelist, operators, bans ---------------- */
 const ACV={d:null,
-  async load(){try{const r=await fetch("/api/access");if(!r.ok)return;this.d=await r.json();this.render()}catch(e){}},
+  async load(){try{const r=await GET("/api/access");if(!r)return;this.d=await r.json();this.render()}catch(e){}},
   people(){const d=this.d,m=new Map(),get=(n,u)=>{const k=n.toLowerCase();if(!m.has(k))m.set(k,{name:n,uuid:u||null});const p=m.get(k);if(u&&!p.uuid)p.uuid=u;return p};
     d.known.forEach(x=>get(x.name,x.uuid).known=true);d.whitelist.forEach(x=>get(x.name,x.uuid).wl=true);d.ops.forEach(x=>get(x.name,x.uuid).op=true);
     d.bans.forEach(x=>get(x.name,x.uuid).ban=x);d.online.forEach(n=>get(n).online=true);
@@ -1323,11 +1323,11 @@ const ACV={d:null,
       +(d.white_list&&d.enforce?"<span class='pill ok'>"+_t("Whoever is removed is kicked at once")+"</span>":"")
       +"<span class='pill'>"+(d.state=="on"?_t("Server on: changes go through the server"):_t("Server off: editing the server files (UUIDs from Mojang)"))+"</span>";
     const ps=this.people(),A=(a,n,l,c,dis)=>"<button class='sb "+c+"' data-a='"+a+"' data-n='"+esc(n)+"'"+(dis?" disabled":"")+">"+l+"</button>";
-    $("#ac-list").innerHTML=ps.map(p=>{const tags=(p.online?"<span class='tg on'>Online</span>":"")+(p.op?"<span class='tg opx'>OP</span>":"")+(p.wl?"<span class='tg wl'>Whitelist</span>":"")+(p.ban?"<span class='tg ban'>"+_t("Banned")+"</span>":"");
+    $("#ac-list").innerHTML=ps.map(p=>{const tags=(p.online?"<span class='tg on'>"+_t("Online")+"</span>":"")+(p.op?"<span class='tg opx'>OP</span>":"")+(p.wl?"<span class='tg wl'>"+_t("Whitelist")+"</span>":"")+(p.ban?"<span class='tg ban'>"+_t("Banned")+"</span>":"");
       const sub=p.ban?_t("Banned")+": "+esc(p.ban.reason||"")+" · "+esc(String(p.ban.source||""))+" · "+esc(String(p.ban.created||"").slice(0,16)):p.online?_t("Playing now"):p.known?_t("Has played on this world"):_t("Has not played on this world yet");
       return "<div class='acr"+(p.ban?" banned":"")+"'>"+(p.uuid?"<div class='fc' style='"+faceStyle(p.uuid,36)+"'></div>":"<div class='ini'>"+esc(p.name[0].toUpperCase())+"</div>")
         +"<div class='tx'><b>"+esc(p.name)+"</b><span class='tags'>"+tags+"</span><small>"+sub+"</small></div><div class='acts'>"
-        +(p.wl?A("wl_remove",p.name,"✓ "+_t("Whitelisted"),"on"):A("wl_add",p.name,"+ Whitelist",""))
+        +(p.wl?A("wl_remove",p.name,"✓ "+_t("Whitelisted"),"on"):A("wl_add",p.name,_t("+ Whitelist"),""))
         +(p.op?A("deop",p.name,"★ "+_t("Operator"),"gold on"):A("op",p.name,"☆ "+_t("Make OP"),"gold"))
         +(p.online?A("kick",p.name,_t("Kick"),"red"):"")
         +(p.ban?A("pardon",p.name,_t("Unban"),""):A("ban",p.name,_t("Ban"),"red"))+"</div></div>"}).join("")||"<div class='card' style='color:var(--mute)'>"+_t("No players.")+"</div>";
@@ -1352,7 +1352,7 @@ const RCAT={server:["Server","#3fb950",'<path d="M12 3v8M6.3 7.3a8 8 0 1 0 11.4 
 const RGV={items:[],total:0,counts:{},cat:"",user:"",q:"",loaded:false,mc:{},
   async load(more){const p=new URLSearchParams({limit:100,offset:more?this.items.length:0});if(this.cat)p.set("cat",this.cat);if(this.user)p.set("user",this.user);if(this.q)p.set("q",this.q);
     const req=this.req=(this.req||0)+1;   // only the answer to the latest request counts (search while typing)
-    try{const r=await fetch("/api/audit?"+p);if(!r.ok)return;const j=await r.json();if(req!=this.req)return;
+    try{const r=await GET("/api/audit?"+p);if(!r)return;const j=await r.json();if(req!=this.req)return;
       const key=x=>x.i!=null?"i"+x.i:x.t+x.raw,seen=new Set(this.items.map(key));this.items=more?this.items.concat(j.entries.filter(x=>!seen.has(key(x)))):j.entries;this.total=j.total;this.counts=j.counts;this.mc=j.mc||{};
       if(!this.loaded){$("#rg-user").innerHTML="<option value=''>"+_t("All")+"</option>"+j.users.map(u=>"<option>"+esc(u)+"</option>").join("")}this.loaded=true;this.render()}catch(e){}},
   matches(e,ignoreCat){return (ignoreCat||!this.cat||e.cat==this.cat)&&(!this.user||e.user==this.user)&&(!this.q||e.raw.toLowerCase().includes(this.q.toLowerCase()))},
@@ -1378,11 +1378,11 @@ $("#rg-more").onclick=()=>RGV.load(true);
 $("#pw-save").onclick=async()=>{const a=$("#pw-new").value;if(a!=$("#pw-new2").value)return toast(_t("The new passwords do not match."),"bad");
   const j=await api("/api/account/password",{current:$("#pw-cur").value,new:a});toast(j.message,j.ok?"good":"bad");if(j.ok)["#pw-cur","#pw-new","#pw-new2"].forEach(x=>$(x).value="")};
 const ACC={users:[],editing:null,
-  async load(){if(!BOOT.admin)return;try{const r=await fetch("/api/users");if(!r.ok)return;this.users=(await r.json()).users;this.render()}catch(e){}},
+  async load(){if(!BOOT.admin)return;try{const r=await GET("/api/users");if(!r)return;this.users=(await r.json()).users;this.render()}catch(e){}},
   render(){$("#us-list").innerHTML=this.users.map(u=>{const p=u.mc&&(P.roster||[]).find(x=>x.name.toLowerCase()==u.mc.toLowerCase());
     return "<div class='acr'>"+(p?"<div class='fc' style='"+faceStyle(p.uuid,36)+"'></div>":"<div class='ini'>"+esc(u.name[0].toUpperCase())+"</div>")
       +"<div class='tx'><b>"+esc(u.name)+"</b><span class='tags'>"+(u.admin?"<span class='tg opx'>Admin</span>":"<span class='tg wl'>"+_t("Player")+"</span>")+(u.me?"<span class='tg on'>"+_t("you")+"</span>":"")+"</span>"
-      +"<small>"+(u.mc?"Minecraft: "+esc(u.mc):_t("no Minecraft name"))+"</small></div><div class='acts'><button class='sb' data-a='edit' data-n='"+esc(u.name)+"'>"+_t("Edit")+"</button>"
+      +"<small>"+(u.mc?_t("Minecraft")+": "+esc(u.mc):_t("no Minecraft name"))+"</small></div><div class='acts'><button class='sb' data-a='edit' data-n='"+esc(u.name)+"'>"+_t("Edit")+"</button>"
       +(u.me?"":"<button class='sb red' data-a='del' data-n='"+esc(u.name)+"'>"+_t("Delete")+"</button>")+"</div></div>"}).join("")},
   edit(n){const u=this.users.find(x=>x.name==n);if(!u)return;this.editing=n;$("#us-title").textContent=_t("Edit %s",n);$("#us-name").value=n;$("#us-name").disabled=true;
     $("#us-pw").value="";$("#us-pw").placeholder=_t("empty = unchanged");$("#us-mc").value=u.mc||"";$("#us-admin").checked=u.admin;$("#us-cancel").hidden=false;$("#us-pw").focus()},
@@ -1399,7 +1399,7 @@ $("#version").innerHTML="ByzzCraft "+esc(BOOT.version)+" · "+(BOOT.latest?"<b>"
 
 /* ---------------- health checks (dashboard) and technical log (activity log) ---------------- */
 const HL={
-  async load(){if(!BOOT.admin)return;try{const r=await fetch("/api/health");if(!r.ok)return;const c=(await r.json()).checks;$("#health").hidden=!c.length;
+  async load(){if(!BOOT.admin)return;try{const r=await GET("/api/health");if(!r)return;const c=(await r.json()).checks;$("#health").hidden=!c.length;
     $("#health-list").innerHTML=c.map(x=>"<div class='hc'><span>"+esc(x.text)+"</span>"+(x.fix?"<button class='btn' data-fix='"+esc(x.id)+"'>"+esc(HL.label(x.id))+"</button>":"")
       +(x.cmd?"<code>"+esc(x.cmd)+"</code>":"")+"</div>").join("")}catch(e){}},
   label(id){return {java:_t("Download Java"),eula:_t("I accept the EULA"),rcon:_t("Turn on RCON"),script:_t("Copy the start script"),assets:_t("Download")}[id]||_t("Fix")},
@@ -1409,7 +1409,7 @@ $("#health-list").onclick=e=>{const b=e.target.closest("[data-fix]");if(b&&!b.di
 setInterval(()=>{if(CUR=="dash")HL.load()},30000);
 $("#rg-mode").onclick=async e=>{const b=e.target.closest("button");if(!b)return;$$("#rg-mode button").forEach(x=>x.classList.toggle("on",x==b));const m=b.dataset.m;
   ["#rg-tools","#rg-cats","#rg-feed"].forEach(x=>$(x).hidden=!!m);$("#rg-more").hidden=!!m||RGV.items.length>=RGV.total;$("#rg-sys").hidden=!m;
-  if(!m)return;const r=await fetch("/api/syslog?file="+m);if(!r.ok)return;const box=$("#rg-sys"),ls=(await r.json()).lines;
+  if(!m)return;const r=await GET("/api/syslog?file="+m);if(!r)return;const box=$("#rg-sys"),ls=(await r.json()).lines;
   box.innerHTML=ls.length?ls.map(l=>"<div class='l"+(/ ERROR | WARNING |Exception|Error:/.test(l)?" err":"")+"'><span class=m>"+esc(l)+"</span></div>").join(""):esc(_t("Empty."));box.scrollTop=box.scrollHeight};
 
 connect();loadRoster();   /* health: loaded by the "init" event of connect() */

@@ -23,7 +23,7 @@ for t in tests/test_*.py; do python3 "$t"; done
 
 Every test file prints `PASS n FAIL m` and exits non-zero on failure. `tests/test_http.py` starts the real panel
 on a free port with a fake server jar: no network, no Minecraft. GitHub Actions runs everything on Ubuntu and
-Windows with Python 3.10, 3.13 and 3.14.
+Windows with Python 3.10, 3.12 and 3.14.
 
 For a change in how the server starts, stops or is backed up, also try it with a real server (vanilla and, if it
 matters, Paper or Fabric) and say in the pull request what you tried.

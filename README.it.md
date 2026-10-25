@@ -261,6 +261,11 @@ Il pannello parla solo con questi servizi, e solo per scaricare; non invia dati 
 | Adoptium (`api.adoptium.net`, files on GitHub) | manca Java | download di Java |
 | GitHub (`api.github.com`) | una volta al giorno | c'è una release nuova? (`update_check: false` lo spegne) |
 
+## Traduzioni
+
+I testi nel codice sono in inglese. `i18n/it.json` li associa all'italiano; una nuova lingua è un nuovo
+`i18n/<codice>.json` con le stesse chiavi (le voci mancanti ricadono sull'inglese).
+
 ## Contribuire
 
 I test girano con `for t in tests/test_*.py; do python3 "$t"; done` e su GitHub Actions (Ubuntu e Windows).

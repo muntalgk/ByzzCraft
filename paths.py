@@ -22,8 +22,16 @@ def write_json(path, data, mode=0o644, **kw):
     """Whole or not at all: a crash halfway leaves the old file. kw goes to json.dump."""
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     tmp = path + ".tmp"
-    with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode), "w", encoding="utf-8") as f:
-        json.dump(data, f, **kw)
+    try:
+        with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode), "w", encoding="utf-8") as f:
+            os.chmod(tmp, mode)   # open() ignores mode when an old .tmp already exists
+            json.dump(data, f, **kw)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
     for i in range(5):
         try:
             return os.replace(tmp, path)

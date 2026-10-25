@@ -106,6 +106,27 @@ def run():
     d = b.disk(); check("disk", d["free"] > 0 and d["total"] >= d["free"])
     check("status base", b.status()["busy"] is None and b.status()["schedule"]["every_minutes"] == 120)
 
+    # ---------- old world size counts _nether, a failed save keeps the old schedule, the save-on warning survives other operations
+    r2, s2, st2 = fresh()
+    write(os.path.join(s2, "mondi-vecchi", "w", "a.bin"), b"123")
+    write(os.path.join(s2, "mondi-vecchi", "w_nether", "b.bin"), b"4567")
+    b2 = mk(s2, st2)
+    check("old world size with _nether", [e["size"] for e in b2.list()] == [7], b2.list())
+    before = b2.status()["schedule"]
+    b2._save_state = lambda: (_ for _ in ()).throw(OSError("disk full"))
+    raises("set_schedule save fails", OSError, b2.set_schedule, {"every_hours": 7})
+    check("set_schedule: old schedule kept", b2.status()["schedule"] == before, b2.status()["schedule"])
+    del b2._save_state
+    r = Rcon(); r.fail_on = "save-on"
+    b2.create("manual", True, r)
+    check("save-on warning set", (b2.status()["last_error"] or "").startswith("WARNING"), b2.status()["last_error"])
+    b2._begin("delete", "x"); b2._end()
+    check("warning survives another operation", (b2.status()["last_error"] or "").startswith("WARNING"))
+    time.sleep(1.1)
+    b2.create("manual", False)
+    check("good backup clears the warning", b2.status()["last_error"] is None, b2.status()["last_error"])
+    shutil.rmtree(r2, ignore_errors=True)
+
     # ---------- malicious ids
     for bad in ["../x", "C:\\x", "backups/../world", "backups/..", "/etc/passwd", "backups\\x.zip",
                 "backups/nonesiste.zip", "backups/a/b.zip", "", None, "world"]:

@@ -32,6 +32,11 @@ try:
     d = deaths(tl)
     check("lang.json added: one death for Steve", len(d) == 1 and d[0].get("player") == "Steve", d)
 
+    # a session with no stop line: open while the server runs, closed at the last event once it is off (crash, kill)
+    check("server on: session still open", tl.sessions()[0]["end"] is None, tl.sessions()[0])
+    ss = tl.sessions(running=False)
+    check("server off: session closed at the last event", ss[0]["end"] is not None, ss[0])
+
     # panel.log is read incrementally: appended lines once, a rewritten file from the start
     plog = os.path.join(root, "panel.log")
     panel = lambda: [e["text"] for e in tl._all if e["type"] == "panel"]

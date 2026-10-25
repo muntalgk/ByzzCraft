@@ -455,7 +455,10 @@ class Rcon:
                         return ""
                     self.sock.settimeout(timeout)
                     try:
-                        _, body = self._recv()
+                        while True:
+                            rid, body = self._recv()
+                            if rid == self.rid:   # leftover pieces of a long answer carry an older id
+                                break
                     finally:
                         if self.sock:
                             self.sock.settimeout(5)
@@ -585,6 +588,8 @@ class ServerControl:
                     self.state = "stopping" if pid_alive(self.last_pid) else "off"
             if self.proc is not None:
                 self.proc.poll()   # reaps the finished script: no zombie processes
+            if self.state == "off" and not pid_alive(self.last_pid):
+                self.last_pid = None   # Windows reuses PIDs: a stale one would look "still shutting down" forever
             changed = prev != self.state
             crashed = changed and self.state == "off" and prev in ("on", "stopping") \
                       and (not self.stop_requested or bool(crash_reason(self.on_since)))   # a crash also logs "Stopping server"
@@ -837,6 +842,7 @@ def sampler():
     procs = ProcSampler()
     last_tick = 0; mspt = p95 = None
     last_sys = system_times()
+    auto_stop_retry = 0
     while True:
         t0 = time.time()
         try:
@@ -874,8 +880,10 @@ def sampler():
             HUB.publish("metrics", point)
             HUB.publish("status", SRV.snapshot())
             mins = CFG["auto_stop_minutes"]
-            if mins and info is not None and SRV.state == "on" and SRV.empty_since and time.time() - SRV.empty_since >= mins * 60:
-                SRV.stop("panel", "empty for %d minutes" % mins)
+            if mins and info is not None and SRV.state == "on" and SRV.empty_since and time.time() - SRV.empty_since >= mins * 60 \
+                    and time.time() >= auto_stop_retry:
+                if not SRV.stop("panel", "empty for %d minutes" % mins)[0]:
+                    auto_stop_retry = time.time() + 60   # RCON down: do not retry (and log) every 2 s
         except Exception as e:  # noqa: BLE001
             loop_error("sampling", e)
         time.sleep(max(0.2, SAMPLE_SECONDS - (time.time() - t0)))
@@ -1104,7 +1112,7 @@ UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 
 def level_name_ok(v):
     """level-name goes into a path: no separators, no .., not absolute, not empty."""
-    return bool(v.strip()) and not re.search(r"[/\\]|\.\.|^[A-Za-z]:", v) and not os.path.isabs(v)
+    return bool(v.strip()) and v != "." and not v.endswith((" ", ".")) and not re.search(r"[/\\]|\.\.|^[A-Za-z]:", v) and not os.path.isabs(v)
 
 
 def world_dir():
@@ -1260,9 +1268,9 @@ def client_id(handler):
     ip = handler.client_address[0]
     if not from_local_proxy(handler):
         return ip   # proxy headers count only from a local proxy (tailscale serve, nginx): otherwise they could be forged
-    # the last X-Forwarded-For hop is the one our proxy appended; Tailscale-User-Login can be sent by the client through nginx
+    # the last X-Forwarded-For hop is the one our proxy appended; no Tailscale-User-Login fallback: a client can forge it, dodging the login lock
     xff = (handler.headers.get("X-Forwarded-For") or "").split(",")[-1].strip()
-    return xff or handler.headers.get("Tailscale-User-Login") or ip
+    return xff or ip
 
 
 LOOPBACK = ("127.0.0.1", "::1", "::ffff:127.0.0.1")
@@ -1474,7 +1482,7 @@ def languages():
 
 
 # allowlist: -XX:OnError, -javaagent, @argfile, -cp... would run commands or code on the host
-JAVA_ARG_RE = re.compile(r"^(?:-XX:(?![+-]?(?:OnError|OnOutOfMemoryError|Flags|VMOptionsFile)\b)\S+|-D[\w.-]+=\S*|-Xss\S+|-Xmn\S+|-Xlog:\S*"
+JAVA_ARG_RE = re.compile(r"^(?:-XX:(?![+-]?(?:OnError|OnOutOfMemoryError|Flags|VMOptionsFile)\b)\S+|-D(?!com\.sun\.management|log4j|java\.security)[\w.-]+=\S*|-Xss\S+|-Xmn\S+|-Xlog:\S*"
                          r"|--enable-native-access=\S+|--add-(?:opens|exports|modules)=\S+)$")
 JAVA_ARGS_MSG = "Java flags: one line, only -XX:, -D, -Xss, -Xmn, -Xlog:, --add-opens, --add-exports, --add-modules and --enable-native-access (RAM has its own field)."
 
@@ -1805,7 +1813,15 @@ class Handler(BaseHTTPRequestHandler):
                          "connect-src 'self'; img-src 'self' data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'")
 
     def send_file(self, path, name):
-        size = os.path.getsize(path)
+        try:
+            f = open(path, "rb")   # before the headers: a zip pruned meanwhile is a clean 404
+        except OSError:
+            return self.json(404, {"error": "not found"})
+        with f:
+            self.send_file_open(f, name)
+
+    def send_file_open(self, f, name):
+        size = os.fstat(f.fileno()).st_size
         self.send_response(200)
         self.send_header("Content-Type", "application/zip")
         self.send_header("Content-Length", str(size))
@@ -1814,8 +1830,7 @@ class Handler(BaseHTTPRequestHandler):
         self.security_headers()
         self.end_headers()
         try:
-            with open(path, "rb") as f:
-                shutil.copyfileobj(f, self.wfile, 1 << 20)
+            shutil.copyfileobj(f, self.wfile, 1 << 20)
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             pass
 
@@ -1929,6 +1944,8 @@ class Handler(BaseHTTPRequestHandler):
             if m.group(1) not in known_players():   # else any logged-in user could make us query Mojang for any uuid
                 return self.send(404, b"", "image/png")
             png, slim = PL.skin(m.group(1))
+            if not png:   # no skin from Mojang and no default one in the assets
+                return self.send(404, b"", "image/png")
             return self.send(200, png, "image/png", {"Cache-Control": "private, max-age=3600", "X-Skin-Slim": "1" if slim else "0"})
         m = re.match(r"^/icon/([a-z0-9_]{1,64})\.png$", path)
         if m:
@@ -1988,7 +2005,7 @@ class Handler(BaseHTTPRequestHandler):
                 evs = [e for e in evs if e["t"] <= before]
             return self.json(200, {"events": evs[:qint(q, "limit", 200, 1, 500)]})
         if path == "/api/sessions":
-            return self.json(200, {"sessions": TLINE.sessions(limit=qint(q, "limit", 30, 1, 200))})
+            return self.json(200, {"sessions": TLINE.sessions(limit=qint(q, "limit", 30, 1, 200), running=SRV.state != "off")})
         if path in ("/api/backups", "/api/backups/download", "/api/access", "/api/audit", "/api/users", "/api/health", "/api/syslog") and not s["admin"]:
             return self.json(403, {"error": "admins only"})
         if path == "/api/access":
@@ -2052,7 +2069,8 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(("retry: 3000\nevent: init\ndata: %s\n\n" % json.dumps(init, separators=(",", ":"))).encode())
             self.wfile.flush()
             # if the user is deleted or changes role it closes: the browser reconnects with the new permissions
-            while s["exp"] > time.time() and tok in SESSIONS and (u := load_users().get(s["user"])) and bool(u.get("admin")) == admin0:
+            while s["exp"] > time.time() and tok in SESSIONS and (u := load_users().get(s["user"])) and bool(u.get("admin")) == admin0 \
+                    and pw_version(u) == s["pv"]:
                 try:
                     msg = q.get(timeout=15)
                 except queue.Empty:
@@ -2222,7 +2240,7 @@ class Handler(BaseHTTPRequestHandler):
             clean = {}
             for k, v in changes.items():
                 v = str(v)
-                if "\n" in v or "\r" in v or len(v) > 512:
+                if re.search("[\x00-\x1f\x7f\x85  ]", v) or len(v) > 512:   # splitlines() would split on these and inject locked keys
                     return self.json(200, {"ok": False, "message": t("Invalid value for %s") % k})
                 if k == "level-name" and not level_name_ok(v):
                     return self.json(200, {"ok": False, "message": t("Invalid value for %s") % k})
@@ -2417,7 +2435,7 @@ def cli(args):
         return
     if cmd in ("adduser", "passwd"):
         name = args[1].strip().lower()
-        if not USER_RE.match(name) or name in RESERVED:
+        if not USER_RE.match(name) or name in RESERVED or name.startswith("-"):   # "adduser --admin" is a typo, not a user
             sys.exit("invalid user name: lowercase letters, digits, . _ -")
         if cmd == "passwd" and name not in users:
             sys.exit("no such user '%s'" % name)

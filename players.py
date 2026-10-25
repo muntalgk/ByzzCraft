@@ -1,7 +1,6 @@
 """Player data for the panel: NBT from the files, SNBT from RCON, statistics, icons and skins."""
 import base64, gzip, json, os, re, shutil, struct, threading, time, urllib.request
 
-HERE = os.path.dirname(os.path.abspath(__file__))
 from paths import ASSETS, CACHE  # noqa: E402
 UA = "byzzcraft (+https://github.com/muntalgk/byzzcraft)"
 
@@ -400,8 +399,11 @@ def skin(uuid):
                 else:
                     slim = int(uuid.replace("-", "")[-1], 16) % 2 == 1
                     default = os.path.join(ASSETS, "skin", "slim_alex.png" if slim else "wide_steve.png")
-                    shutil.copyfile(default, png)
-                    json.dump({"slim": slim}, open(meta, "w"))
+                    try:
+                        shutil.copyfile(default, png)
+                        json.dump({"slim": slim}, open(meta, "w"))
+                    except OSError:   # assets from an old version have no skin/ folder: "no skin"
+                        return b"", False
         slim = False
         try:
             slim = json.load(open(meta)).get("slim", False)

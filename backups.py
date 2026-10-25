@@ -296,7 +296,8 @@ class Backups:
             raise Busy(tr("Another operation is in progress"))
         with self._mu:
             self._busy = {"op": op, "label": label, "progress": 0.0, "started": time.time()}
-            self._last_error = None
+            if not (self._last_error or "").startswith(tr("WARNING")):   # only a good backup clears it
+                self._last_error = None
         self._notify()
 
     def _end(self):
@@ -330,7 +331,7 @@ class Backups:
         with self._mu:
             if key in self._size_cache:
                 return self._size_cache[key]
-        total = self._tree_bytes(path)
+        total = sum(self._tree_bytes(p) for p in [path] + [p for _s, p in _extras(path)])   # with _nether/_the_end
         with self._mu:
             self._size_cache[key] = total
         return total
@@ -583,8 +584,12 @@ class Backups:
     def set_schedule(self, cfg):
         with self._mu:
             new = self._normalize_schedule(cfg, self._state["schedule"])
-            self._state["schedule"] = new
-            self._save_state()
+            old, self._state["schedule"] = self._state["schedule"], new
+            try:
+                self._save_state()
+            except BaseException:
+                self._state["schedule"] = old   # not saved: the old schedule stays active
+                raise
             res = json.loads(json.dumps(new))
         self._notify()
         return res
@@ -597,9 +602,8 @@ class Backups:
         if server_on and rcon is None:
             raise ValueError(tr("RCON is needed to back up while the server is on"))
         self._begin("backup", {"auto": tr("Scheduled backup"), "world": tr("Backup before the start")}.get(prefix, tr("Manual backup")))
-        with self._mu:
-            self._last_error = None   # the old warning does not apply to this attempt
         tmpdir = part = None
+        warned = False
         try:
             os.makedirs(self.backups_dir, exist_ok=True)
             self._clean_stale()
@@ -636,6 +640,7 @@ class Backups:
                             err = ex
                             time.sleep(2)
                     if err is not None:   # also when save-off's answer was lost but the command went through
+                        warned = True
                         self._set_error(tr("WARNING: save-on failed (%s): type save-on in the Console") % err)
                 srcs = [(arc, os.path.join(tmpdir, arc)) for arc, _p in srcs]
                 base, span = 0.3, 0.7
@@ -644,6 +649,9 @@ class Backups:
             self._zip_world(srcs, part, base, span)
             os.replace(part, final)
             part = None
+            if not warned:
+                with self._mu:
+                    self._last_error = None   # a good backup retires an older save-on warning
             if tmpdir:
                 _rmtree(tmpdir)
                 tmpdir = None
@@ -780,7 +788,7 @@ class Backups:
             if os.name == "nt":
                 try:
                     _to_recycle_bin(p, e.get("size") if p == paths[0] else None)
-                except _BinRefused:
+                except OSError:   # includes _BinRefused and an unreadable bin limit
                     # automatic backups must free space even when the bin cannot take them
                     if not (auto and e["folder"] == "backups"):
                         raise

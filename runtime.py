@@ -13,7 +13,6 @@ import tarfile
 import urllib.request
 import zipfile
 
-HERE = os.path.dirname(os.path.abspath(__file__))
 from paths import RUNTIME  # noqa: E402
 API = "https://api.adoptium.net/v3/assets/latest/%d/hotspot?os=%s&architecture=%s&image_type=jre&vendor=eclipse"
 EXE = "java.exe" if os.name == "nt" else "java"
