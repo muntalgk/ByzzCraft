@@ -542,6 +542,7 @@ class ServerControl:
         self.props_mtime_on = None  # server.properties mtime when the server was found on
         self.start_error = None     # why the last start failed (shown on the dashboard)
         self.preparing = False      # "starting", but still in the backup before the start
+        self.ram = None             # -Xmx this panel started the server with (None: a start script or a server found running)
         self.stop_requested = False # wanted stop (panel, /stop, "Stopping the server" in the log): not a crash
         self.on_since = 0
         self.crashes = []           # when it crashed in the last 10 minutes
@@ -651,10 +652,11 @@ class ServerControl:
             env = dict(os.environ, NOPAUSE="1", PYTHON=sys.executable, SERVER_JAR=jar or "server.jar")
             if java:
                 env["JAVA"] = java   # the example scripts use it; a custom script may ignore it
+            self.ram = None if script else CFG.get("ram") or auto_ram()
             if script:
                 cmd = ["cmd.exe", "/c", script] if os.name == "nt" else ([script] if has_shebang(script) else ["sh", script])
             else:
-                cmd = launch_cmd(jar, java)
+                cmd = launch_cmd(jar, java, self.ram)
                 os.makedirs(os.path.join(CFG["server_dir"], "logs"), exist_ok=True)
             os.makedirs(LOG_DIR, exist_ok=True)
             out = open(START_LOG, "wb")   # only the last start: that is what tells why it does not start
@@ -777,9 +779,8 @@ def ram_mb(ram):
     return int(m.group(1)) if m.group(1) else int(m.group(2)) * 1024
 
 
-def launch_cmd(jar, java):
+def launch_cmd(jar, java, ram):
     """Java command line when there is no start script. gc.log feeds the heap chart."""
-    ram = CFG.get("ram") or auto_ram()
     return ([java or "java", "-Xms" + ram, "-Xmx" + ram] + AIKAR + ["-Xlog:gc:file=logs/gc.log:time,uptime:filecount=3,filesize=10M"]
             + shlex.split(CFG.get("java_args") or "", posix=os.name != "nt") + ["-jar", jar, "nogui"])
 START_HINTS = (   # (text in the start output, explanation for the user)
@@ -1467,7 +1468,7 @@ def save_config(changes):
 def panel_settings():
     need = RT.required(CFG["server_dir"], server_jar())
     java = RT.java_for(need)[0]
-    return {**{k: CFG.get(k, DEFAULTS.get(k)) for k in PANEL_KEYS}, "ram_auto": auto_ram(), "ram_total": round(system_memory()[1]),
+    return {**{k: CFG.get(k, DEFAULTS.get(k)) for k in PANEL_KEYS}, "ram_auto": SRV.ram if SRV.state != "off" and SRV.ram else auto_ram(),   # while on: what it really has, free RAM no longer counts it "ram_total": round(system_memory()[1]),
             "jar": server_jar(), "java": java, "java_need": need, "start_script": CFG.get("start_script") or "",
             "java_bundled": bool(java and java.startswith(RT.RUNTIME)), "langs": [[c, LANG_NAMES.get(c, c)] for c in languages()]}
 

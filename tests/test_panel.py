@@ -150,6 +150,12 @@ try:
     except ValueError:
         good = False
     check("java_args from the config file kept", good)
+    # automatic RAM: while on, the value the server got, not an estimate from the RAM still free
+    panel.SRV.state, panel.SRV.ram = "on", "4096M"
+    check("ram_auto while on", panel.panel_settings()["ram_auto"] == "4096M", panel.panel_settings()["ram_auto"])
+    panel.SRV.state = "off"
+    check("ram_auto while off", panel.panel_settings()["ram_auto"] == panel.auto_ram())
+    panel.SRV.ram = None
     panel.CFG["java_args"] = ""
     check("STOPPING_RE vanilla/Paper/Fabric, not chat", all(panel.STOPPING_RE.match(l) for l in (
         "[12:00:00] [Server thread/INFO]: Stopping server", "[12:00:00 INFO]: Stopping the server",
