@@ -207,8 +207,9 @@ main{padding:22px 28px 60px;min-width:0}
 .slot .glint{position:absolute;inset:5px;pointer-events:none;-webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
   background:linear-gradient(115deg,transparent 30%,#c48cff99 45%,#8a5cff66 55%,transparent 70%);background-size:300% 300%;animation:glint 3s linear infinite;mix-blend-mode:screen}
 /* a potion's liquid: the grey overlay multiplied by its color, as in the game */
-.slot .liq{position:absolute;inset:5px;pointer-events:none;image-rendering:pixelated;background:url('/icon/potion_overlay.png?v=5') center/contain no-repeat;background-blend-mode:multiply;
-  -webkit-mask:url('/icon/potion_overlay.png?v=5') center/contain no-repeat;mask:url('/icon/potion_overlay.png?v=5') center/contain no-repeat}
+/* same box as the icon (also on the phone), so the liquid lines up with the bottle */
+.slot .liq{position:absolute;inset:0;margin:auto;width:32px;height:32px;pointer-events:none;image-rendering:pixelated;background:url('/icon/potion_overlay.png?v=5') center/contain no-repeat;background-blend-mode:multiply;
+  -webkit-mask-image:url('/icon/potion_overlay.png?v=5');mask-image:url('/icon/potion_overlay.png?v=5');-webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
 @keyframes glint{from{background-position:120% 0}to{background-position:-120% 0}}
 .slot .fb{font:700 10px var(--mono);color:var(--text2);text-align:center;line-height:1.1;padding:2px;pointer-events:none}
 .mctip{position:fixed;z-index:20;pointer-events:none;background:#100010f2;border:2px solid #25015b;outline:1px solid #100010;border-radius:4px;padding:6px 9px;font-size:13px;max-width:280px;box-shadow:0 8px 24px #000a}
@@ -430,7 +431,7 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
   .pl-wrap{grid-template-columns:1fr}.pl-list{flex-direction:row;overflow-x:auto}.pl-item{width:auto;flex:none}
   .pl-top{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.tops{grid-template-columns:1fr}}
 .pl-wrap>*{min-width:0}
-@media (max-width:520px){.inv{grid-template-columns:repeat(9,30px);gap:3px}.slot{width:30px;height:30px}.slot img{width:24px;height:24px}
+@media (max-width:520px){.inv{grid-template-columns:repeat(9,30px);gap:3px}.slot{width:30px;height:30px}.slot img,.slot .liq{width:24px;height:24px}
   .slot .cnt{font-size:11px;right:2px}.slot .glint{inset:3px}.inv-wrap{gap:10px}.pl-head .pos{width:100%}.vrow .lbl{width:auto;min-width:70px}
   .hud img,.hud span{width:14px!important;height:14px!important}.hud span img{width:14px;height:14px}}
 @media (max-width:760px){
