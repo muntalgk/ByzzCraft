@@ -31,6 +31,10 @@ try:
     n = len(calls)
     check("Mojang down: second request served from the cache", P.skin(online) == first and len(calls) == n, (n, len(calls)))
     check("missing icon not cached", P.icon_path("nope_item") is None and "nope_item" not in P._ICON_CACHE)
+    try:
+        P.snbt("[:]"); check("snbt: empty token raises", False)
+    except ValueError:
+        check("snbt: empty token raises", True)
 finally:
     shutil.rmtree(root, ignore_errors=True)
 print("PASS %d  FAIL %d" % (OK, FAIL))

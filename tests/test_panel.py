@@ -99,6 +99,86 @@ try:
     check("has_shebang missing file", not panel.has_shebang(j(srv_dir, "nope.sh")))
 
     # spaces in the install path (systemd unit)
+    # setup without the code: loopback or the machine's own LAN address, never through a proxy or from another PC
+    def handler(peer, me, headers=None):
+        h = type("H", (), {})()
+        h.client_address, h.headers = (peer, 50000), headers or {}
+        h.connection = type("S", (), {"getsockname": lambda self: (me, 8765)})()
+        return h
+    check("local: loopback", panel.is_local(handler("127.0.0.1", "127.0.0.1")))
+    check("local: own LAN address", panel.is_local(handler("192.168.1.20", "192.168.1.20")))
+    check("not local: another PC", not panel.is_local(handler("192.168.1.30", "192.168.1.20")))
+    check("not local: proxy", not panel.is_local(handler("127.0.0.1", "127.0.0.1", {"X-Forwarded-For": "1.2.3.4"})))
+
+    # rate-limit key: the client cannot pick it through a local proxy
+    check("client_id: last X-Forwarded-For hop", panel.client_id(handler("127.0.0.1", "127.0.0.1", {"X-Forwarded-For": "9.9.9.9, 1.2.3.4", "Tailscale-User-Login": "a"})) == "1.2.3.4")
+    check("client_id: tailscale login", panel.client_id(handler("127.0.0.1", "127.0.0.1", {"Tailscale-User-Login": "a@b"})) == "a@b")
+    check("client_id: headers ignored from another PC", panel.client_id(handler("192.168.1.30", "192.168.1.20", {"X-Forwarded-For": "1.1.1.1"})) == "192.168.1.30")
+    # setup without the code: Host must be an IP or localhost, Origin the same host
+    for host, want in (("127.0.0.1:8765", True), ("localhost:8765", True), ("[::1]:8765", True), ("192.168.1.20", True), ("evil.example.com:8765", False), ("", False)):
+        check("host_is_literal %r" % host, panel.host_is_literal(handler("127.0.0.1", "127.0.0.1", {"Host": host})) == want)
+    check("setup: rebinding host needs the code", not panel.setup_allowed(handler("127.0.0.1", "127.0.0.1", {"Host": "evil.example.com"}), ""))
+    check("setup: local IP host ok", panel.setup_allowed(handler("127.0.0.1", "127.0.0.1", {"Host": "127.0.0.1:8765"}), ""))
+    check("same_origin: none", panel.same_origin(handler("127.0.0.1", "127.0.0.1", {"Host": "localhost:1"})))
+    check("same_origin: same", panel.same_origin(handler("127.0.0.1", "127.0.0.1", {"Host": "localhost:1", "Origin": "http://localhost:1"})))
+    check("same_origin: cross-site", not panel.same_origin(handler("127.0.0.1", "127.0.0.1", {"Host": "localhost:1", "Origin": "http://evil.com"})))
+
+    # "Stopping server" only as a system line, never in chat
+    for line, want in (("[12:00:00] [Server thread/INFO]: Stopping server", True), ("[12:00:00 INFO]: Stopping the server", True),
+                       ("[12:00:00] [Server thread/INFO]: <bob> Stopping server", False), ("[12:00:00] [Server thread/INFO]: [Not Secure] <bob> Stopping the server", False)):
+        check("STOPPING_RE %r" % line, bool(panel.STOPPING_RE.match(line)) == want)
+
+    # java flags allowlist
+    save = lambda a: panel.save_panel_settings({"java_args": a, "lang": panel.CFG["lang"]}, "t")
+    for a in ("", "-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -Dfile.encoding=UTF-8 -Xss1M -Xlog:gc:file=gc.log --add-opens=java.base/java.lang=ALL-UNNAMED"):
+        try:
+            save(a); good = True
+        except ValueError:
+            good = False
+        check("java_args ok %r" % a[:30], good)
+    for a in ("-XX:OnError=calc", "-XX:+OnOutOfMemoryError=x", "-XX:Flags=f", "-XX:VMOptionsFile=f", "-javaagent:x.jar", "-agentlib:jdwp", "@args.txt", "-cp x", "-Xbootclasspath/a:x", "-jar x.jar", "-Xmx4G", "-XX:+UseG1GC"+chr(10)+"-cp x"):
+        try:
+            save(a); good = True
+        except ValueError:
+            good = False
+        check("java_args refused %r" % a, not good)
+    panel.CFG["java_args"] = "-server"   # written by hand in the config: other settings can still be saved
+    try:
+        save("-server"); good = True
+    except ValueError:
+        good = False
+    check("java_args from the config file kept", good)
+    panel.CFG["java_args"] = ""
+    check("STOPPING_RE vanilla/Paper/Fabric, not chat", all(panel.STOPPING_RE.match(l) for l in (
+        "[12:00:00] [Server thread/INFO]: Stopping server", "[12:00:00 INFO]: Stopping the server",
+        "[12:00:00] [Server thread/INFO] (Minecraft) Stopping server")) and not any(panel.STOPPING_RE.match(l) for l in (
+        "[12:00:00] [Server thread/INFO]: <bob> Stopping server", "[12:00:00] [Server thread/INFO]: System chat: Stopping the server")))
+
+    # level-name goes into a path
+    for v, want in (("world", True), ("my world", True), ("", False), ("../x", False), ("a/b", False), ("a"+chr(92)+"b", False), ("/abs", False), ("C:x", False)):
+        check("level_name_ok %r" % v, panel.level_name_ok(v) == want)
+
+    # session valid only while the password it was created with is the current one
+    panel.CFG["users_file"] = j(root, "data", "u.json")
+    us = {}; panel.set_password(us, "bob", "a-long-password"); v1 = panel.pw_version(us["bob"])
+    panel.set_password(us, "bob", "another-long-password")
+    check("pw_version changes with the password", panel.pw_version(us["bob"]) != v1)
+    panel.save_users(us)
+    check("users file exists", os.path.exists(panel.CFG["users_file"]))
+
+    NL = chr(10)
+    # server.properties not in UTF-8: read and rewritten as read
+    with open(props, "wb") as f:
+        f.write(("motd=caf"+chr(233)+NL+"level-name=world"+NL).encode("latin-1"))
+    check("server_props latin-1", panel.server_props().get("motd") == "caf"+chr(233), panel.server_props())
+    panel.write_props({"level-name": "w2"}, "t")
+    check("write_props rewrites as UTF-8", open(props, "rb").read() == ("motd=caf"+chr(233)+NL+"level-name=w2"+NL).encode("utf-8"))
+
+    # usercache: bad entries are skipped
+    with open(j(srv_dir, "usercache.json"), "w") as f:
+        json.dump([{"name": "x"}, {"uuid": "../../etc", "name": "y"}, {"uuid": "12345678-1234-1234-1234-123456789abc", "name": "ok"}], f)
+    check("known_players filters entries", panel.known_players() == {"12345678-1234-1234-1234-123456789abc": "ok"}, panel.known_players())
+
     if os.name != "nt":
         panel.HERE = j(root, "with space")
         buf = io.StringIO()

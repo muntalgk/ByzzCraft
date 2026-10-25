@@ -406,6 +406,37 @@ def run():
     b.restore("backups/vanilla.zip", False)
     check("paper: current nether untouched", open(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), "rb").read() == b"NETHER-NUOVO")
 
+    # restore is all or nothing: a failing extra swap brings the main world back too
+    write(os.path.join(s, "world", "level.dat"), b"CURRENT")
+    real_replace = os.replace
+    def bad_extra(a, c, *x, **k):
+        if str(a).endswith("restore-tmp_nether"):
+            raise OSError("simulated extra failure")
+        return real_replace(a, c, *x, **k)
+    os.replace = bad_extra
+    try:
+        raises("restore extra fails", OSError, b.restore, "backups/" + e["name"], False)
+    finally:
+        os.replace = real_replace
+    check("restore extra fails: main world back", open(os.path.join(s, "world", "level.dat"), "rb").read() == b"CURRENT")
+    check("restore extra fails: nether back", open(os.path.join(s, "world_nether", "DIM-1", "region", "r.0.0.mca"), "rb").read() == b"NETHER-NUOVO")
+
+    # file with mtime before 1980: the zip must not fail
+    root, s, st = fresh(); b = mk(s, st)
+    os.utime(os.path.join(s, "world", "locked.dat"), (0, 0))
+    check("backup with 1970 mtime", b.create("manual", False)["kind"] == "manual")
+
+    # automatic prune deletes for good, manual delete keeps the trash
+    mkzip(os.path.join(s, "backups", "auto_2026-10-19_15-00-00.zip"), ["world/level.dat"])
+    b._recycle(b._find("backups/auto_2026-10-19_15-00-00.zip"), auto=True)
+    check("auto prune: not in trash", not os.path.exists(os.path.join(s, "trash")) and
+          not os.path.exists(os.path.join(s, "backups", "auto_2026-10-19_15-00-00.zip")))
+
+    # one invalid schedule field does not reset the others
+    with open(st, "w", encoding="utf-8") as f:
+        json.dump({"schedule": {"every_minutes": 30, "window": "bad"}}, f)
+    check("schedule per field", mk(s, st).status()["schedule"]["every_minutes"] == 30)
+
     # ---------- state file from before 1.0: Italian kind names in the retention rules
     with open(st, "w", encoding="utf-8") as f:
         json.dump({"schedule": {"keep": {"avvio": 3, "programmato": 4, "manuale": 5}}}, f)

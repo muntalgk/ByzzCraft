@@ -257,10 +257,13 @@ class Backups:
         }
         if out["last_daily"] and len(out["last_daily"]) == 10:
             out["last_daily"] += " 23:59"   # before 1.x only the day was saved: that day counts as done
-        try:
-            out["schedule"] = self._normalize_schedule(st.get("schedule") or {}, out["schedule"])
-        except ValueError:
-            pass
+        sch = st.get("schedule")
+        if isinstance(sch, dict):
+            for k, v in sch.items():   # an invalid field falls back to its default, the others stay
+                try:
+                    out["schedule"] = self._normalize_schedule({k: v}, out["schedule"])
+                except ValueError:
+                    pass
         return out
 
     def _save_state(self):
@@ -642,7 +645,7 @@ class Backups:
                         except Exception as ex:  # noqa: BLE001
                             err = ex
                             time.sleep(2)
-                    if err is not None and save_off:
+                    if err is not None:   # also when save-off's answer was lost but the command went through
                         self._set_error(tr("WARNING: save-on failed (%s): type save-on in the Console") % err)
                 srcs = [(arc, os.path.join(tmpdir, arc)) for arc, _p in srcs]
                 base, span = 0.3, 0.7
@@ -723,7 +726,8 @@ class Backups:
         """srcs: [(name in the zip, folder)]: world, and for Paper world_nether and world_the_end."""
         total = sum(self._tree_bytes(p) for _a, p in srcs)
         done = 0
-        with zipfile.ZipFile(part, "w", zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True) as zf:
+        with zipfile.ZipFile(part, "w", zipfile.ZIP_DEFLATED, compresslevel=6, allowZip64=True,
+                             strict_timestamps=False) as zf:
             for arc, src in srcs:
                 done = self._zip_dir(zf, arc, src, done, total, base, span)
 
@@ -791,13 +795,18 @@ class Backups:
                     if not (auto and e["folder"] == "backups"):
                         raise
                     os.remove(p)
+            elif auto and e["folder"] == "backups":
+                os.remove(p)   # pruned zips would fill the trash for 7 days
             else:
                 _to_trash_dir(p, os.path.join(self.server_dir, "trash"))
         with self._mu:
             self._state["pinned"].discard(e["id"])
             self._state["note"].pop(e["id"], None)
             self._state["world"].pop(e["id"], None)
-            self._save_state()
+            try:
+                self._save_state()
+            except OSError:   # the file is already gone: do not report a failure
+                pass
 
     # ------------------------------------------------------------ retention
     def prune(self):
@@ -912,23 +921,31 @@ class Backups:
                 raise ValueError(tr("The backup does not contain level.dat"))
             os.makedirs(self.old_dir, exist_ok=True)
             old = None
-            if os.path.isdir(self.world_dir):
-                old = self._unique(os.path.join(
-                    self.old_dir, "world_%s_before-restore" % datetime.now().strftime(TS_FMT)))
-                os.replace(self.world_dir, old)
+            done = []   # (from, to) of every swap, undone in reverse if one fails: all or nothing
+
+            def move(a, b):
+                os.replace(a, b)
+                done.append((a, b))
             try:
-                os.replace(tmp, self.world_dir)
+                if os.path.isdir(self.world_dir):
+                    old = self._unique(os.path.join(
+                        self.old_dir, "world_%s_before-restore" % datetime.now().strftime(TS_FMT)))
+                    move(self.world_dir, old)
+                move(tmp, self.world_dir)
+                # Paper's Nether and End: only those the backup contains are replaced, the old ones go next to the old world
+                for sfx in EXTRA:
+                    if os.path.isdir(tmp + sfx):
+                        if os.path.isdir(self.world_dir + sfx):
+                            os.makedirs(self.old_dir, exist_ok=True)
+                            move(self.world_dir + sfx, (old or self._unique(os.path.join(self.old_dir, "world"))) + sfx)
+                        move(tmp + sfx, self.world_dir + sfx)
             except Exception:
-                if old:
-                    os.replace(old, self.world_dir)
+                for a, b in reversed(done):
+                    try:
+                        os.replace(b, a)
+                    except OSError:
+                        pass
                 raise
-            # Paper's Nether and End: only those the backup contains are replaced, the old ones go next to the old world
-            for sfx in EXTRA:
-                if os.path.isdir(tmp + sfx):
-                    if os.path.isdir(self.world_dir + sfx):
-                        os.makedirs(self.old_dir, exist_ok=True)
-                        os.replace(self.world_dir + sfx, (old or self._unique(os.path.join(self.old_dir, "world"))) + sfx)
-                    os.replace(tmp + sfx, self.world_dir + sfx)
             self._notify()
             return {"moved_to": os.path.basename(old) if old else ""}
         except Exception as ex:

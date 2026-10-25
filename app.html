@@ -329,7 +329,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .sched .keep{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.sched .keep small{display:block;font-size:11.5px;color:var(--mute);margin-bottom:3px}
 .sched .note{font-size:12px;color:var(--mute);margin-top:8px;line-height:1.45}
 .sched .rt{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);gap:6px 8px;align-items:center;font-size:12.5px;color:var(--text2)}.sched .rt small{font-size:11.5px;color:var(--mute)}
-.sched .chips-f{margin-top:6px}.sched .chips-f button.xc{padding:3px 6px 3px 10px}
+.sched .chips-f{margin-top:6px}
 /* weekdays: one segmented row of seven, never wrapping */
 .sched .chips-f.dy{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:0;border:1px solid var(--line2);border-radius:10px;overflow:hidden;margin-top:8px}
 .sched .chips-f.dy button{border:0;border-left:1px solid var(--line2);border-radius:0;padding:8px 0;font-size:12px;font-weight:600;text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--mute)}
@@ -815,14 +815,15 @@ function renderConsole(){const f=$("#con-filter").value.toLowerCase();const item
 function renderMini(){const box=$("#con-mini");box.innerHTML=S.console.slice(-40).map(lineHTML).join("");box.scrollTop=box.scrollHeight}
 function appendConsole(items){S.console.push(...items);if(S.console.length>1500)S.console.splice(0,S.console.length-1500);
   const f=$("#con-filter").value.toLowerCase();const box=$("#con-full");
-  if(!$("#v-console").hidden){const ok=items.filter(e=>!f||e.text.toLowerCase().includes(f));box.insertAdjacentHTML("beforeend",ok.map(lineHTML).join(""));if($("#con-follow").checked)box.scrollTop=box.scrollHeight}
+  if(!$("#v-console").hidden){const ok=items.filter(e=>!f||e.text.toLowerCase().includes(f));box.insertAdjacentHTML("beforeend",ok.map(lineHTML).join(""));while(box.childElementCount>1500)box.firstElementChild.remove();if($("#con-follow").checked)box.scrollTop=box.scrollHeight}
   renderMini()}
-/* audit */
+/* GET helper: null on error; 401 reloads (session expired) */
+async function GET(u){try{const r=await fetch(u);if(r.status==401){location.reload();return null}return r.ok?r:null}catch(_){return null}}
 
 
 /* ---------------- live events (SSE) ---------------- */
 let es,fails=0;
-function connect(){es=new EventSource("/api/events");
+function connect(){if(es)es.close();es=new EventSource("/api/events");
   es.addEventListener("init",e=>{const d=JSON.parse(e.data);S.status=d.status;S.metrics=d.metrics;S.heap=d.heap;S.audit=d.audit;S.console=d.console;S.timeline=d.timeline||[];fails=0;live(true);
     renderStatus();renderMetrics();renderHeap();renderConsole();renderDashFeed();WV.set(d.world);HL.load()});
   es.addEventListener("timeline",e=>onTimeline(JSON.parse(e.data)));
@@ -842,7 +843,9 @@ function connect(){es=new EventSource("/api/events");
   es.addEventListener("roster",e=>{P.roster=JSON.parse(e.data);renderRoster();renderOnline();MAPF.drawMarkers();MAPM.drawMarkers();TLV.fillPlayers();if(P.sel&&!$("#v-players").hidden){const r=P.roster.find(x=>x.uuid==P.sel);if(r&&P.cur&&r.online!=P.cur.online)selectPlayer(P.sel,true)}});
   es.addEventListener("player",e=>{const d=JSON.parse(e.data);if(P.cur&&d.uuid==P.cur.uuid){Object.assign(P.cur,d);renderPlayer(false)}});
   es.onopen=()=>live(true);
-  es.onerror=async()=>{live(false);if(++fails>=3){try{const r=await fetch("/api/properties");if(r.status==401)location.reload()}catch(_){}}}}
+  es.onerror=async()=>{live(false);if(es.readyState!=2)return;   // CLOSED (401/502): no auto-retry, so check the session and reconnect with backoff
+    try{const r=await fetch("/api/properties");if(r.status==401){location.reload();return}}catch(_){}
+    setTimeout(connect,Math.min(30000,2000*2**Math.min(fails++,4)))}}
 function live(ok){const l=$("#live");l.classList.toggle("off",!ok);l.querySelector("span").textContent=ok?_t("Live"):_t("Reconnecting...")}
 setInterval(()=>{charts.forEach(c=>c.draw());if(S.status.state=="on")renderStatus()},15000);
 
@@ -893,7 +896,7 @@ const META={
  "enable-rcon":[_t("Management"),_t("RCON (locked: the panel needs it)")],"rcon.port":[_t("Management"),_t("RCON port (locked)")],"rcon.password":[_t("Management"),_t("RCON password (hidden)")],
  "broadcast-rcon-to-ops":[_t("Management"),_t("Shows panel commands to OPs")],"broadcast-console-to-ops":[_t("Management"),_t("Shows console commands to OPs")]};
 const GROUPS=[_t("Game"),_t("Access control"),_t("Performance"),_t("World"),_t("Network"),_t("Management"),_t("Other")];
-async function loadProps(){if(!BOOT.admin)return;const r=await fetch("/api/properties");if(!r.ok)return;S.props=(await r.json()).items;S.edits={};renderProps()}
+async function loadProps(){if(!BOOT.admin)return;const r=await GET("/api/properties");if(!r)return;S.props=(await r.json()).items;S.edits={};renderProps()}
 function renderProps(){const f=$("#p-filter").value.toLowerCase();const by={};
   S.props.forEach(p=>{const m=META[p.key]||[_t("Other"),""];if(f&&!(p.key.includes(f)||(m[1]||"").toLowerCase().includes(f)))return;(by[m[0]]=by[m[0]]||[]).push([p,m])});
   $("#p-list").innerHTML=GROUPS.filter(g=>by[g]).map(g=>"<div class=group><h3>"+g+"</h3><div class=card style='padding:0'>"+by[g].map(([p,m])=>propRow(p,m)).join("")+"</div></div>").join("");
@@ -908,7 +911,7 @@ function propRow(p,m){const v=p.key in S.edits?S.edits[p.key]:p.value;const dis=
 function savebar(){const n=Object.keys(S.edits).length;$("#savebar").classList.toggle("show",n>0);$("#p-count").textContent=(n==1?_t("%s unsaved change",n):_t("%s unsaved changes",n))}
 $("#p-filter").oninput=renderProps;$("#p-undo").onclick=()=>{S.edits={};renderProps()};
 async function saveProps(restart){const j=await api("/api/properties",{changes:S.edits,restart});toast(j.message,j.ok?"good":"bad");if(j.ok){await loadProps();if(restart)go("dash")}}
-const PS={async load(){if(!BOOT.admin)return;const r=await fetch("/api/panel-settings");if(r.ok)this.render(await r.json())},
+const PS={async load(){if(!BOOT.admin)return;const r=await GET("/api/panel-settings");if(r)this.render(await r.json())},
   render(j){$("#ps-ram").value=j.ram;$("#ps-ram").placeholder=_t("automatic: %s",j.ram_auto);$("#ps-stop").value=j.auto_stop_minutes;
     $("#ps-addr").value=j.mc_address;$("#ps-args").value=j.java_args;$("#ps-bk").checked=j.backup_on_start;$("#ps-ar").checked=j.auto_restart;
     $("#ps-lang").innerHTML=j.langs.map(([c,n])=>"<option value='"+esc(c)+"'>"+esc(n)+"</option>").join("");$("#ps-lang").value=j.lang;
@@ -1028,8 +1031,7 @@ function dayLabel(t){const d=new Date(t),n=new Date();const k=x=>x.toDateString(
   return d.toLocaleDateString(LOC,{weekday:"long",day:"numeric",month:"long"})}
 function evHTML(e,compact){const u=e.player&&uuidOf(e.player);const face=u&&["join","leave","chat"].includes(e.type);
   const ic=face?"<span class=fc style='"+faceStyle(u,compact?24:30)+"'></span>":"<span class=ic>"+(EVI[e.type]||"•")+"</span>";
-  const sub=e.type=="death"&&e.detail&&e.detail.killer?"":e.type=="chat"&&e.player?"":"";
-  return "<div class='ev "+e.type+"'>"+ic+"<div class=tx>"+esc(e.text)+sub+"</div><time>"+(compact?hhmm(e.t):hhmmss(e.t))+"</time></div>"}
+  return "<div class='ev "+e.type+"'>"+ic+"<div class=tx>"+esc(e.text)+"</div><time>"+(compact?hhmm(e.t):hhmmss(e.t))+"</time></div>"}
 const feedEv=e=>e.type!="chat"&&(e.type!="panel"||(e.detail||{}).cat=="server");   /* events the dashboard feed shows */
 function renderDashFeed(){const box=$("#dash-feed");const evs=(S.timeline||[]).filter(feedEv).slice(0,8);
   box.innerHTML=evs.length?evs.map(e=>evHTML(e,true)).join(""):"<div style='color:var(--mute);font-size:14px'>"+_t("No events yet.")+"</div>"}
@@ -1042,7 +1044,7 @@ function renderOnline(){renderMe();setSub();if(CUR=="audit"&&RGV.loaded)RGV.rend
   box.querySelectorAll(".op[data-u]").forEach(o=>o.onclick=()=>{go("players");selectPlayer(o.dataset.u)})}
 function onTimeline(e){S.timeline=S.timeline||[];if(feedEv(e)){S.timeline.unshift(e);S.timeline.length=Math.min(S.timeline.length,40);renderDashFeed()}TLV.live(e);
   const T={death:"bad",join:"good",leave:"",server_ready:"good",server_stop:""};if(e.type in T)toast((EVI[e.type]||"")+" "+e.text,T[e.type])}
-async function loadRoster(){try{const r=await fetch("/api/players");if(!r.ok)return;const j=await r.json();P.roster=j.players;P.hardcore=j.hardcore;renderOnline();renderRoster();TLV.fillPlayers();MAPF.drawMarkers();MAPM.drawMarkers();renderDashFeed();
+async function loadRoster(){try{const r=await GET("/api/players");if(!r)return;const j=await r.json();P.roster=j.players;P.hardcore=j.hardcore;renderOnline();renderRoster();TLV.fillPlayers();MAPF.drawMarkers();MAPM.drawMarkers();renderDashFeed();
   if(TLV.opened){TLV.renderSessions();TLV.render()}}catch(e){}}
 
 /* ---------------- map ---------------- */
@@ -1059,7 +1061,7 @@ class WorldMap{
     new ResizeObserver(()=>this.apply()).observe(el)}
   visible(){return this.el.offsetParent!==null&&this.el.clientWidth>0}
   async show(){if(!this.loaded)await this.load(this.dim);this.apply();if(!this.mini)this.legend()}
-  async load(dim,keep){this.want=dim;const r=await fetch("/api/map?dim="+dim);if(!r.ok)return;const j=await r.json();
+  async load(dim,keep){this.want=dim;const r=await GET("/api/map?dim="+dim);if(!r)return;const j=await r.json();
     if(this.want!=dim)return;   // stale answer that arrived after a dimension change
     if(dim!=this.dim){this.tiles.innerHTML="";this.imgs.clear();this.dim=dim;this.centered=false;this.pl.forEach(x=>x.remove());this.pl.clear()}
     this.regions=new Map(j.regions.map(([rx,rz,mt])=>[rx+","+rz,mt]));this.spawn=j.spawn;this.markers=j.markers;this.loaded=true;
@@ -1156,12 +1158,12 @@ const TLV={types:new Set(["death","join","leave","advancement","server_start","s
   async load(reset){if(reset){this.events=[];this.oldest=null}const types=[...this.types].join(",")||"none";
     let url="/api/timeline?limit="+(this.sess?500:150)+"&type="+encodeURIComponent(types)+(this.player?"&player="+encodeURIComponent(this.player):"");
     const before=this.oldest||(this.sess&&this.sess.end?this.sess.end+1000:0);if(before)url+="&before="+before;
-    const r=await fetch(url);if(!r.ok)return;let evs=(await r.json()).events;if(this.sess)evs=evs.filter(e=>e.t>=this.sess.start-1000);
+    const r=await GET(url);if(!r)return;let evs=(await r.json()).events;if(this.sess)evs=evs.filter(e=>e.t>=this.sess.start-1000);
     const key=e=>e.t+"|"+e.type+"|"+e.player+"|"+e.text;const have=new Set(reset?[]:this.events.map(key));const fresh=evs.filter(e=>!have.has(key(e)));
     this.events=reset?evs:this.events.concat(fresh);this.oldest=evs.length?evs[evs.length-1].t:this.oldest;$("#tl-more").hidden=this.sess!=null||evs.length<150||(!reset&&!fresh.length);this.render()},
   render(){const box=$("#tl-feed");if(!this.events.length){box.innerHTML="<div class=card style='color:var(--mute)'>"+_t("No events with these filters.")+"</div>";return}
     let h="",day="";for(const e of this.events){const d=dayLabel(e.t);if(d!=day){day=d;h+="<div class=day>"+esc(d)+"</div>"}h+=evHTML(e,false)}box.innerHTML=h},
-  async loadSessions(){const r=await fetch("/api/sessions?limit=40");if(!r.ok)return;this.sessions=(await r.json()).sessions;this.renderSessions()},
+  async loadSessions(){const r=await GET("/api/sessions?limit=40");if(!r)return;this.sessions=(await r.json()).sessions;this.renderSessions()},
   renderSessions(){const box=$("#tl-sessions");if(!this.sessions.length){box.innerHTML="<div style='color:var(--mute);font-size:14px'>"+_t("No sessions yet.")+"</div>";return}
     box.innerHTML=this.sessions.map(s=>{const names=[...new Set(s.players.map(p=>p.name))];const dur=s.end?s.duration_s:(Date.now()-s.start)/1000;
       const when=new Date(s.start).toLocaleDateString(LOC,{weekday:"short",day:"numeric",month:"short"})+", "+hhmm(s.start)+(s.end?"–"+hhmm(s.end):"");

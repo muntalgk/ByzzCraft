@@ -213,7 +213,7 @@
  "Inventory": "Inventario",
  "Java %s is not installed (found: %s).": "Java %s non è installato (trovato: %s).",
  "Java flags: a quote is not closed.": "Flag Java: una virgoletta non è chiusa.",
- "Java flags: one line, without -jar, -Xms or -Xmx (RAM has its own field).": "Flag Java: una riga, senza -jar, -Xms o -Xmx (la RAM ha il suo campo).",
+ "Java flags: one line, only -XX:, -D, -Xss, -Xmn, -Xlog:, --add-opens, --add-exports, --add-modules and --enable-native-access (RAM has its own field).": "Flag Java: una riga, solo -XX:, -D, -Xss, -Xmn, -Xlog:, --add-opens, --add-exports, --add-modules e --enable-native-access (la RAM ha il suo campo).",
  "Java is not installed: download it from the Dashboard checks.": "Java non è installato: scaricalo dai controlli nella Dashboard.",
  "Java is too old for this Minecraft version: download the right one from the Dashboard checks.": "Java è troppo vecchio per questa versione di Minecraft: scarica quello giusto dai controlli nella Dashboard.",
  "Java memory": "Memoria Java",

@@ -14,7 +14,7 @@ from datetime import datetime
 
 from i18n import t
 
-NAME_RE = re.compile(r"^[A-Za-z0-9_]{3,16}$")
+NAME_RE = re.compile(r"^[A-Za-z0-9_]{3,16}\Z")
 FILES = {"whitelist": "whitelist.json", "ops": "ops.json", "bans": "banned-players.json", "ipbans": "banned-ips.json"}
 ACTIONS = ("wl_add", "wl_remove", "op", "deop", "ban", "pardon", "kick")
 # activity log phrases ("admin <verb> Nick"): activity.py recognises them from here, so change them only here
