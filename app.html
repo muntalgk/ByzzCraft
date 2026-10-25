@@ -2,7 +2,7 @@
 <html lang="{{LANG}}">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>{{TITLE}}</title>
 {{ICON}}
 <style>
@@ -32,6 +32,7 @@ nav{background:linear-gradient(180deg,#16191f,#111318);border-right:1px solid va
 .tab.on{background:linear-gradient(90deg,#3fb95024,#3fb9500a 65%,transparent);color:var(--text);font-weight:600}
 .tab.on:before{content:"";position:absolute;left:-12px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--good);box-shadow:0 0 12px var(--good)}
 .tab.on svg{opacity:1;color:#7ee08f}
+.tab.more{display:none}   /* phones only: opens the sheet with the other pages */
 .tab:focus-visible,.srv-pill:focus-visible,#logout:focus-visible{outline:2px solid #3fb950aa;outline-offset:1px}
 .me{margin-top:auto;display:flex;align-items:center;gap:10px;padding:9px 9px 9px 10px;border-radius:12px;background:#ffffff06;border:1px solid var(--line)}
 .me-face{width:32px;height:32px;border-radius:8px;flex:none;box-shadow:0 0 0 1px #ffffff1a;display:grid;place-items:center;font-weight:800;color:#06210c;background:linear-gradient(135deg,#3fb950,#1f7a33)}
@@ -44,7 +45,7 @@ nav{background:linear-gradient(180deg,#16191f,#111318);border-right:1px solid va
 #logout.ask{color:#ffb4ae;background:#3a1715;border-color:#6b2a26}#logout.ask span{display:inline}
 /* ---------- main ---------- */
 main{padding:22px 28px 60px;min-width:0}
-.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:20px}.top>div{min-width:0}.top .live{flex:none;margin-top:4px}
 .top h1{font-size:24px;margin:0;font-weight:700;letter-spacing:-.015em;line-height:1.2}
 .v-sub{margin:3px 0 0;color:var(--mute);font-size:13.5px}
 .card{box-shadow:inset 0 1px 0 #ffffff07,0 1px 2px #0003}
@@ -68,7 +69,7 @@ main{padding:22px 28px 60px;min-width:0}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .chip{display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px 12px 4px 4px;font-size:13px}
 .chip .av{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;color:#0b0c0e}
-.chip.plain{padding:4px 12px}
+.chip.plain{padding:4px 12px}.chip.more-pl{color:var(--text2);cursor:pointer;font:inherit;font-size:13px}
 .chip button{border:0;background:transparent;color:var(--mute);cursor:pointer;padding:0;font-size:12px}
 .actions{display:flex;gap:10px;flex-wrap:wrap}
 .btn{border:1px solid var(--line2);background:var(--card2);color:var(--text);border-radius:10px;padding:11px 18px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
@@ -150,8 +151,9 @@ main{padding:22px 28px 60px;min-width:0}
 .audit li:last-child{border-bottom:0}
 .audit time{color:var(--mute);font:12.5px var(--mono);white-space:nowrap;padding-top:2px}
 /* ---------- toasts ---------- */
-#toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:9}
-.toast{background:#0b0d10;border:1px solid var(--line2);border-left:3px solid var(--info);border-radius:10px;padding:10px 14px;font-size:14px;max-width:360px;box-shadow:0 10px 30px #0009;animation:in .2s ease}
+#toasts{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top));transform:translateX(-50%);width:min(420px,calc(100vw - 32px));display:flex;flex-direction:column;gap:8px;z-index:60;pointer-events:none}
+.toast{background:#0b0d10;border:1px solid var(--line2);border-left:3px solid var(--info);border-radius:10px;padding:10px 14px;font-size:14px;box-shadow:0 10px 30px #0009;animation:in .2s ease;position:relative;padding-right:44px;pointer-events:auto}
+.toast .x{position:absolute;top:5px;right:5px;width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:var(--mute);font-size:18px;line-height:1;cursor:pointer}.toast .x:hover{background:#ffffff10;color:var(--text)}
 .toast.bad{border-left-color:var(--crit)}.toast.good{border-left-color:var(--good)}
 @keyframes pulse{from{opacity:.35}to{opacity:1}}
 @keyframes in{from{transform:translateY(8px);opacity:0}}
@@ -174,7 +176,7 @@ main{padding:22px 28px 60px;min-width:0}
 .pl-top{display:grid;grid-template-columns:260px 1fr;gap:16px;margin-top:16px}
 .viewer{height:340px;border-radius:14px;background:radial-gradient(ellipse at 50% 85%,#2a3a2c 0,#15181d 60%);border:1px solid var(--line);position:relative;overflow:hidden;cursor:grab;touch-action:none;perspective:900px}
 .viewer:active{cursor:grabbing}
-.viewer .hint{position:absolute;bottom:8px;left:0;right:0;text-align:center;color:var(--mute);font-size:11px;pointer-events:none}
+.viewer .hint{position:absolute;top:8px;left:0;right:0;text-align:center;color:var(--mute);font-size:11px;pointer-events:none}
 .scene{position:absolute;left:50%;top:52%;transform-style:preserve-3d}
 .part,.part .bx{position:absolute;transform-style:preserve-3d}
 .face{position:absolute;image-rendering:pixelated;backface-visibility:hidden;background-repeat:no-repeat}
@@ -241,7 +243,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .card-head b{font-size:14px}
 .link{background:none;border:0;color:var(--text2);cursor:pointer;font-size:13px;padding:2px 4px}.link:hover{color:var(--text)}
 /* ---------- map ---------- */
-.wm{position:relative;overflow:hidden;background:#0b0d10;border-radius:12px;border:1px solid var(--line);touch-action:none;cursor:grab;user-select:none}
+.wm{position:relative;z-index:0;overflow:hidden;background:#0b0d10;border-radius:12px;border:1px solid var(--line);touch-action:none;cursor:grab;user-select:none}
 .wm:active{cursor:grabbing}
 .wm-world{position:absolute;left:0;top:0;transform-origin:0 0}/* no will-change: the browser would paint at one scale only (missing tiles, blurry text when zoomed) */
 .wm-world img{position:absolute;width:513px;height:513px;image-rendering:auto}   /* 1 px overlap: no seams between tiles when zoomed out */
@@ -257,6 +259,9 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .wm-ui{position:absolute;display:flex;gap:6px;z-index:6}
 .wm-ui button,.wm-ui select{background:#14171cee;border:1px solid var(--line2);color:var(--text);border-radius:8px;padding:6px 10px;font:inherit;font-size:13px;cursor:pointer}
 .wm-ui button:hover{border-color:#4a505c}
+.wm-zoom{flex-direction:column}
+.wm-dims{gap:0;border:1px solid var(--line2);border-radius:8px;overflow:hidden;background:#14171cee}.wm-dims button{border:0;border-radius:0;background:transparent;color:var(--text2)}
+.wm-dims button+button{border-left:1px solid var(--line2)}.wm-dims button.on{background:#1d2a3d;color:#cfe2ff}
 .wm-coord{position:absolute;left:10px;bottom:10px;z-index:6;background:#14171cee;border:1px solid var(--line2);border-radius:8px;padding:4px 10px;font:12.5px var(--mono);color:var(--text2);pointer-events:none}
 .wm-pop{position:absolute;z-index:8;background:#0b0d10f2;border:1px solid var(--line2);border-radius:10px;padding:10px 12px;font-size:13px;min-width:170px;box-shadow:0 10px 30px #000a}
 .wm-pop b{display:block;margin-bottom:4px}.wm-pop .row{display:flex;gap:6px;margin-top:8px}
@@ -334,7 +339,12 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .sched .row2{display:flex;gap:8px;align-items:center;margin-top:6px}.sched .row2 .btn{padding:8px 14px}
 .bk-prev{font-size:12px;color:var(--text2);margin-top:8px;min-height:16px}
 .bk-sel{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:6px 12px;font-size:13px;color:var(--text2)}.bk-sel .btn{padding:6px 12px}.bk-sel .sp{flex:1}
-.bk .cb,.bk-sel input{width:16px;height:16px;flex:none;cursor:pointer;accent-color:#3d6db3}
+/* one checkbox look everywhere (iOS draws native ones as black squares); the switches (.sw) keep theirs */
+input[type=checkbox]{-webkit-appearance:none;appearance:none;width:18px;height:18px;flex:none;margin:0;border:1.5px solid #4a505c;border-radius:5px;background:var(--surface);display:inline-grid;place-content:center;cursor:pointer;vertical-align:middle;transition:background .15s,border-color .15s}
+input[type=checkbox]:checked{background:#3d6db3;border-color:#3d6db3}
+input[type=checkbox]:checked::after{content:"";width:4px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:translateY(-1px) rotate(45deg)}
+input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox]:focus-visible{outline:2px solid #3d6db3;outline-offset:2px}
+.sw input{opacity:0;width:0;height:0;position:absolute;border:0}
 .bk-bulk{display:none;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;margin:4px 0;border-radius:10px;background:#1d2a3d;border:1px solid #3d6db3;font-size:13px}.bk-bulk.on{display:flex}.bk-bulk .btn{padding:6px 12px}
 .bk.sel{border-color:#3d6db3}
 .kb.dm{color:#d98a85;border-color:#d98a8555}.kb.wd{color:var(--text2);border-color:var(--line2)}
@@ -346,7 +356,11 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .modal input{width:100%;background:var(--surface);border:1px solid var(--line2);border-radius:10px;padding:10px 12px;color:var(--text);font:600 15px var(--mono);letter-spacing:.06em}
 .modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
 @media (max-width:1100px){.bk-top{grid-template-columns:1fr 1fr}.bk-now{grid-column:1/-1}.bk-wrap{grid-template-columns:minmax(0,1fr)}}
-@media (max-width:520px){.bk-top{grid-template-columns:1fr}.bk{flex-wrap:wrap;row-gap:4px}.bk .acts{flex-basis:100%;justify-content:flex-end}}
+/* backup row on phones: the kind as a colored edge (the badge says it too), title, details, then the actions spread evenly */
+@media (max-width:520px){.bk-top{grid-template-columns:1fr}
+  .bk{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:12px;row-gap:8px;align-items:start;padding:12px 12px 6px;border-left:3px solid var(--k,var(--line))}
+  .bk .ic{display:none}.bk .cb{margin-top:1px}.bk .tx b{font-size:15px}.bk .tx small{row-gap:4px;margin-top:4px}
+  .bk .acts{grid-column:1/-1;display:flex;justify-content:space-between;border-top:1px solid var(--line);padding-top:4px}.bk .acts .ib{width:44px;height:36px}}
 /* ---------- world: time and weather ---------- */
 .wc{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:18px;align-items:center;overflow:hidden;position:relative;transition:background 2s}
 .wc.day{background:linear-gradient(120deg,#1b3550,#1a2433 55%,var(--card))}.wc.dusk{background:linear-gradient(120deg,#4a2738,#261d2e 55%,var(--card))}
@@ -360,8 +374,12 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .wchips{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
 .wchip{display:inline-flex;align-items:center;gap:7px;font-size:13px;padding:5px 10px;border-radius:999px;background:#0006;border:1px solid #ffffff14;white-space:nowrap}
 .wchip small{color:var(--mute);font-size:12px}
-.wchip.sleep{color:#b8f5c4;border-color:#2f6b3a}.wchip.warn{color:#ffd18a;border-color:#6b5222}
-@media (max-width:760px){.wc{grid-template-columns:auto minmax(0,1fr)}.wchips{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;align-items:center}}
+.wchip.sleep{color:#b8f5c4;border-color:#2f6b3a}.wchip.warn{color:#ffd18a;border-color:#6b5222}.wchip.off{color:var(--mute)}
+.wchip .wi{font-style:normal;display:grid;place-items:center}.wchip .wi svg{width:18px;height:18px}
+@media (max-width:760px){.wc{grid-template-columns:auto minmax(0,1fr);gap:14px 16px}.wc .orb{width:48px;height:48px}.wc .orb svg{width:46px;height:46px}
+  .wchips{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:stretch}
+  .wchip{flex-direction:column;justify-content:center;text-align:center;white-space:normal;border-radius:12px;padding:10px 6px;gap:5px;font-size:12.5px;line-height:1.25}
+  .wchip .wi{font-size:20px;height:24px}.wchip .wi svg{width:22px;height:22px}.wchip small{display:block;margin-top:2px;font-size:11px}}
 /* ---------- access ---------- */
 .ac-top{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
 .ac-top .search{flex:1;min-width:180px}
@@ -422,7 +440,34 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
   .prop{grid-template-columns:1fr}
   #con-full{height:calc(100vh - 330px)}
   .st h2{font-size:22px}
+  main{padding-bottom:calc(90px + env(safe-area-inset-bottom))}
+  nav{overflow:visible;padding-bottom:calc(6px + env(safe-area-inset-bottom))}
+  .tab.nb{flex:1 1 0;min-width:0}.tab:not(.nb){display:none}.tab.more{display:flex}
+  nav.open{display:grid;grid-template-columns:repeat(15,minmax(0,1fr));gap:4px 0;border-radius:16px 16px 0 0}
+  nav.open .tab.nb{grid-column:span 3;order:2}nav.open .tab[data-v=dash]{grid-column:1/span 3}nav.open .tab:not(.nb){display:flex;grid-column:span 5;order:1;padding:14px 4px!important}
+  #nav-bd{position:fixed;inset:0;background:#0009;z-index:4}
+  .pl-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible;gap:6px}.pl-item{width:100%;min-width:0;padding:8px;gap:8px}.pl-item>div{min-width:0}.pl-item b,.pl-item small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .viewer{height:290px}
+  input[type=checkbox]{width:22px;height:22px;border-radius:6px}input[type=checkbox]:checked::after{width:5px;height:11px}
+  .quick button{min-height:36px}.chip button{min-height:32px;padding:0 8px}.wm-ui button,.wm-ui select{min-width:36px;min-height:36px}
 }
+@media (max-width:360px){.pl-list{grid-template-columns:1fr}}
+/* map on phones: the whole screen above the bottom bar, no header, no page scroll */
+@media (max-width:760px){body[data-v=map] .top{display:none}
+  body[data-v=map] #map-full{position:fixed;left:0;right:0;top:0;bottom:calc(62px + env(safe-area-inset-bottom));height:auto;min-height:0;border:0;border-radius:0}
+  body[data-v=map] #map-full .wm-ui{top:calc(10px + env(safe-area-inset-top))!important}}
+/* phones: the same inner spacing in every card, compact filter chips */
+@media (max-width:520px){.bk-bulk.on{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.bk-bulk b{grid-column:1/-1}.bk-bulk .sp{display:none}.bk-bulk .btn{justify-content:center}
+  .card-head:has(#bk-wfilter){flex-direction:column;align-items:stretch}#bk-wfilter:empty{display:none}
+  .prop:has(.sw){grid-template-columns:minmax(0,1fr) auto;align-items:center}   /* on/off settings: the switch next to its name, half the height */
+  #ps-save,#pw-save,#us-save{width:100%;justify-content:center}   /* form saves across the card, like Back up and Save schedule */
+  .toolbar{flex-wrap:wrap}.toolbar .search{flex:1 1 100%;min-width:0}
+  .v-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}   /* one line under the title */
+  .card{padding:16px}.grid{gap:12px}.top{margin-bottom:16px}.top h1{font-size:22px}.chips-f button{padding:5px 11px;font-size:12.5px}}
+/* hero on phones: the address on its own row with copy at the end, player chips the same height below */
+@media (max-width:520px){#players .chip{min-height:40px}#players .chip.addr{flex-basis:100%;padding:4px 6px 4px 14px}#players .chip.addr button{margin-left:auto}#players .chip .av{width:28px;height:28px;font-size:12px}}
+/* server buttons on phones: Restart and Stop side by side, Start and Force stop on their own row */
+@media (max-width:520px){.srv-acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%}.srv-acts .btn{width:100%;justify-content:center}.srv-acts #b-start,.srv-acts #b-kill{grid-column:1/-1}.srv-acts #b-kill{padding:9px;font-size:13px;border-color:#3a2423}}
 </style>
 </head>
 <body>
@@ -431,21 +476,23 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
     <div class="brand"><div class="logo">{{LOGO}}</div><div class="bt"><b id="b-title"></b><small>{{Minecraft server panel}}</small></div></div>
     <button class="srv-pill" id="srv-pill" title="{{Copy the server address}}"><i></i><span class="st">...</span><span class="addr" id="srv-addr"></span></button>
     <p class="nav-sec">{{World}}</p>
-    <button class="tab on" data-v="dash" data-s="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Dashboard</button>
-    <button class="tab" data-v="map"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4 3 6.5v13.5l6-2.5 6 2.5 6-2.5V4l-6 2.5z"/><path d="M9 4v13.5M15 6.5V20"/></svg>{{Map}}</button>
-    <button class="tab" data-v="players"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.8c1.6.8 2.7 2.5 3 5.2"/></svg>{{Players}}<span class="cnt" id="cnt-pl"></span></button>
+    <button class="tab nb on" data-v="dash" data-s="Home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Dashboard</button>
+    <button class="tab nb" data-v="map"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4 3 6.5v13.5l6-2.5 6 2.5 6-2.5V4l-6 2.5z"/><path d="M9 4v13.5M15 6.5V20"/></svg>{{Map}}</button>
+    <button class="tab nb" data-v="players"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.8c1.6.8 2.7 2.5 3 5.2"/></svg>{{Players}}<span class="cnt" id="cnt-pl"></span></button>
     <button class="tab" data-v="timeline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg>Timeline</button>
     <button class="tab" data-v="metrics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 15 4-5 3 3 5-7"/></svg>{{Metrics}}</button>
     <p class="nav-sec adm">{{Administration}}</p>
-    <button class="tab adm" data-v="console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-5-6-5M12 19h8"/></svg>Console</button>
+    <button class="tab nb adm" data-v="console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-5-6-5M12 19h8"/></svg>Console</button>
     <button class="tab adm" data-v="props" data-s="Config"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>{{Settings}}</button>
     <button class="tab adm" data-v="backups"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></svg>Backup<span class="cnt" id="cnt-bk"></span></button>
     <button class="tab adm" data-v="access"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>{{Access}}</button>
     <button class="tab adm" data-v="audit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>{{Log}}</button>
     <button class="tab" data-v="account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.2 4.2-6.5 8-6.5s7 2.3 8 6.5"/></svg>{{Account}}</button>
+    <button class="tab nb more" id="more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>{{More}}</button>
     <div class="me"><div class="me-face" id="me-face"></div><div class="me-t"><b id="who"></b><span class="role" id="me-role"></span></div>
       <button id="logout" title="{{Log out}}" aria-label="{{Log out}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4"/></svg><span>{{Log out?}}</span></button></div>
   </nav>
+  <div id="nav-bd" hidden></div>
 
   <main>
     <div class="top"><div><h1 id="v-title">Dashboard</h1><p class="v-sub" id="v-sub"></p></div><span class="live off" id="live"><i></i><span>{{Connecting...}}</span></span></div>
@@ -458,7 +505,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
           <div class="sub" id="st-sub"></div>
           <div class="chips" id="players"></div>
         </div>
-        <div class="actions">
+        <div class="actions srv-acts">
           <button class="btn primary" id="b-start">{{Start}}</button>
           <button class="btn" id="b-restart">{{Restart}}</button>
           <button class="btn danger" id="b-stop">{{Stop}}</button>
@@ -649,26 +696,30 @@ const WINDOW=10*60*1000;
 /* ---------------- navigation ---------------- */
 $("#b-title").textContent=BOOT.title;$("#who").textContent=BOOT.mc||BOOT.user;
 $("#me-role").textContent=BOOT.admin?_t("Admin"):_t("Player");$("#me-role").classList.toggle("pl",!BOOT.admin);$("#srv-addr").textContent=BOOT.address||"";
-if(!BOOT.admin){$$(".adm,.adm-only").forEach(e=>e.hidden=true)}
+if(!BOOT.admin){$$(".adm,.adm-only").forEach(e=>e.hidden=true);$(".tab[data-v=timeline]").classList.add("nb")}
 function renderMe(){const f=$("#me-face");const me=BOOT.mc&&(P.roster||[]).find(p=>p.name.toLowerCase()==BOOT.mc.toLowerCase());
   if(me){if(f.dataset.u!=me.uuid){f.dataset.u=me.uuid;f.className="me-face fc";f.style.cssText=faceStyle(me.uuid,32);f.textContent=""}}
   else if(!f.dataset.u)f.textContent=(BOOT.mc||BOOT.user).charAt(0).toUpperCase()}
 const TITLES={dash:"Dashboard",map:_t("Map"),players:_t("Players"),timeline:"Timeline",metrics:_t("Metrics"),console:"Console",props:_t("Server settings"),backups:"Backup",access:_t("Access"),audit:_t("Panel log"),account:_t("Account")};
-const SUBS={dash:()=>_t("Live server and world status"),map:()=>_t("Top-down view · drag, zoom, right-click for a marker"),
-  players:()=>{const r=P.roster||[],n=r.filter(p=>p.online).length;return _t("%s players recorded",r.length)+" · "+(n?_t("%s online",n):_t("nobody online"))},
-  timeline:()=>_t("Play sessions and events from the server logs"),metrics:()=>_t("PC and server · last 10 minutes, one point every 2 seconds"),console:()=>_t("Live log and RCON commands"),props:()=>_t("server.properties · every save backs up the file"),access:()=>_t("Whitelist, operators and bans"),audit:()=>_t("Who did what in the panel"),account:()=>BOOT.admin?_t("Your password and the panel users"):_t("Your password"),
-  backups:()=>BK.items?_t("%s backups",BK.items.length)+" · "+gb(BK.items.reduce((a,e)=>a+e.size,0))+" · "+_t("%s free on disk",gb(BK.disk.free)):_t("World copies, schedule and restore")};
+const SUBS={dash:()=>_t("Server and world"),map:()=>matchMedia("(pointer:coarse)").matches?_t("Drag and pinch"):_t("Right-click to add a marker"),
+  players:()=>{const r=P.roster||[],n=r.filter(p=>p.online).length;return _t("%s players",r.length)+" · "+(n?_t("%s online",n):_t("nobody online"))},
+  timeline:()=>_t("Sessions and events"),metrics:()=>_t("Last 10 minutes"),console:()=>_t("Log and commands"),props:()=>"server.properties",access:()=>_t("Whitelist, OP and bans"),audit:()=>_t("Who did what"),account:()=>BOOT.admin?_t("Password and users"):_t("Your password"),
+  backups:()=>BK.items?_t("%s backups",BK.items.length)+" · "+gb(BK.items.reduce((a,e)=>a+e.size,0))+" · "+_t("%s free",gb(BK.disk.free)):_t("World backups")};
 let CUR="dash";function setSub(){$("#v-sub").textContent=SUBS[CUR]?SUBS[CUR]():""}
-function go(v){if(!TITLES[v])v="dash";CUR=v;$$(".tab").forEach(t=>{t.classList.toggle("on",t.dataset.v==v);if(t.dataset.v==v&&innerWidth<=760)t.scrollIntoView({inline:"nearest",block:"nearest"})});Object.keys(TITLES).forEach(x=>$("#v-"+x).hidden=x!=v);
+function go(v){if(!TITLES[v])v="dash";CUR=v;document.body.dataset.v=v;$$(".tab").forEach(t=>{t.classList.toggle("on",t.dataset.v==v);});$("#more").classList.toggle("on",!!$(".tab.on:not(.nb)"));navMore(0);Object.keys(TITLES).forEach(x=>$("#v-"+x).hidden=x!=v);
   $("#v-title").textContent=TITLES[v];setSub();if(v=="props"){loadProps();PS.load()}if(v=="console"){renderConsole();setTimeout(()=>$("#cmd").focus(),50)}if(v=="metrics")charts.forEach(c=>c.draw());
-  if(v=="players")loadPlayers();if(v=="map")MAPF.show();if(v=="timeline")TLV.open();if(v=="dash")MAPM.show();if(v=="backups")BK.load();if(v=="access")ACV.load();if(v=="audit")RGV.load();if(v=="account")ACC.load();location.hash=v}
-$$(".tab").forEach(t=>t.onclick=()=>go(t.dataset.v));$$("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
+  if(v=="players")loadPlayers();if(v=="map")MAPF.show();if(v=="timeline")TLV.open();if(v=="dash")MAPM.show();if(v=="backups")BK.load();if(v=="access")ACV.load();if(v=="audit")RGV.load();if(v=="account")ACC.load();location.hash=v;scrollTo(0,0)}
+$$(".tab").forEach(t=>t.onclick=()=>go(t.dataset.v));
+function navMore(o){$("nav").classList.toggle("open",o);$("#nav-bd").hidden=!o}
+$("#more").onclick=()=>navMore(!$("nav").classList.contains("open"));$("#nav-bd").onclick=()=>navMore(0);addEventListener("keydown",e=>{if(e.key=="Escape")navMore(0)});
+$$("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
 $("#logout").onclick=async e=>{const b=e.currentTarget;
   if(!b.classList.contains("ask")){b.classList.add("ask");clearTimeout(b._t);b._t=setTimeout(()=>b.classList.remove("ask"),3000);return}
   await fetch("/logout",{method:"POST",headers:{"X-CSRF":BOOT.csrf}});location.href="/"};
 $("#srv-pill").onclick=async()=>{if(!BOOT.address)return;try{await navigator.clipboard.writeText(BOOT.address);toast(_t("Address copied: %s",BOOT.address),"good")}catch(e){toast(_t("Server address: %s",BOOT.address))}};
 
-function toast(msg,kind){if(!msg)return;const d=document.createElement("div");d.className="toast "+(kind||"");d.textContent=msg;$("#toasts").append(d);setTimeout(()=>d.remove(),5000)}
+function toast(msg,kind){if(!msg)return;const d=document.createElement("div");d.className="toast "+(kind||"");d.setAttribute("role","status");d.textContent=msg;
+  const x=document.createElement("button");x.className="x";x.textContent="×";x.title=_t("Close");x.onclick=()=>d.remove();d.append(x);$("#toasts").append(d);setTimeout(()=>d.remove(),5000)}
 async function api(path,body){try{const r=await fetch(path,{method:"POST",headers:{"X-CSRF":BOOT.csrf,"Content-Type":"application/json"},body:JSON.stringify(body||{})});
   if(r.status==401){location.reload();return{}}const j=await r.json();return j}catch(e){return{ok:false,message:_t("Panel unreachable")}}}
 
@@ -725,9 +776,11 @@ function renderStatus(){const s=S.status;if(BOOT.admin&&BK.st)BK.renderStatus();
   else if(s.state=="stopping")sub=_t("Saving the world...");else sub=s.start_error||_t("Press Start when you want to play.");$("#st-sub").classList.toggle("st-err",s.state=="off"&&!!s.start_error);
   $("#st-sub").textContent=sub;
   const pl=$("#players");pl.innerHTML="";
-  if(BOOT.address){const c=document.createElement("span");c.className="chip plain";c.innerHTML=_t("Address")+" <b style='font-family:var(--mono)'>"+esc(BOOT.address)+"</b> <button title='"+_t("Copy")+"'>"+_t("copy")+"</button>";
+  if(BOOT.address){const c=document.createElement("span");c.className="chip plain addr";c.innerHTML=_t("Address")+" <b style='font-family:var(--mono)'>"+esc(BOOT.address)+"</b> <button title='"+_t("Copy")+"'>"+_t("copy")+"</button>";
     c.querySelector("button").onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(BOOT.address);toast(_t("Address copied"),"good")};pl.append(c)}
-  (s.players||[]).forEach((n,i)=>{const c=document.createElement("span");c.className="chip";c.innerHTML="<span class=av style='background:"+AVC[[...n].reduce((a,ch)=>a+ch.charCodeAt(0),0)%AVC.length]+"'>"+esc(n[0].toUpperCase())+"</span>"+esc(n);pl.append(c)});
+  const ps=s.players||[],shown=ps.length>7?ps.slice(0,6):ps;   /* a full server: six names and "+N", the full list is in Players */
+  shown.forEach((n,i)=>{const c=document.createElement("span");c.className="chip";c.innerHTML="<span class=av style='background:"+AVC[[...n].reduce((a,ch)=>a+ch.charCodeAt(0),0)%AVC.length]+"'>"+esc(n[0].toUpperCase())+"</span>"+esc(n);pl.append(c)});
+  if(ps.length>shown.length){const c=document.createElement("button");c.className="chip plain more-pl";c.textContent=_t("+%s more",ps.length-shown.length);c.onclick=()=>go("players");pl.append(c)}
   const up=s.state=="on"||s.state=="stopping";$("#b-start").hidden=up;$("#b-stop").hidden=$("#b-restart").hidden=!up;
   $("#b-kill").hidden=!BOOT.admin||s.state=="off"||s.state=="starting"&&s.backup_progress!=null;$("#b-start").disabled=s.state!="off";$("#b-stop").disabled=s.state!="on";$("#b-restart").disabled=s.state!="on";
   $("#banner").classList.toggle("show",!!s.props_changed&&s.state=="on"&&BOOT.admin);
@@ -920,15 +973,19 @@ function hudRow(kind,val,max,extra){const n=10;let h="";const hc=P.hardcore&&kin
   if(kind=="heart"&&extra>0)for(let i=0;i<Math.ceil(extra/2);i++)h+="<img src='/hud/heart_absorbing_"+hc+(extra-i*2>=2?"full":"half")+".png'>";
   return "<div class='hud "+kind+"'>"+h+"</div>"}
 const SLOT_PH={head:"empty_armor_slot_helmet",chest:"empty_armor_slot_chestplate",legs:"empty_armor_slot_leggings",feet:"empty_armor_slot_boots",offhand:"empty_armor_slot_shield"};
-function slotHTML(it,ph,sel){if(!it)return "<div class='slot"+(sel?" sel":"")+"'>"+(ph?"<img class=ph src='/icon/"+ph+".png?v=3' onerror=\"this.remove()\">":"")+"</div>";
+function slotHTML(it,ph,sel){if(!it)return "<div class='slot"+(sel?" sel":"")+"'>"+(ph?"<img class=ph src='/icon/"+ph+".png?v=5' onerror=\"this.remove()\">":"")+"</div>";
   const tip=encodeURIComponent(JSON.stringify({n:it.name,e:it.ench,g:it.glint,d:it.dmg,m:it.max,id:it.id,c:it.count}));
   const dur=it.max&&it.dmg>0?"<div class=dur><b style='width:"+(100*(1-it.dmg/it.max))+"%;background:hsl("+Math.round(120*(1-it.dmg/it.max))+",90%,45%)'></b></div>":"";
-  const glint=it.glint?"<div class=glint style=\"-webkit-mask-image:url('/icon/"+it.id+".png?v=3');mask-image:url('/icon/"+it.id+".png?v=3')\"></div>":"";
-  return "<div class='slot"+(sel?" sel":"")+"' data-tip='"+tip+"'><img src='/icon/"+it.id+".png?v=3' onerror=\"this.outerHTML='<div class=fb>"+esc(it.name.slice(0,10))+"</div>'\">"+glint+dur+(it.count>1?"<span class=cnt>"+it.count+"</span>":"")+"</div>"}
+  const glint=it.glint?"<div class=glint style=\"-webkit-mask-image:url('/icon/"+it.id+".png?v=5');mask-image:url('/icon/"+it.id+".png?v=5')\"></div>":"";
+  return "<div class='slot"+(sel?" sel":"")+"' data-tip='"+tip+"'><img src='/icon/"+it.id+".png?v=5' alt='"+esc(it.name.slice(0,10))+"' onerror='icoErr(this)'>"+glint+dur+(it.count>1?"<span class=cnt>"+it.count+"</span>":"")+"</div>"}
+/* a failed icon gets one more try (a phone can drop image loads), then its name */
+function icoErr(i){if(!i.dataset.r){i.dataset.r=1;setTimeout(()=>i.src+="&r=1",800)}else i.outerHTML="<div class=fb>"+esc(i.alt)+"</div>"}
+/* only when it changed: rewriting the same inventory on every live update reloads every icon */
+function setHTML(el,h){if(el._h!==h){el._h=h;el.innerHTML=h}}
 function invGrid(items,slots,sel){const by={};items.forEach(i=>by[i.slot]=i);return slots.map(s=>s==="gap"?"<div class=gap></div>":slotHTML(by[s],null,s===sel)).join("")}
 function range(a,b){const r=[];for(let i=a;i<=b;i++)r.push(i);return r}
 function dur2(sec){const d=Math.floor(sec/86400),h=Math.floor(sec%86400/3600),m=Math.floor(sec%3600/60);return d?_t("%s d %s h",d,h):h?h+" h "+m+" min":m+" min"}
-function topList(title,rows){return "<div><h4>"+title+"</h4><ol>"+(rows.length?rows.map(r=>"<li><img src='/icon/"+r[2]+".png?v=3' onerror=\"this.style.visibility='hidden'\">"+esc(r[0])+"<span>"+r[1].toLocaleString(LOC)+"</span></li>").join(""):"<li style='color:var(--mute)'>"+_t("none")+"</li>")+"</ol></div>"}
+function topList(title,rows){return "<div><h4>"+title+"</h4><ol>"+(rows.length?rows.map(r=>"<li><img src='/icon/"+r[2]+".png?v=5' onerror=\"this.style.visibility='hidden'\">"+esc(r[0])+"<span>"+r[1].toLocaleString(LOC)+"</span></li>").join(""):"<li style='color:var(--mute)'>"+_t("none")+"</li>")+"</ol></div>"}
 function renderPlayer(first){const d=P.cur;if(!d)return;const box=$("#pl-detail");
   if(first||!$("#scene")){box.innerHTML="<div class='card'><div class=pl-head><div><h2 id=pl-name></h2><div class=pl-meta id=pl-meta></div></div><div class=pos id=pl-pos></div></div>"+
     "<div class=pl-top><div class=viewer id=viewer><div class=shadow></div><div class=scene id=scene></div><div class=hint>"+_t("drag to rotate")+"</div></div><div class=vitals id=pl-vitals></div></div></div>"+
@@ -947,9 +1004,9 @@ function renderPlayer(first){const d=P.cur;if(!d)return;const box=$("#pl-detail"
     (fx?"<div class=vrow><span class=lbl>"+_t("Effects")+"</span><div class=effects>"+fx+"</div></div>":"")+
     (d.fire?"<div class=vrow><span class=lbl></span><span class='badge dead'>"+_t("ON FIRE")+"</span></div>":"")+(d.air<300?"<div class=vrow><span class=lbl>"+_t("Air")+"</span><span class=num>"+Math.max(0,Math.round(d.air/30))+"/10</span></div>":"");
   const eq=d.equipment||{};
-  $("#pl-inv").innerHTML="<div class='inv armor'>"+["head","chest","legs","feet"].map(s=>slotHTML(eq[s],SLOT_PH[s])).join("")+"<div class=gap></div>"+slotHTML(eq.offhand,SLOT_PH.offhand)+"</div>"+
-    "<div class=inv>"+invGrid(d.inventory||[],[...range(9,35),"gap",...range(0,8)],d.selected)+"</div>";
-  $("#pl-ender").innerHTML=invGrid(d.ender||[],range(0,26));
+  setHTML($("#pl-inv"),"<div class='inv armor'>"+["head","chest","legs","feet"].map(s=>slotHTML(eq[s],SLOT_PH[s])).join("")+"<div class=gap></div>"+slotHTML(eq.offhand,SLOT_PH.offhand)+"</div>"+
+    "<div class=inv>"+invGrid(d.inventory||[],[...range(9,35),"gap",...range(0,8)],d.selected)+"</div>");
+  setHTML($("#pl-ender"),invGrid(d.ender||[],range(0,26)));
   if(d.stats){const s=d.stats.summary;$("#pl-stats").innerHTML="<div class=stats>"+[
     [dur2(s.play_time),_t("play time")],[s.deaths,_t("deaths")],[s.mob_kills.toLocaleString(LOC),_t("mobs killed")],[nf(s.distance_km,1)+" km",_t("travelled")],
     [nf(s.damage_dealt/2,0)+" ❤",_t("damage dealt")],[nf(s.damage_taken/2,0)+" ❤",_t("damage taken")],[s.jumps.toLocaleString(LOC),_t("jumps")],[d.stats.advancements,_t("advancements")]]
@@ -995,8 +1052,8 @@ class WorldMap{
   constructor(el,mini){this.el=el;this.mini=mini;this.dim="overworld";this.s=mini?.5:1;this.tx=0;this.ty=0;this.regions=new Map();this.imgs=new Map();this.pl=new Map();
     this.markers=[];this.spawn=null;this.follow=null;this.loaded=false;this.centered=false;
     el.innerHTML="<div class=wm-world><div class=wm-tiles></div><div class=wm-marks></div><div class=wm-players></div></div><div class=wm-empty></div>"+(mini?"":
-      "<div class=wm-ui style='left:10px;top:10px'><select class=dimsel>"+Object.entries(DIMNAMES).map(([k,v])=>"<option value="+k+">"+v+"</option>").join("")+"</select>"+
-      "<button data-a=home title='"+_t("Center")+"'>⌂</button><button data-a=zin title='"+_t("Zoom in")+"'>+</button><button data-a=zout title='"+_t("Zoom out")+"'>−</button></div><div class=wm-coord>"+_t("move the mouse over the map")+"</div><div class=wm-legend></div>");
+      "<div class='wm-ui wm-dims' style='left:10px;top:10px'>"+Object.entries(DIMNAMES).map(([k,v])=>"<button data-dim="+k+">"+v+"</button>").join("")+"</div>"+
+      "<div class='wm-ui wm-zoom' style='right:10px;top:10px'><button data-a=home title='"+_t("Center")+"'>⌂</button><button data-a=zin title='"+_t("Zoom in")+"'>+</button><button data-a=zout title='"+_t("Zoom out")+"'>−</button></div><div class=wm-coord>"+(matchMedia("(pointer:coarse)").matches?_t("Drag to move, pinch to zoom"):_t("move the mouse over the map"))+"</div><div class=wm-legend></div>");
     this.world=el.querySelector(".wm-world");this.tiles=el.querySelector(".wm-tiles");this.marks=el.querySelector(".wm-marks");this.players=el.querySelector(".wm-players");this.empty=el.querySelector(".wm-empty");
     if(mini)el.addEventListener("click",()=>go("map"));else this.bind();
     new ResizeObserver(()=>this.apply()).observe(el)}
@@ -1009,14 +1066,16 @@ class WorldMap{
     for(const [k,img] of this.imgs){const mt=this.regions.get(k);
       if(mt&&img.dataset.v!=mt){img.dataset.v=mt;img.src=this.url(k,mt)}else if(mt&&img.style.visibility=="hidden")img.src=this.url(k,mt)+"&r="+Date.now()}   // failed tile: retried at every update
     this.empty.textContent=this.regions.size?"":_t("No explored area in this dimension.");
-    if(!this.mini){const sel=this.el.querySelector(".dimsel");if(sel)sel.value=this.dim}
+    if(!this.mini)this.el.querySelectorAll("[data-dim]").forEach(b=>b.classList.toggle("on",b.dataset.dim==this.dim));
     this.drawMarkers();this.setPlayers(P.positions||[]);if(!this.centered&&this.visible()){this.centered=true;this.home()}this.apply()}
   reloadIf(dim){if(this.loaded&&dim==this.dim)this.load(this.dim)}
   url(k,mt){const [rx,rz]=k.split(",");return "/map/"+this.dim+"/"+rx+"."+rz+".png?v="+mt}
   home(){const me=(P.positions||[]).filter(p=>p.dim==this.dim);let x,z;
     if(me.length){x=me.reduce((a,p)=>a+p.pos[0],0)/me.length;z=me.reduce((a,p)=>a+p.pos[2],0)/me.length}
-    else{const h=this.markers.find(m=>m.icon=="home");if(h){x=h.x;z=h.z}else if(this.spawn){x=this.spawn[0];z=this.spawn[2]}
-      else if(this.regions.size){const ks=[...this.regions.keys()].map(k=>k.split(",").map(Number));x=(Math.min(...ks.map(a=>a[0]))+Math.max(...ks.map(a=>a[0]))+1)*256;z=(Math.min(...ks.map(a=>a[1]))+Math.max(...ks.map(a=>a[1]))+1)*256}else{x=0;z=0}}
+    else{const h=this.markers.find(m=>m.icon=="home");if(h){x=h.x;z=h.z}else if(this.spawn&&this.dim=="overworld"){x=this.spawn[0];z=this.spawn[2]}else if(this.dim=="the_end"&&this.regions.size){x=0;z=0}   /* the main island is always at 0 0 */
+      else if(this.regions.size){   /* the overworld spawn means nothing in the Nether and the End: the explored region nearest the middle of them all */
+        const ks=[...this.regions.keys()].map(k=>k.split(",").map(Number)),mx=ks.reduce((a,k)=>a+k[0],0)/ks.length,mz=ks.reduce((a,k)=>a+k[1],0)/ks.length,
+          b=ks.reduce((a,k)=>Math.hypot(k[0]-mx,k[1]-mz)<Math.hypot(a[0]-mx,a[1]-mz)?k:a);x=b[0]*512+256;z=b[1]*512+256}else{x=0;z=0}}
     this.center(x,z)}
   center(x,z){const W=this.el.clientWidth,H=this.el.clientHeight;this.tx=W/2-x*this.s;this.ty=H/2-z*this.s;this.apply()}
   apply(){const W=this.el.clientWidth,H=this.el.clientHeight;if(!W||!this.loaded)return;
@@ -1068,18 +1127,18 @@ class WorldMap{
   bind(){const el=this.el,pts=new Map();let start=null,moved=false;
     const snap=()=>{start={tx:this.tx,ty:this.ty,s:this.s,pts:new Map([...pts].map(([k,v])=>[k,{...v}]))}};
     el.addEventListener("pointerdown",e=>{if(e.target.closest(".wm-ui,.wm-legend,.wm-pop,.wm-mk"))return;if(e.button==2)return;el.setPointerCapture(e.pointerId);pts.set(e.pointerId,{x:e.clientX,y:e.clientY});moved=false;snap();this.closePop();
-      if(e.pointerType!="mouse"){clearTimeout(this.lp);const p={x:e.clientX,y:e.clientY};this.lp=setTimeout(()=>{if(!moved&&pts.size==1)this.addAt(p)},650)}});
+});
     el.addEventListener("pointermove",e=>{this.cursor(e);if(!pts.has(e.pointerId)||!start)return;pts.set(e.pointerId,{x:e.clientX,y:e.clientY});const ids=[...pts.keys()];
       if(ids.length==1){const a=start.pts.get(ids[0]),b=pts.get(ids[0]);if(!a)return;const dx=b.x-a.x,dy=b.y-a.y;if(Math.abs(dx)+Math.abs(dy)>5){moved=true;this.follow=null}
         if(moved){this.tx=start.tx+dx;this.ty=start.ty+dy;this.apply()}}
       else{const [i,j]=ids,a1=start.pts.get(i),a2=start.pts.get(j),b1=pts.get(i),b2=pts.get(j);if(!a1||!a2)return;moved=true;this.follow=null;
         const r=el.getBoundingClientRect(),ns=this.clamp(start.s*Math.hypot(b1.x-b2.x,b1.y-b2.y)/Math.max(1,Math.hypot(a1.x-a2.x,a1.y-a2.y)));
         const wx=((a1.x+a2.x)/2-r.left-start.tx)/start.s,wz=((a1.y+a2.y)/2-r.top-start.ty)/start.s;this.s=ns;this.tx=(b1.x+b2.x)/2-r.left-wx*ns;this.ty=(b1.y+b2.y)/2-r.top-wz*ns;this.apply()}});
-    const up=e=>{clearTimeout(this.lp);pts.delete(e.pointerId);snap();if(moved)this.legend()};
+    const up=e=>{pts.delete(e.pointerId);snap();if(moved)this.legend()};
     el.addEventListener("pointerup",up);el.addEventListener("pointercancel",up);
     el.addEventListener("wheel",e=>{e.preventDefault();const r=el.getBoundingClientRect();this.zoomAt(e.clientX-r.left,e.clientY-r.top,e.deltaY<0?1.25:.8)},{passive:false});
-    el.addEventListener("contextmenu",e=>{e.preventDefault();if(!e.target.closest(".wm-ui,.wm-legend,.wm-pop"))this.addAt({x:e.clientX,y:e.clientY})});
-    el.querySelector(".dimsel").onchange=e=>{this.follow=null;this.load(e.target.value).then(()=>{this.home();this.legend()})};
+    el.addEventListener("contextmenu",e=>{e.preventDefault();if(!matchMedia("(pointer:coarse)").matches&&!e.target.closest(".wm-ui,.wm-legend,.wm-pop"))this.addAt({x:e.clientX,y:e.clientY})});   /* markers are added from a computer, not from the phone */
+    el.querySelectorAll("[data-dim]").forEach(b=>b.onclick=e=>{e.stopPropagation();if(b.dataset.dim==this.dim)return;this.follow=null;this.load(b.dataset.dim).then(()=>{this.home();this.legend()})});
     el.querySelectorAll(".wm-ui [data-a]").forEach(b=>b.onclick=e=>{e.stopPropagation();const W=el.clientWidth/2,H=el.clientHeight/2;
       if(b.dataset.a=="zin")this.zoomAt(W,H,1.5);if(b.dataset.a=="zout")this.zoomAt(W,H,1/1.5);if(b.dataset.a=="home"){this.follow=null;this.s=1;this.home()}})}
 }
@@ -1142,7 +1201,7 @@ const BK={items:null,disk:null,st:null,f:"",w:"",sel:new Set(),shown:[],doomed:n
     $("#bk-wfilter").innerHTML=ws.length>1?[["",_t("All worlds")],...ws.map(w=>[w,w])].map(([k,l])=>"<button data-w='"+esc(k)+"' class='"+(this.w==k?"on":"")+"'>"+esc(l)+"</button>").join(""):"";
     const rows=this.shown=it.filter(e=>(!this.f||e.kind==this.f)&&(!this.w||e.world==this.w));const busy=!!(this.st&&this.st.busy);
     $("#bk-list").innerHTML=rows.length?rows.map(e=>{const k=KIND[e.kind]||KIND.other,id=esc(e.id),zip=e.folder=="backups";
-      return "<div class='bk"+(e.pinned?" pin":"")+(this.sel.has(e.id)?" sel":"")+"'><input type='checkbox' class='cb' data-id='"+id+"'"+(this.sel.has(e.id)?" checked":"")+"><div class='ic' style='background:"+k[1]+"22;color:"+k[1]+"'>"+(zip?BI.zip:BI.dir)+"</div>"
+      return "<div class='bk"+(e.pinned?" pin":"")+(this.sel.has(e.id)?" sel":"")+"' style='--k:"+k[1]+"'><input type='checkbox' class='cb' data-id='"+id+"'"+(this.sel.has(e.id)?" checked":"")+"><div class='ic' style='background:"+k[1]+"22;color:"+k[1]+"'>"+(zip?BI.zip:BI.dir)+"</div>"
         +"<div class='tx'><b title='"+esc(e.name)+"'>"+esc(e.note||e.name)+"</b><small><span class='kb' style='color:"+k[1]+";border-color:"+k[1]+"55'>"+k[0]+"</span>"
         +(ws.length>1&&e.world?"<span class='kb wd'>"+esc(e.world)+"</span>":"")+(this.doomed.has(e.id)?"<span class='kb dm'>"+_t("next cleanup")+"</span>":"")
         +new Date(e.mtime*1000).toLocaleString(LOC,{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})+" · "+bkAgo(e.mtime)+" · "+gb(e.size)
@@ -1226,7 +1285,10 @@ const MOONS=[["🌕",_t("Full moon"),_t("more slimes, better-equipped mobs")],["
   ["🌑",_t("New moon"),_t("darkest night, no swamp slimes")],["🌒",_t("Waxing crescent"),""],["🌓",_t("First quarter"),""],["🌔",_t("Waxing gibbous"),_t("full moon tomorrow")]];
 const SUNSVG='<svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="10.5" fill="#ffd76a"/><g stroke="#ffd76a" stroke-width="3" stroke-linecap="round">'+
   [0,45,90,135,180,225,270,315].map(a=>{const r=a*Math.PI/180,c=Math.cos(r),s=Math.sin(r);return '<line x1="'+(26+c*16)+'" y1="'+(26+s*16)+'" x2="'+(26+c*21)+'" y2="'+(26+s*21)+'"/>'}).join("")+'</g></svg>';
-const MOONSVG='<svg viewBox="0 0 52 52"><path d="M31 8a18 18 0 1 0 13 28A15 15 0 0 1 31 8z" fill="#dfe6ff"/><circle cx="22" cy="30" r="2.5" fill="#c3cbe6"/><circle cx="17" cy="21" r="1.6" fill="#c3cbe6"/></svg>';
+/* the moon as it is tonight: k 0 = full, 4 = new; waning lit on the left, waxing on the right */
+function moonSVG(k){const r=18,c=26,lit="#dfe6ff",dark="#2a3150",rx=(r*Math.abs(Math.cos(Math.PI*k/4))).toFixed(2),L=k>=1&&k<=3,
+  shape=k==0?"<circle cx='26' cy='26' r='18' fill='"+lit+"'/>":k==4?"":"<path fill='"+lit+"' d='M26 8A18 18 0 0 "+(L?0:1)+" 26 44A"+rx+" 18 0 0 "+((k==3||k==5)==L?1:0)+" 26 8z'/>";
+  return "<svg viewBox='0 0 52 52'><circle cx='26' cy='26' r='18' fill='"+dark+"' stroke='#3a4370' stroke-width='.6'/>"+shape+"</svg>"}
 const WV={w:null,
   // rx: arrival time by our own clock (minus the age of the reading), never by the server timestamp
   set(w){this.w=w&&w.t?w:null;if(this.w)this.w.rx=performance.now()-(w.age||0);$("#world").hidden=!this.w;this.draw()},
@@ -1235,15 +1297,16 @@ const WV={w:null,
   draw(){const w=this.w;if(!w)return;const t=this.ticks();
     const h=Math.floor((t/1000+6)%24),m=Math.floor(t%1000*.06);$("#w-clock").textContent=String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
     const ph=t<12000?"day":t<13000?"dusk":t<23000?"night":"dawn";$("#world").className="card wc "+ph;
-    const orb=ph=="night"?MOONSVG:SUNSVG;if($("#w-orb").dataset.k!=orb.length){$("#w-orb").innerHTML=orb;$("#w-orb").dataset.k=orb.length}
+    const ok=ph=="night"?"m"+w.moon:"s";if($("#w-orb").dataset.k!=ok){$("#w-orb").innerHTML=ph=="night"?moonSVG(w.moon||0):SUNSVG;$("#w-orb").dataset.k=ok}
     const dur=x=>{const s=x/20;return s<60?Math.round(s)+" s":Math.round(s/60)+" min"};
     const nxt=t<13000?_t("night in %s",dur(13000-t)):t<23000?_t("dawn in %s",dur(23000-t)):_t("full day in %s",dur(24000-t));
     $("#w-ph").innerHTML="<b>"+{day:_t("Day"),dusk:_t("Dusk"),night:_t("Night"),dawn:_t("Dawn")}[ph]+"</b> · "+(w.running?nxt:_t("world paused until someone plays"));
     $("#w-mark").style.left=(t/240)+"%";
     const sleep=w.thunder||(w.rain?t>=12010&&t<23992:t>=12542&&t<23460),mo=MOONS[w.moon]||MOONS[0];
-    $("#w-chips").innerHTML=(w.thunder?"<span class='wchip warn'>⛈️ "+_t("Thunderstorm")+" <small>"+_t("mobs even by day")+"</small></span>":w.rain?"<span class='wchip'>🌧️ "+_t("Rain")+"</span>":"<span class='wchip'>"+(ph=="night"?"🌙":"☀️")+" "+_t("Clear")+"</span>")
-      +"<span class='wchip' title='"+esc(mo[2])+"'>"+mo[0]+" "+mo[1]+(mo[2]&&(ph=="night"||ph=="dusk"||w.moon==7)?" <small>"+esc(mo[2])+"</small>":"")+"</span>"
-      +(sleep?"<span class='wchip sleep'>🛏️ "+_t("You can sleep")+"</span>":"")}};
+    const tile=(c,icon,label,hint)=>"<span class='wchip"+(c?" "+c:"")+"'"+(hint?" title='"+esc(hint)+"'":"")+"><i class=wi>"+icon+"</i><span>"+label+(hint?" <small>"+esc(hint)+"</small>":"")+"</span></span>";
+    $("#w-chips").innerHTML=(w.thunder?tile("warn","⛈️",_t("Thunderstorm"),_t("mobs even by day")):w.rain?tile("","🌧️",_t("Rain")):tile("",ph=="night"?"✨":"☀️",_t("Clear")))
+      +tile("",moonSVG(w.moon||0),mo[1],mo[2]&&(ph=="night"||ph=="dusk"||w.moon==7)?mo[2]:"")
+      +(sleep?tile("sleep","🛏️",_t("You can sleep")):tile("off","🛏️",_t("You cannot sleep now")))}};
 setInterval(()=>{if(WV.w&&CUR=="dash")WV.draw()},1000);
 
 /* ---------------- access: whitelist, operators, bans ---------------- */
