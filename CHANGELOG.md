@@ -38,6 +38,8 @@
 - Backups: automatic cleanup on Linux no longer fills `trash/`; files dated before 1980 no longer break every
   backup; a failed restore puts the Nether and the End back too.
 - The page reconnects after a session or proxy error instead of "Reconnecting..." forever.
+- Long RCON answers no longer shift every later answer by one command; a crashed server's session is closed in
+  the timeline; missing default skins no longer break the Players page; Docker image has a health check.
 
 Upgrading a Docker install from 1.0.0:
 - stop the Minecraft server from the panel first: the old container cannot stop it cleanly yet;
