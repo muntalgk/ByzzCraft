@@ -3,6 +3,7 @@ root = tempfile.mkdtemp(prefix="skins_test_")
 os.environ["BYZZ_DATA"] = os.path.join(root, "data")  # before importing players
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # panel folder
 import players as P
+import paths; assert paths.DATA == os.path.abspath(os.environ["BYZZ_DATA"]), "run each test file in its own process: real data at risk"
 
 OK = FAIL = 0
 def check(name, cond, extra=""):
