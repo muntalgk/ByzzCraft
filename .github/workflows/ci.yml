@@ -1,8 +1,9 @@
 name: ci
 
 # Pull requests: tests, Docker image and Windows zip are built and smoke-tested, nothing is published.
-# Every merge on main: the image goes to GHCR (:latest and :sha-xxxxxxx, amd64 and arm64), the zip is a build artifact.
-# A tag v1.2.3 also gives :1.2.3 and :1.2 and a GitHub release with the zip.
+# Every merge on main: the image goes to GHCR as :edge and :sha-xxxxxxx (amd64 and arm64), the zip is a build artifact.
+# A tag v1.2.3 gives :latest, :1.2.3 and :1.2 and a GitHub release with the zip and its SHA256SUMS
+# (panel.py update checks the zip against it).
 on:
   push:
     branches: [main]
@@ -34,8 +35,11 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/byzzcraft
+          # two channels: :latest and :1.2 / :1.2.3 are releases (tags), :edge is main between releases
+          flavor: latest=false
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=edge,enable={{is_default_branch}}
             type=sha,prefix=sha-
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -112,9 +116,10 @@ jobs:
           # the notes are the "## 1.2.3" section of CHANGELOG.md
           awk -v h="## $v" '$0 == h {on = 1; next} /^## / {on = 0} on' CHANGELOG.md > notes.md
           [ -s notes.md ] || echo "See CHANGELOG.md." > notes.md
+          sha256sum ByzzCraft-windows.zip > SHA256SUMS
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" ByzzCraft-windows.zip --clobber --repo "$GITHUB_REPOSITORY"
+            gh release upload "$GITHUB_REF_NAME" ByzzCraft-windows.zip SHA256SUMS --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$GITHUB_REF_NAME" ByzzCraft-windows.zip --title "ByzzCraft $v" --notes-file notes.md \
+            gh release create "$GITHUB_REF_NAME" ByzzCraft-windows.zip SHA256SUMS --title "ByzzCraft $v" --notes-file notes.md \
               --verify-tag --repo "$GITHUB_REPOSITORY"
           fi

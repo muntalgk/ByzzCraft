@@ -685,5 +685,18 @@
  "yesterday": "ieri",
  "yesterday %s": "ieri %s",
  "you": "tu",
- "× clear session filter": "× togli filtro sessione"
+ "× clear session filter": "× togli filtro sessione",
+ "In Docker the image is updated from outside: docker compose pull && docker compose up -d": "In Docker l'immagine si aggiorna da fuori: docker compose pull && docker compose up -d",
+ "Cannot ask GitHub for the latest release (%s).": "Non riesco a chiedere a GitHub l'ultima release (%s).",
+ "git does not run (%s).": "git non parte (%s).",
+ "Files of the panel were changed by hand (see git status): commit or stash them, then update again.": "Alcuni file del pannello sono stati modificati a mano (vedi git status): fai commit o stash, poi aggiorna di nuovo.",
+ "Release %s has no %s with its SHA256SUMS: download it by hand from GitHub.": "La release %s non ha %s con il suo SHA256SUMS: scaricala a mano da GitHub.",
+ "The downloaded zip does not match SHA256SUMS: nothing was changed.": "Lo zip scaricato non corrisponde a SHA256SUMS: non è stato cambiato niente.",
+ "The release zip has unexpected paths: nothing was changed.": "Lo zip della release ha percorsi inattesi: non è stato cambiato niente.",
+ "The release zip is damaged (%s): nothing was changed.": "Lo zip della release è danneggiato (%s): non è stato cambiato niente.",
+ "Could not replace the files (%s): the old version is back.": "Non sono riuscito a sostituire i file (%s): è tornata la versione di prima.",
+ "the new version": "la nuova versione",
+ "updated ByzzCraft to %s": "ha aggiornato ByzzCraft alla %s",
+ "Update": "Aggiorna",
+ "Download the new version and restart the panel? Minecraft keeps running. What changed: https://github.com/%s/releases/latest": "Scaricare la nuova versione e riavviare il pannello? Minecraft resta acceso. Cosa cambia: https://github.com/%s/releases/latest"
 }

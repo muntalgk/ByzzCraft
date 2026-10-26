@@ -33,6 +33,7 @@ _RULES = [
     (_WHO + r" accepted the Minecraft EULA$", "settings", "info", lambda g: (t("accepted the Minecraft EULA"), "")),
     (_WHO + r" downloaded Java (?P<v>\d+)$", "system", "info", lambda g: (t("downloaded Java %s") % g["v"], "")),
     (_WHO + r" downloaded the Minecraft assets$", "system", "info", lambda g: (t("downloaded the textures and names from Mojang"), "")),
+    (_WHO + r" updated ByzzCraft to (?P<v>[\w.-]+)$", "system", "info", lambda g: (t("updated ByzzCraft to %s") % g["v"], "")),
     (_WHO + r" started the server$", "server", "info", lambda g: (t("started the server"), "")),
     (_WHO + r" (?P<v>stopped|restarted) the server(?: \((?P<r>.*)\))?$", "server", "info",
      lambda g: (t("%s the server" % g["v"]), _reason(g["r"]))),

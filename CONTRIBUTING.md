@@ -34,6 +34,15 @@ matters, Paper or Fabric) and say in the pull request what you tried.
 - New behaviour gets a test, or an explanation of why it cannot have one.
 - Update `README.md` and `README.it.md` when users would notice the change, and add a line to `CHANGELOG.md`.
 
+## Releases
+
+1. In a pull request: `VERSION` in `panel.py` and the `## Unreleased` heading of `CHANGELOG.md` become the new
+   version (`1.2.0`), with any manual upgrade steps in that section.
+2. After the merge, tag the merge commit and push the tag: `git tag -a v1.2.0 -m "ByzzCraft 1.2.0"`, then
+   `git push origin v1.2.0`.
+3. `ci.yml` publishes `:latest`, `:1.2` and `:1.2.0` on GHCR and the GitHub release with the Windows zip, its
+   `SHA256SUMS` and that CHANGELOG section as notes. Panels then offer the update.
+
 ## Security
 
 Do not open a public issue for a vulnerability: see [SECURITY.md](SECURITY.md).

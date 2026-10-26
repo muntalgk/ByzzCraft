@@ -26,7 +26,8 @@ La versione attuale è nella [pagina delle release](https://github.com/muntalgk/
 
 - **Windows**: [ByzzCraft-windows.zip](https://github.com/muntalgk/ByzzCraft/releases/latest/download/ByzzCraft-windows.zip).
   Scompattalo e fai doppio clic su `ByzzCraft.bat`.
-- **Docker**: `ghcr.io/muntalgk/byzzcraft` (x86 e ARM, quindi va anche su un Raspberry Pi). Vedi [Docker](#docker).
+- **Docker**: `ghcr.io/muntalgk/byzzcraft` (x86 e ARM, quindi va anche su un Raspberry Pi): `:latest` è l'ultima
+  release, `:edge` segue `main`. Vedi [Docker](#docker).
 - **Linux**: clona il repository, così per aggiornare basta un `git pull`.
 
 Fuori da Docker serve Python 3.10 o successivo. Server Minecraft, Java e texture li scarica il pannello quando
@@ -135,13 +136,17 @@ Su internet usa password lunghe. Dopo 5 tentativi sbagliati un indirizzo resta b
 
 ## Aggiornare
 
-- Linux: `git pull && sudo systemctl restart byzzcraft`
-- Windows: scompatta il nuovo zip sopra la vecchia cartella (la tua `data/` non è nello zip, quindi resta), oppure
-  `git pull`; poi riavvia il pannello (gira come `pythonw.exe` se parte all'accesso)
-- Docker: `docker compose pull && docker compose up -d`
+Quando esce una nuova release, la Dashboard mostra agli admin un pulsante **Aggiorna**: installa la release e
+riavvia il pannello, mentre Minecraft resta acceso. Dalla shell è `python3 panel.py update` (poi
+`sudo systemctl restart byzzcraft` su un server).
 
-Utenti, impostazioni, backup e cache stanno in `data/` e non vengono toccati. Quando esce una nuova release la
-Dashboard lo dice agli admin.
+Funziona allo stesso modo con un clone git (passa al tag della release, e si ferma se hai modificato dei file a
+mano) e con lo zip per Windows (controlla il download con lo `SHA256SUMS` della release e sostituisce solo il
+codice). Utenti, impostazioni, backup e cache stanno in `data/` e non vengono mai toccati. Con Docker è
+`docker compose pull && docker compose up -d`; se le note di una release lo dicono, riscarica `docker-compose.yml`.
+
+Gli aggiornamenti seguono le release, non ogni modifica su `main`. Per provare quello che arriva, usa l'immagine
+Docker `:edge` oppure `git checkout main && git pull`.
 
 ## Configurazione
 

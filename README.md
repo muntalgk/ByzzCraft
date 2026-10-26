@@ -26,7 +26,8 @@ The current version is on the [releases page](https://github.com/muntalgk/ByzzCr
 
 - **Windows**: [ByzzCraft-windows.zip](https://github.com/muntalgk/ByzzCraft/releases/latest/download/ByzzCraft-windows.zip).
   Unzip it and double-click `ByzzCraft.bat`.
-- **Docker**: `ghcr.io/muntalgk/byzzcraft` (x86 and ARM, so a Raspberry Pi works too). See [Docker](#docker).
+- **Docker**: `ghcr.io/muntalgk/byzzcraft` (x86 and ARM, so a Raspberry Pi works too): `:latest` is the latest
+  release, `:edge` follows `main`. See [Docker](#docker).
 - **Linux**: clone the repository, so updating is a `git pull`.
 
 Outside Docker you need Python 3.10 or newer. The Minecraft server, Java and the textures are downloaded by the
@@ -133,13 +134,17 @@ On the internet use long passwords. Wrong logins lock an address for 15 minutes 
 
 ## Updating
 
-- Linux: `git pull && sudo systemctl restart byzzcraft`
-- Windows: unzip the new zip over the old folder (your `data/` isn't in the zip, so it stays), or `git pull`; then
-  restart the panel (it runs as `pythonw.exe` if it starts at login)
-- Docker: `docker compose pull && docker compose up -d`
+When a new release is out, the Dashboard shows an **Update** button to admins: it installs the release and restarts
+the panel, while Minecraft keeps running. From the shell it's `python3 panel.py update` (then
+`sudo systemctl restart byzzcraft` on a server).
 
-Users, settings, backups and caches live in `data/` and aren't touched. The Dashboard tells admins when a new
-release is out.
+It works the same way for a git clone (it checks out the release tag, and stops if you changed files by hand) and
+for the Windows zip (it checks the download against the release's `SHA256SUMS` and replaces only the code). Users,
+settings, backups and caches live in `data/` and are never touched. With Docker it's
+`docker compose pull && docker compose up -d`; if a release says so in its notes, download `docker-compose.yml` again.
+
+Updates follow releases, not every change on `main`. To try what's coming, use the `:edge` Docker image or
+`git checkout main && git pull`.
 
 ## Configuration
 
