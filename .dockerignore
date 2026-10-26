@@ -1,20 +1,7 @@
-.git
-.github
-data
-cache
-logs
-runtime
-backup-properties
-__pycache__
-panel-config.json
-panel-users.json
-panel.log*
-markers.json
-assets/block
-assets/item
-assets/hud
-assets/skin
-assets/lang.json
-assets/texcolors.json
-minecraft
-docs
+# Only what the image runs: a build from an install folder must not copy its data, logs or downloaded assets
+*
+!panel.py
+!byzzcraft/
+!examples/
+!LICENSE
+**/__pycache__
