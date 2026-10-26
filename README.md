@@ -13,10 +13,12 @@ start the server from my phone, see who's online and where, check inventories an
 It's plain Python with no dependencies and no database: it reads the server's own files and talks to it over RCON.
 Runs on Windows, Linux and Docker. [Leggimi in italiano](README.it.md).
 
-| | |
-|---|---|
-| ![Dashboard](docs/screenshots/dashboard.jpg) | ![Map](docs/screenshots/map.jpg) |
-| ![Settings](docs/screenshots/settings.jpg) | ![Phone](docs/screenshots/phone.jpg) |
+<p>
+  <img src="docs/screenshots/dashboard.jpg" alt="Dashboard" width="49%">
+  <img src="docs/screenshots/map.jpg" alt="Map" width="49%">
+  <img src="docs/screenshots/settings.jpg" alt="Settings" width="75%">
+  <img src="docs/screenshots/phone.jpg" alt="The dashboard on a phone" width="22%">
+</p>
 
 ## Download
 

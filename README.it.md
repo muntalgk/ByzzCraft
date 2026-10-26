@@ -13,10 +13,12 @@ accendere il server dal telefono, vedere chi è online e dove, controllare gli i
 È Python puro, senza dipendenze e senza database: legge i file del server e ci parla via RCON. Gira su Windows,
 Linux e Docker. [Read in English](README.md).
 
-| | |
-|---|---|
-| ![Dashboard](docs/screenshots/dashboard.jpg) | ![Mappa](docs/screenshots/map.jpg) |
-| ![Impostazioni](docs/screenshots/settings.jpg) | ![Telefono](docs/screenshots/phone.jpg) |
+<p>
+  <img src="docs/screenshots/dashboard.jpg" alt="Dashboard" width="49%">
+  <img src="docs/screenshots/map.jpg" alt="Mappa" width="49%">
+  <img src="docs/screenshots/settings.jpg" alt="Impostazioni" width="75%">
+  <img src="docs/screenshots/phone.jpg" alt="La dashboard sul telefono" width="22%">
+</p>
 
 ## Download
 
