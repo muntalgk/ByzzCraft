@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.0
 
 - Docker stops Minecraft cleanly before an update (no more world loss) and uses host networking.
 - Timeline shows deaths on new installs.
@@ -55,6 +55,8 @@
 - The code moved into `byzzcraft/`; `panel.py` stays in the root and data stays where it was.
 
 Upgrading a Docker install from 1.0.0:
+- `git pull` once more: `docker-compose.yml` now uses the published image, so from then on update with
+  `docker compose pull && docker compose up -d` (a folder of your own mounted in `volumes:` stays as it is);
 - stop the Minecraft server from the panel first: the old container cannot stop it cleanly yet;
 - the setup choice is now respected: if you picked "Only this machine" and open the panel from another PC, run
   `docker compose exec byzzcraft sed -i 's/"listen": "127.0.0.1"/"listen": "0.0.0.0"/' /data/panel-config.json && docker compose restart`.
