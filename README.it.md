@@ -68,7 +68,7 @@ mondi della 26.x e le cartelle separate di Nether ed End di Paper.
 
 ## Installazione
 
-Serve **Python 3.10 o successivo**. Il resto (server Minecraft, Java, texture) lo può scaricare il pannello.
+Serve **Python 3.10 o successivo**. Il resto (server Minecraft, Java, texture) lo può scaricare il pannello. Un Python più vecchio viene rifiutato con un messaggio chiaro.
 
 ### Su un server senza schermo (Linux, via SSH)
 
@@ -91,7 +91,9 @@ Aprilo nel browser **del tuo computer**. La pagina chiede la cartella del server
 la lingua, il tuo utente admin, chi può aprire il pannello (solo questa macchina o la rete di casa) e se
 accetti l'[EULA di Minecraft](https://aka.ms/MinecraftEULA). Senza codice la pagina non si apre, così nessun
 altro sulla rete può prendersi l'admin. Se il link non si apre proprio, il firewall blocca la porta:
-`sudo ufw allow 8765/tcp`. Link perso? `grep setup= data/logs/byzzcraft.log`.
+`sudo ufw allow 8765/tcp` (firewalld: `sudo firewall-cmd --permanent --add-port=8765/tcp && sudo firewall-cmd --reload`;
+su Windows con "La mia rete di casa": `netsh advfirewall firewall add rule name="ByzzCraft" dir=in action=allow protocol=TCP localport=8765`
+da un terminale come amministratore). Link perso? `grep setup= data/logs/byzzcraft.log`.
 
 Poi fai in modo che resti acceso quando chiudi SSH e dopo un riavvio (il comando stampa un'unit systemd per il
 tuo utente e la tua cartella; lancia `panel.py` col tuo utente normale, solo `tee` vuole `sudo`):
@@ -121,6 +123,7 @@ docker compose logs
 Apri il link di configurazione dei log (contiene l'IP della macchina) e lascia `/minecraft` come cartella del server.
 Il container usa la rete dell'host: su Linux funziona così. Su Docker Desktop (Windows/Mac) attivala in
 Settings > Resources > Network (Docker Desktop 4.34 o successivo).
+Se non puoi attivarla, usa l'alternativa commentata con `ports:` in `docker-compose.yml`.
 Il pannello scarica server e Java nei due volumi di `docker-compose.yml`. Per aggiornare:
 `git pull && docker compose build --pull && docker compose up -d` (Minecraft viene fermato in modo pulito prima).
 
@@ -136,6 +139,9 @@ cd byzzcraft
 python panel.py
 ```
 
+Su Windows puoi fare doppio clic su `ByzzCraft.bat`: trova Python o dice come installarlo
+(`winget install -e --id Python.Python.3.12`), e al primo avvio il pannello apre il browser da solo.
+
 Apri <http://127.0.0.1:8765> sullo stesso PC: la configurazione si apre senza codice. Per avviarlo a ogni
 accesso: `python panel.py service` (su Windows lo aggiunge a Esecuzione automatica, senza admin).
 Se `python` non si trova, usa `py panel.py`. Senza git: "Code > Download ZIP" su GitHub e decomprimi.
@@ -147,7 +153,7 @@ quindi non stanno nel repository). Se manca ancora qualcosa (Java, EULA) la **Da
 pulsante per sistemarlo. Premi **Accendi**.
 
 **Amici**: apri **Account** e aggiungi un utente per ognuno. Gli admin possono usare anche console,
-impostazioni, backup e accessi. Per farli entrare in gioco apri la porta di Minecraft: `sudo ufw allow 25565/tcp`
+impostazioni, backup e accessi. Per farli entrare in gioco apri la porta di Minecraft: `sudo ufw allow 25565/tcp` (firewalld: `sudo firewall-cmd --permanent --add-port=25565/tcp && sudo firewall-cmd --reload`)
 (su Windows: consenti Java quando Windows lo chiede, oppure da un terminale come amministratore
 `netsh advfirewall firewall add rule name="Minecraft" dir=in action=allow protocol=TCP localport=25565`),
 e inoltrala sul router se giocano da fuori casa.

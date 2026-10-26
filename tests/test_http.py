@@ -67,6 +67,13 @@ try:
     csrf = re.search(r'"csrf": "([^"]+)"', body)
     check("app page", st == 200 and csrf and "Max-Age=2592000" in h.get("set-cookie", ""), h.get("set-cookie"))
     csrf = csrf.group(1) if csrf else ""
+    nonce = re.search(r"script-src 'nonce-([\w-]+)'", h.get("content-security-policy", ""))
+    check("CSP: scripts only with this page's nonce", nonce and body.count('<script nonce="%s">' % nonce.group(1)) == 2
+          and "<script>" not in body and "unsafe-inline'; connect" not in h["content-security-policy"], h.get("content-security-policy"))
+    check("CSP: a new nonce per page", nonce and nonce.group(1) not in req("GET", "/", headers=cookie)[2]["content-security-policy"])
+    check("CSP: no scripts on the login page", "script-src 'none'" in req("GET", "/")[2]["content-security-policy"])
+    check("no HSTS on plain http", "strict-transport-security" not in h)
+    check("HSTS behind an HTTPS proxy", "strict-transport-security" in req("GET", "/", headers={"X-Forwarded-Proto": "https"})[2])
     js = dict(cookie, **{"Content-Type": "application/json"})
     check("POST without CSRF", req("POST", "/api/command", "{}", js)[0] == 403)
     st, body, _ = req("POST", "/api/command", '{"command": "list"}', dict(js, **{"X-CSRF": csrf}))

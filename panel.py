@@ -10,7 +10,10 @@ Users:            python panel.py adduser NAME [--admin]
                   python panel.py users
 Assets:           python panel.py assets [VERSION]   (textures and translations downloaded from Mojang)
 """
-import getpass, hashlib, hmac, html, ipaddress, json, logging, logging.handlers, os, queue, re, secrets, shlex, shutil, signal, socket, struct, subprocess, sys, threading, time, urllib.request
+import sys
+if sys.version_info < (3, 10):   # before the other modules: they need 3.10 and would fail with a traceback
+    sys.exit("ByzzCraft needs Python 3.10 or newer (this is %s)." % sys.version.split()[0])
+import getpass, hashlib, hmac, html, ipaddress, json, logging, logging.handlers, os, queue, re, secrets, shlex, shutil, signal, socket, struct, subprocess, threading, time, urllib.request, webbrowser
 from collections import deque
 from datetime import datetime
 from http.cookies import SimpleCookie
@@ -1284,18 +1287,55 @@ def is_local(handler):
     return from_local_proxy(handler) and not any(handler.headers.get(h) for h in PROXY_HEADERS)
 
 
+def fail_key(handler):
+    """Login lock key: the client address, an IPv6 one by its /64 (a host gets a whole /64 and could rotate in it)."""
+    ip = client_id(handler)
+    try:
+        a = ipaddress.ip_address(ip)
+        if a.version == 6 and not a.ipv4_mapped:
+            ip = str(ipaddress.ip_network(ip + "/64", strict=False))
+    except ValueError:
+        pass
+    return "c:" + ip
+
+
+RECENT_FAILS = deque(maxlen=1000)   # every wrong login, any address: many in a short time = attack from many addresses
+SLOW = threading.Lock()
+
+
+def slow_down():
+    """More than 30 wrong logins in 10 minutes overall: one attempt per second for everybody, whatever the address."""
+    now = time.time()
+    with FAIL_LOCK:
+        many = sum(1 for t in RECENT_FAILS if now - t < FAIL_WINDOW) > 30
+    if many:
+        with SLOW:
+            time.sleep(1)
+
+
+FAIL_LOCK = threading.Lock()   # FAILS, LOCKED and RECENT_FAILS: request threads change them together
+
+
 def locked(keys):
     now = time.time()
-    return any(LOCKED.get(k, 0) > now for k in keys)
+    with FAIL_LOCK:
+        return any(LOCKED.get(k, 0) > now for k in keys)
 
 
 def note_fail(keys):
     now = time.time()
-    for k in keys:
-        lst = [t for t in FAILS.get(k, []) if now - t < FAIL_WINDOW] + [now]
-        FAILS[k] = lst
-        if len(lst) >= MAX_FAILS:
-            LOCKED[k] = now + LOCK_SECONDS; FAILS[k] = []
+    with FAIL_LOCK:
+        RECENT_FAILS.append(now)
+        if len(FAILS) + len(LOCKED) > 10000:   # rotating addresses must not fill the memory: drop what has expired
+            for k in [k for k, v in FAILS.items() if not v or now - v[-1] >= FAIL_WINDOW]:
+                del FAILS[k]
+            for k in [k for k, v in LOCKED.items() if v <= now]:
+                del LOCKED[k]
+        for k in keys:
+            lst = [t for t in FAILS.get(k, []) if now - t < FAIL_WINDOW] + [now]
+            FAILS[k] = lst
+            if len(lst) >= MAX_FAILS:
+                LOCKED[k] = now + LOCK_SECONDS; FAILS[k] = []
 
 
 # ---------------------------------------------------------------- pages
@@ -1392,7 +1432,7 @@ def setup_allowed(handler, token):
     """Setup from the browser of this machine, or remotely with the code printed at start-up."""
     if is_local(handler) and host_is_literal(handler):
         return True
-    keys = ["c:" + client_id(handler)]
+    keys = [fail_key(handler)]
     if not token or locked(keys):
         return False
     if hmac.compare_digest(token, setup_token()):
@@ -1408,6 +1448,17 @@ def lan_ip():
             return so.getsockname()[0]
     except OSError:
         return "SERVER-IP"
+
+
+def lan_is_public():
+    """A VPS: the "home network" address is on the internet (Tailscale's 100.64/10 is not global)."""
+    try:
+        return ipaddress.ip_address(lan_ip()).is_global
+    except ValueError:
+        return False
+
+
+PUBLIC_WARNING = "WARNING: %s is a public address. With this choice the panel and its passwords travel unencrypted on the internet: choose the first option and use Tailscale, nginx or Caddy."
 
 
 def setup_page(error="", form=None, token="", remote=False):
@@ -1430,7 +1481,7 @@ def setup_page(error="", form=None, token="", remote=False):
 <label for=p2>%s</label><input id=p2 name=password2 type=password autocomplete=new-password required minlength=10>
 <label>%s</label>
 <label class=chk><input type=radio name=network value=""%s> %s</label>
-<label class=chk><input type=radio name=network value=1%s> %s</label>
+<label class=chk><input type=radio name=network value=1%s> %s</label>%s
 <label class=chk><input type=checkbox name=java value=1%s> %s</label>
 <label class=chk><input type=checkbox name=eula value=1> %s <a href="https://aka.ms/MinecraftEULA" target=_blank rel=noopener>EULA</a></label>
 <button type=submit>%s</button><p class=note>%s</p>%s</form></main>""" % (
@@ -1441,6 +1492,7 @@ def setup_page(error="", form=None, token="", remote=False):
         e(t("Who can open the panel")), chk(not network), e(t("Only this machine (then Tailscale, nginx or an SSH tunnel)"))
         + (" " + e(t("- from this device the panel will not open any more after the setup")) if remote else ""),
         chk(network), e(t("My home network: http://%s:%d (no HTTPS: fine at home, not on the internet)") % (lan_ip(), CFG["port"])),
+        '<p class=err>%s</p>' % e(t(PUBLIC_WARNING) % lan_ip()) if lan_is_public() else "",
         chk(f.get("java", "1") == "1"), e(t("Download Java automatically if it is missing")),
         e(t("I accept the Minecraft")), e(t("Set up the panel")), e(t("Downloads can take a minute.")), err)
     return _page(body)
@@ -1485,9 +1537,12 @@ def languages():
 
 
 # allowlist: -XX:OnError, -javaagent, @argfile, -cp... would run commands or code on the host
-JAVA_ARG_RE = re.compile(r"^(?:-XX:(?![+-]?(?:OnError|OnOutOfMemoryError|Flags|VMOptionsFile)\b)\S+|-D(?!com\.sun\.management|log4j|java\.security)[\w.-]+=\S*|-Xss\S+|-Xmn\S+|-Xlog:\S*"
+# also refused: flags that write a file anywhere (ErrorFile, HeapDumpPath, -Xlog output) or load code from a path (AOT/CRaC, Fabric's addMods)
+JAVA_ARG_RE = re.compile(r"^(?:-XX:(?![+-]?(?:OnError|OnOutOfMemoryError|Flags|VMOptionsFile|\w*(?:File|Path)|AOT\w*|CRaC\w*|ArchiveClassesAtExit|DumpLoadedClassList|StartFlightRecording|FlightRecorderOptions)\b)\S+"
+                         r"|-D(?!com\.sun\.management|log4j|java\.security|fabric\.|loader\.)[\w.-]+=\S*|-Xss\S+|-Xmn\S+"
+                         r"|-Xlog(?::[^:\s]*(?::(?:stdout|stderr|(?:file=)?[\w.%-]+)?(?::[^:\s]*(?::\S*)?)?)?)?"   # a log file only in the server folder
                          r"|--enable-native-access=\S+|--add-(?:opens|exports|modules)=\S+)$")
-JAVA_ARGS_MSG = "Java flags: one line, only -XX:, -D, -Xss, -Xmn, -Xlog:, --add-opens, --add-exports, --add-modules and --enable-native-access (RAM has its own field)."
+JAVA_ARGS_MSG = "Java flags: one line, only -XX:, -D, -Xss, -Xmn, -Xlog:, --add-opens, --add-exports, --add-modules and --enable-native-access (RAM has its own field), none that writes or loads a file."
 
 
 def save_panel_settings(data, who):
@@ -1501,7 +1556,7 @@ def save_panel_settings(data, who):
     if len(args) > 500 or "\n" in args or "\r" in args:
         raise ValueError(t(JAVA_ARGS_MSG))
     try:
-        toks = shlex.split(args)   # on Windows too: here it only has to find unclosed quotes
+        toks = shlex.split(args, posix=os.name != "nt")   # as launch_cmd splits them: on Windows a posix split would drop the \ of ..\ before the check
     except ValueError:
         raise ValueError(t("Java flags: a quote is not closed."))
     if args != (CFG.get("java_args") or "").strip() and not all(JAVA_ARG_RE.match(x) for x in toks):   # flags already in the config file: do not block saving the RAM
@@ -1674,6 +1729,10 @@ ExecStart="%s" "%s"
 Restart=on-failure
 # Minecraft runs in its own session: it keeps running when the panel restarts
 KillMode=process
+# no sudo/setuid from the panel or Minecraft; /usr, /boot and /etc read-only (the server folder stays writable).
+# No PrivateTmp: Java outlives a panel restart (KillMode=process) and would lose its /tmp
+NoNewPrivileges=yes
+ProtectSystem=full
 
 [Install]
 WantedBy=multi-user.target
@@ -1774,7 +1833,7 @@ def fix_health(cid, who):
     return True
 
 
-def app_page(sess):
+def app_page(sess, nonce):
     with open(os.path.join(HERE, "app.html"), encoding="utf-8") as f:
         tpl = f.read()
     boot = {"user": sess["user"], "admin": sess["admin"], "csrf": sess["csrf"], "title": CFG["title"],
@@ -1784,8 +1843,8 @@ def app_page(sess):
     tpl = tpl.replace("{{TITLE}}", html.escape(CFG["title"])).replace("{{LANG}}", i18n.LANG)
     tpl = tpl.replace("{{LOGO}}", LOGO_SVG).replace("{{ICON}}", LOGO_ICON)
     # {{text}} in the static HTML: translated here; JavaScript uses _t("text")
-    tpl = re.sub(r"\{\{([^{}]+)\}\}", lambda m: m.group(0) if m.group(1) == "BOOT" else html.escape(t(m.group(1))), tpl)
-    return tpl.replace("{{BOOT}}", json.dumps(boot).replace("</", "<\\/")).encode()
+    tpl = re.sub(r"\{\{([^{}]+)\}\}", lambda m: m.group(0) if m.group(1) in ("BOOT", "NONCE") else html.escape(t(m.group(1))), tpl)
+    return tpl.replace("{{NONCE}}", nonce).replace("{{BOOT}}", json.dumps(boot).replace("</", "<\\/")).encode()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1808,12 +1867,21 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def https(self):
+        """The browser speaks HTTPS to a local proxy (nginx, Caddy, Tailscale Serve)."""
+        h = self.headers
+        return from_local_proxy(self) and (h.get("X-Forwarded-Proto", "").lower() == "https" or bool(h.get("Tailscale-User-Login")))
+
     def security_headers(self):
+        if self.https():
+            self.send_header("Strict-Transport-Security", "max-age=31536000")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
-                         "connect-src 'self'; img-src 'self' data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'")
+        # scripts only with this response's nonce: HTML slipped into the page (a player's chat line) cannot run
+        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src %s; "
+                         "connect-src 'self'; img-src 'self' data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'"
+                         % ("'nonce-%s'" % self.nonce if self.nonce else "'none'"))
 
     def send_file(self, path, name):
         try:
@@ -1884,6 +1952,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def safe(self, fn):
         """A malformed request gets a 400 instead of a connection closed without an answer."""
+        self.nonce = None   # per request: a kept-alive connection reuses this handler
         try:
             fn()
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
@@ -1898,9 +1967,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def cookie(self, value, max_age):
         # Secure only if the browser speaks HTTPS to a local proxy: on http://home-IP the cookie would be dropped
-        h = self.headers
-        https = from_local_proxy(self) and (h.get("X-Forwarded-Proto", "").lower() == "https" or bool(h.get("Tailscale-User-Login")))
-        secure = "; Secure" if https else ""
+        secure = "; Secure" if self.https() else ""
         return "sess=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=%d%s" % (value, max_age, secure)
 
     # ------------------------------------------------ GET
@@ -1920,7 +1987,8 @@ class Handler(BaseHTTPRequestHandler):
             if not s:
                 return self.send(200, login_page())
             tok = SimpleCookie(self.headers.get("Cookie", ""))["sess"].value   # the cookie starts again from 30 days too
-            return self.send(200, app_page(s), headers={"Set-Cookie": self.cookie(tok, SESSION_SECONDS)})
+            self.nonce = secrets.token_urlsafe(16)
+            return self.send(200, app_page(s, self.nonce), headers={"Set-Cookie": self.cookie(tok, SESSION_SECONDS)})
         if path == "/manifest.webmanifest":
             return self.send(200, json.dumps({"name": CFG["title"], "short_name": CFG["title"], "start_url": "/", "display": "standalone",
                                               "background_color": "#0d0f13", "theme_color": "#0d0f13",
@@ -2091,8 +2159,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.first_setup()
         if self.path == "/login":
             f = self.form()
-            user = f.get("user", "").strip().lower(); keys = ["c:" + client_id(self)]   # not by name: anyone could lock out "admin"
+            user = f.get("user", "").strip().lower(); keys = [fail_key(self)]   # not by name: anyone could lock out "admin"
             if locked(keys):
+                return self.send(429, login_page(t("Too many attempts: try again in 15 minutes.")))
+            slow_down()
+            if locked(keys):   # again: parallel attempts queued in slow_down() while this address got locked
                 return self.send(429, login_page(t("Too many attempts: try again in 15 minutes.")))
             u = check_pw(user, f.get("password", ""))
             if not u:
@@ -2517,6 +2588,13 @@ def main():
         L.info("ByzzCraft is not set up yet.\n  From your computer open:  http://%s:%d/?setup=%s\n  On this machine:          http://127.0.0.1:%d\n"
                "  Page does not open? %s (a Tailscale IP of this machine works the same way)",
                lan_ip(), port, setup_token(), port, fw)
+        # a desktop (not a service, not Docker, not SSH without a screen): open the setup page in the browser
+        if (os.name == "nt" or os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")) \
+                and not os.environ.get("INVOCATION_ID") and not os.path.exists("/.dockerenv"):
+            threading.Thread(target=webbrowser.open, args=("http://127.0.0.1:%d" % port,), daemon=True).start()
+    elif listen in ("0.0.0.0", "::") and lan_is_public():
+        L.warning("%s is a public address: the panel is on the internet without HTTPS. Set \"listen\": \"127.0.0.1\" in %s "
+                  "and use Tailscale, nginx or Caddy (see the README).", lan_ip(), CONFIG_PATH)
     if os.getpid() == 1:   # Docker: PID 1 ignores SIGTERM without a handler, so docker stop would SIGKILL Java after 10 s
         def on_term(signum, frame):
             SHUTTING_DOWN.set()

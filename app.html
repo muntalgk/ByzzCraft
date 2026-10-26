@@ -684,8 +684,8 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
   </main>
 </div>
 <div id="toasts"></div>
-<script>const BOOT={{BOOT}};</script>
-<script>
+<script nonce="{{NONCE}}">const BOOT={{BOOT}};</script>
+<script nonce="{{NONCE}}">
 "use strict";
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const _t=(s,...a)=>{let i=0;return (BOOT.i18n[s]||s).replace(/%s/g,()=>a[i++])};
@@ -786,7 +786,10 @@ function renderStatus(){const s=S.status;if(BOOT.admin&&BK.st)BK.renderStatus();
   shown.forEach((n,i)=>{const c=document.createElement("span");c.className="chip";c.innerHTML="<span class=av style='background:"+AVC[[...n].reduce((a,ch)=>a+ch.charCodeAt(0),0)%AVC.length]+"'>"+esc(n[0].toUpperCase())+"</span>"+esc(n);pl.append(c)});
   if(ps.length>shown.length){const c=document.createElement("button");c.className="chip plain more-pl";c.textContent=_t("+%s more",ps.length-shown.length);c.onclick=()=>go("players");pl.append(c)}
   const up=s.state=="on"||s.state=="stopping";$("#b-start").hidden=up;$("#b-stop").hidden=$("#b-restart").hidden=!up;
-  $("#b-kill").hidden=!BOOT.admin||s.state=="off"||s.state=="starting"&&s.backup_progress!=null;$("#b-start").disabled=s.state!="off";$("#b-stop").disabled=s.state!="on";$("#b-restart").disabled=s.state!="on";
+  /* force stop only when the server does not answer: a stop or start taking over 30 s, or a stop RCON refused */
+  if(s.state=="stopping"||s.state=="starting"&&s.backup_progress==null){if(!S.slowT){S.slowT=Date.now();setTimeout(renderStatus,30500)}}else S.slowT=0;
+  if(s.state=="off")S.stopFailed=false;
+  $("#b-kill").hidden=!BOOT.admin||!(S.stopFailed&&s.state=="on"||S.slowT&&Date.now()-S.slowT>30000);$("#b-start").disabled=s.state!="off";$("#b-stop").disabled=s.state!="on";$("#b-restart").disabled=s.state!="on";
   $("#banner").classList.toggle("show",!!s.props_changed&&s.state=="on"&&BOOT.admin);
   document.title=(s.state=="on"?"● ":"")+BOOT.title;
   const pill=$("#srv-pill");pill.className="srv-pill "+s.state;pill.querySelector(".st").innerHTML="<b>"+(STATE[s.state]||s.state)+"</b>"+(s.state=="on"?" · "+s.online:"");pill.title=(s.state=="on"?_t("%s online",s.online)+" · ":"")+_t("click to copy the address");
@@ -863,7 +866,8 @@ function ask(title,text,ok,o={}){return new Promise(res=>{const bg=document.crea
     kd=e=>{if(e.key=="Escape")done(null);if(e.key=="Enter"&&inp&&e.target==inp)done(val())};
   document.addEventListener("keydown",kd);bg.querySelector("[data-x]").onclick=()=>done(null);bg.querySelector("[data-ok]").onclick=()=>done(val());bg.onclick=e=>{if(e.target==bg)done(null)};
   setTimeout(()=>(inp||bg.querySelector("[data-ok]")).focus(),30)})}
-async function act(path,msg,label,primary){if(msg&&!await ask(label,msg,label,{primary}))return;const j=await api(path);toast(j.message,j.ok?"good":"bad")}
+async function act(path,msg,label,primary){if(msg&&!await ask(label,msg,label,{primary}))return;const j=await api(path);toast(j.message,j.ok?"good":"bad");
+  if(!j.ok&&/stop|restart/.test(path)&&S.status.state=="on"){S.stopFailed=true;renderStatus()}}
 $("#b-start").onclick=()=>act("/api/start");
 $("#b-stop").onclick=()=>act("/api/stop",S.status.online?_t("%s players are online. Stop anyway?",S.status.online):_t("Stop the server?"),_t("Stop"));
 $("#b-kill").onclick=()=>act("/api/kill",_t("Force stop? Java is closed right away: the last minutes of play may be lost. Use it only if the server does not respond."),_t("Force stop"));
@@ -980,20 +984,23 @@ function hudRow(kind,val,max,extra){const n=10;let h="";const hc=P.hardcore&&kin
   if(kind=="heart"&&extra>0)for(let i=0;i<Math.ceil(extra/2);i++)h+="<img src='/hud/heart_absorbing_"+hc+(extra-i*2>=2?"full":"half")+".png'>";
   return "<div class='hud "+kind+"'>"+h+"</div>"}
 const SLOT_PH={head:"empty_armor_slot_helmet",chest:"empty_armor_slot_chestplate",legs:"empty_armor_slot_leggings",feet:"empty_armor_slot_boots",offhand:"empty_armor_slot_shield"};
-function slotHTML(it,ph,sel){if(!it)return "<div class='slot"+(sel?" sel":"")+"'>"+(ph?"<img class=ph src='/icon/"+ph+".png?v=5' onerror=\"this.remove()\">":"")+"</div>";
+function slotHTML(it,ph,sel){if(!it)return "<div class='slot"+(sel?" sel":"")+"'>"+(ph?"<img class=ph src='/icon/"+ph+".png?v=5'>":"")+"</div>";
   const tip=encodeURIComponent(JSON.stringify({n:it.name,e:it.ench,g:it.glint,d:it.dmg,m:it.max,id:it.id,c:it.count}));
   const dur=it.max&&it.dmg>0?"<div class=dur><b style='width:"+(100*(1-it.dmg/it.max))+"%;background:hsl("+Math.round(120*(1-it.dmg/it.max))+",90%,45%)'></b></div>":"";
   const glint=it.glint?"<div class=glint style=\"-webkit-mask-image:url('/icon/"+esc(it.id)+".png?v=5');mask-image:url('/icon/"+esc(it.id)+".png?v=5')\"></div>":"";
   const liq=it.tint?"<div class=liq style='background-color:"+esc(it.tint)+"'></div>":"";
-  return "<div class='slot"+(sel?" sel":"")+"' data-tip='"+tip+"'>"+liq+"<img src='/icon/"+esc(it.id)+".png?v=5' alt='"+esc(it.name.slice(0,10))+"' onerror='icoErr(this)'>"+glint+dur+(it.count>1?"<span class=cnt>"+it.count+"</span>":"")+"</div>"}
+  return "<div class='slot"+(sel?" sel":"")+"' data-tip='"+tip+"'>"+liq+"<img src='/icon/"+esc(it.id)+".png?v=5' alt='"+esc(it.name.slice(0,10))+"'>"+glint+dur+(it.count>1?"<span class=cnt>"+it.count+"</span>":"")+"</div>"}
 /* a failed icon gets one more try (a phone can drop image loads), then its name */
 function icoErr(i){if(!i.dataset.r){i.dataset.r=1;setTimeout(()=>i.src+="&r=1",800)}else i.outerHTML="<div class=fb>"+esc(i.alt)+"</div>"}
+/* not an onerror attribute: the CSP allows only the page's own scripts (error does not bubble: capture) */
+document.addEventListener("error",e=>{const i=e.target;if(!i.matches)return;
+  if(i.matches(".slot>img.ph"))i.remove();else if(i.matches(".slot>img"))icoErr(i);else if(i.matches("li>img"))i.style.visibility="hidden"},true);
 /* only when it changed: rewriting the same inventory on every live update reloads every icon */
 function setHTML(el,h){if(el._h!==h){el._h=h;el.innerHTML=h}}
 function invGrid(items,slots,sel){const by={};items.forEach(i=>by[i.slot]=i);return slots.map(s=>s==="gap"?"<div class=gap></div>":slotHTML(by[s],null,s===sel)).join("")}
 function range(a,b){const r=[];for(let i=a;i<=b;i++)r.push(i);return r}
 function dur2(sec){const d=Math.floor(sec/86400),h=Math.floor(sec%86400/3600),m=Math.floor(sec%3600/60);return d?_t("%s d %s h",d,h):h?h+" h "+m+" min":m+" min"}
-function topList(title,rows){return "<div><h4>"+title+"</h4><ol>"+(rows.length?rows.map(r=>"<li><img src='/icon/"+r[2]+".png?v=5' onerror=\"this.style.visibility='hidden'\">"+esc(r[0])+"<span>"+r[1].toLocaleString(LOC)+"</span></li>").join(""):"<li style='color:var(--mute)'>"+_t("none")+"</li>")+"</ol></div>"}
+function topList(title,rows){return "<div><h4>"+title+"</h4><ol>"+(rows.length?rows.map(r=>"<li><img src='/icon/"+r[2]+".png?v=5'>"+esc(r[0])+"<span>"+r[1].toLocaleString(LOC)+"</span></li>").join(""):"<li style='color:var(--mute)'>"+_t("none")+"</li>")+"</ol></div>"}
 function renderPlayer(first){const d=P.cur;if(!d)return;const box=$("#pl-detail");
   if(first||!$("#scene")){box.innerHTML="<div class='card'><div class=pl-head><div><h2 id=pl-name></h2><div class=pl-meta id=pl-meta></div></div><div class=pos id=pl-pos></div></div>"+
     "<div class=pl-top><div class=viewer id=viewer><div class=shadow></div><div class=scene id=scene></div><div class=hint>"+_t("drag to rotate")+"</div></div><div class=vitals id=pl-vitals></div></div></div>"+
@@ -1003,7 +1010,7 @@ function renderPlayer(first){const d=P.cur;if(!d)return;const box=$("#pl-detail"
     v.onpointerdown=e=>{P.drag={x:e.clientX,r:P.rot};v.setPointerCapture(e.pointerId)};v.onpointermove=e=>{if(P.drag)P.rot=P.drag.r+(e.clientX-P.drag.x)*.6};v.onpointerup=v.onpointercancel=()=>P.drag=null}
   $("#pl-name").innerHTML=esc(d.name)+(d.dead?" <span class='badge dead'>"+_t("DEAD")+"</span>":d.live?" <span class='badge live'>"+_t("LIVE")+"</span>":d.online?" <span class='badge live'>"+_t("ONLINE")+"</span>":" <span class=badge>"+_t("OFFLINE")+"</span>");
   $("#pl-meta").textContent=(GM[d.gamemode]||"")+" · "+(d.live?_t("updated %s",ago(d.saved)):_t("last saved %s",ago(d.saved)))+(d.stats&&d.stats.summary?" · "+(d.stats.summary.deaths?_t("last death %s of play ago",dur2(d.stats.summary.since_death)):_t("never died")):"");
-  $("#pl-pos").innerHTML=(DIM[d.dim]||d.dim)+"<br><b>"+(d.pos||[]).map(v=>Math.floor(v)).join("  ")+"</b>"+(d.last_death?"<br><span style='color:var(--mute)'>"+_t("last death %s",d.last_death.join(" "))+"</span>":"");
+  $("#pl-pos").innerHTML=esc(DIM[d.dim]||d.dim)+"<br><b>"+(d.pos||[]).map(v=>Math.floor(v)).join("  ")+"</b>"+(d.last_death?"<br><span style='color:var(--mute)'>"+esc(_t("last death %s",d.last_death.join(" ")))+"</span>":"");
   const fx=(d.effects||[]).map(e=>"<span class='chip plain'>"+esc(e.name)+(e.amp?" "+["","II","III","IV","V"][e.amp]||"":"")+" · "+(e.dur<0?"∞":Math.floor(e.dur/1200)+":"+String(Math.floor(e.dur/20)%60).padStart(2,"0"))+"</span>").join("");
   $("#pl-vitals").innerHTML="<div class=vrow><span class=lbl>"+_t("Health")+"</span>"+hudRow("heart",d.health,20,d.absorption)+"<span class=num>"+nf(d.health/2,1)+" ❤"+(d.absorption?" +"+nf(d.absorption/2,1):"")+"</span></div>"+
     "<div class=vrow><span class=lbl>"+_t("Food")+"</span>"+hudRow("food",d.food,20)+"<span class=num>"+d.food+"/20 · "+_t("saturation %s",nf(d.saturation,1))+"</span></div>"+

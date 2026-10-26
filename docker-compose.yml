@@ -8,6 +8,10 @@ services:
     # choice "this machine only / home network" works as without Docker. Panel on 8765, Minecraft on 25565.
     # On Docker Desktop (Windows/Mac) enable it in Settings > Resources > Network (Docker Desktop 4.34 or newer).
     network_mode: host
+    # Docker Desktop without host networking: remove the network_mode line above and use these instead.
+    # The panel then sees the Docker gateway, not your browser's address, so set up with the code from the logs.
+    # ports: ["8765:8765", "25565:25565"]
+    # environment: [BYZZ_LISTEN=0.0.0.0]
     # docker compose down / updates stop Minecraft first: the grace period gives it time to save the world
     stop_grace_period: 2m
     volumes:
