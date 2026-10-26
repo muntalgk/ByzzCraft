@@ -9,6 +9,7 @@ Users:            python panel.py adduser NAME [--admin]
                   python panel.py deluser NAME
                   python panel.py users
 Assets:           python panel.py assets [VERSION]   (textures and translations downloaded from Mojang)
+Update:           python panel.py update   (to the latest release; in Docker: docker compose pull)
 """
 import sys
 if sys.version_info < (3, 10):   # before the other modules: they need 3.10 and would fail with a traceback
@@ -33,6 +34,7 @@ from byzzcraft import access as AC  # noqa: E402
 from byzzcraft import activity as ACT  # noqa: E402
 from byzzcraft import assets as AS  # noqa: E402
 from byzzcraft import runtime as RT  # noqa: E402
+from byzzcraft import updater as UP  # noqa: E402
 from byzzcraft import i18n  # noqa: E402
 from byzzcraft.i18n import t  # noqa: E402
 from byzzcraft.sysinfo import NCPU, ProcSampler, listening_pid, pid_alive, system_memory, system_times  # noqa: E402
@@ -1700,6 +1702,19 @@ def download_java():
         job("java", run)
 
 
+def do_update(who):
+    """Dashboard button: the latest release (git checkout of its tag, or its zip), then the panel restarts by itself."""
+    def run():
+        new = UP.update(HERE, REPO, VERSION, log=L.info)   # an UpdateError's message ends up in the Dashboard checks
+        if not new:
+            return
+        log("%s updated ByzzCraft to %s" % (who, new))
+        while SRV.state in ("starting", "stopping") or backup_busy() or OP_PENDING.is_set():
+            time.sleep(5)   # as after the assets: a restart now would lose a start, a backup or a restore in progress
+        restart_soon()   # the new code runs only in a new process (Minecraft keeps running)
+    job("update", run)
+
+
 STARTUP_CMD = os.path.join(os.environ.get("APPDATA", ""), "Microsoft", "Windows", "Start Menu", "Programs", "Startup", "ByzzCraft.cmd")
 SERVICE_HINT = ('"%s" "%s" service' % (sys.executable, os.path.join(HERE, "panel.py")) if os.name == "nt" else
                 "cd %s && %s panel.py service | sudo tee /etc/systemd/system/byzzcraft.service"
@@ -1775,11 +1790,12 @@ def health():
         checks.append(("disk", False, t("Little disk space left: %s free, the biggest backup is %s. Delete old backups or lower how many to keep.")
                        % (BK.mb(free), BK.mb(max(sizes))), None))
     if UPDATE.get("newer"):
-        checks.append(("update", False, t("ByzzCraft %s is available (you have %s).") % (UPDATE["latest"], VERSION), None))
+        checks.append(("update", False, t("ByzzCraft %s is available (you have %s).") % (UPDATE["latest"], VERSION),
+                       None if UP.kind(HERE) == "docker" else "update"))
     out = []
     for cid, ok, text, fix in checks:
         if cid in JOBS:
-            what = {"java": "Java", "assets": t("textures and names from Mojang")}.get(cid, cid)
+            what = {"java": "Java", "assets": t("textures and names from Mojang"), "update": t("the new version")}.get(cid, cid)
             ok, text = False, (t("Downloading %s...") % what if JOBS[cid] == "running" else t("Download of %s failed: %s") % (what, JOBS[cid]))
         if not ok:
             out.append({"id": cid, "text": text, "fix": None if JOBS.get(cid) == "running" else fix,
@@ -1789,9 +1805,9 @@ def health():
 
 UPDATE = {}   # latest release on GitHub: {"latest": "1.1.0", "newer": True}
 UPDATE_HINT = ("docker compose pull && docker compose up -d   (in the folder with docker-compose.yml)" if os.path.exists("/.dockerenv") else
-               "https://github.com/%s/releases/latest" % REPO if not os.path.isdir(os.path.join(HERE, ".git")) else
-               'git -C "%s" pull, then restart the panel' % HERE if os.name == "nt" else
-               "cd %s && git pull && " % shlex.quote(HERE) + ("sudo systemctl restart byzzcraft" if os.environ.get("INVOCATION_ID") else "restart the panel"))
+               '"%s" "%s" update' % (sys.executable, os.path.join(HERE, "panel.py")) if os.name == "nt" else
+               "cd %s && %s panel.py update" % (shlex.quote(HERE), sys.executable)
+               + (" && sudo systemctl restart byzzcraft" if os.environ.get("INVOCATION_ID") else ", then restart the panel"))
 
 
 def _vtuple(v):
@@ -1827,6 +1843,8 @@ def fix_health(cid, who):
         with open(os.path.join(sd, "eula.txt"), "w", encoding="utf-8") as f:
             f.write("# accepted in ByzzCraft by %s (https://aka.ms/MinecraftEULA)\neula=true\n" % who)
         log("%s accepted the Minecraft EULA" % who)
+    elif cid == "update" and UP.kind(HERE) != "docker":
+        do_update(who)
     elif cid in ("rcon", "script"):
         prepare_server(sd, False)
     else:
@@ -2491,6 +2509,16 @@ def cli(args):
         if not need:
             sys.exit("cannot tell which Java the server in %s needs: pass it, e.g.  panel.py java 25" % CFG["server_dir"])
         return RT.install(need)
+    if cmd == "update":
+        try:
+            new = UP.update(HERE, REPO, VERSION)
+        except UP.UpdateError as e:
+            sys.exit(str(e))
+        if not new:
+            return print("ByzzCraft %s is the latest release." % VERSION)
+        log("panel updated ByzzCraft to %s" % new)
+        print("Updated to %s. Restart the panel%s." % (new, ": sudo systemctl restart byzzcraft" if os.name != "nt" else ""))
+        return
     if cmd == "service":
         return service()
     if cmd == "setup":

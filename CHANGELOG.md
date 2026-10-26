@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Update from the Dashboard (an **Update** button when a release is out) or with `panel.py update`: a git clone
+  moves to the release tag, the Windows zip is checked against the release's `SHA256SUMS` and only the code is
+  replaced (files a release dropped go too), Docker points to `docker compose pull`. The panel restarts, Minecraft
+  keeps running.
+- Releases carry a `SHA256SUMS` next to the Windows zip.
+- Docker: `:latest` is now the latest release; builds of `main` are `:edge`.
+
 ## 1.1.0
 
 - Docker stops Minecraft cleanly before an update (no more world loss) and uses host networking.

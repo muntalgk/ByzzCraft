@@ -23,6 +23,7 @@ CASES = [
     ("admin accepted the Minecraft EULA", "settings", "admin", "accepted the Minecraft EULA"),
     ("panel downloaded Java 25", "system", "panel", "downloaded Java 25"),
     ("panel downloaded the Minecraft assets", "system", "panel", "downloaded the textures"),
+    ("admin updated ByzzCraft to 1.2.0", "system", "admin", "updated ByzzCraft to 1.2.0"),
     ("java error: no Java 25 for linux/riscv", "system", None, "Java error"),
     ("panel (restart) started the server", "server", "panel", "started the server"),
     ("panel stopped the server (empty for 30 minutes)", "server", "panel", "stopped the server"),
