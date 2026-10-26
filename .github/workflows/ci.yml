@@ -100,6 +100,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: ByzzCraft-windows
@@ -107,8 +108,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          v="${GITHUB_REF_NAME#v}"
+          # the notes are the "## 1.2.3" section of CHANGELOG.md
+          awk -v h="## $v" '$0 == h {on = 1; next} /^## / {on = 0} on' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "See CHANGELOG.md." > notes.md
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" ByzzCraft-windows.zip --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$GITHUB_REF_NAME" ByzzCraft-windows.zip --generate-notes --verify-tag --repo "$GITHUB_REPOSITORY"
+            gh release create "$GITHUB_REF_NAME" ByzzCraft-windows.zip --title "ByzzCraft $v" --notes-file notes.md \
+              --verify-tag --repo "$GITHUB_REPOSITORY"
           fi
