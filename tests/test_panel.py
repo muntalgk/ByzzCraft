@@ -152,8 +152,10 @@ try:
               "-Dcom.sun.management.jmxremote.port=9010", "-Dlog4j.configurationFile=x", "-Djava.security.manager=x",
               # files written or loaded anywhere
               "-XX:HeapDumpPath=/home/a/.bashrc", "-XX:ErrorFile=x", "-XX:SharedArchiveFile=x.jsa", "-XX:AOTCache=x", "-XX:CRaCRestoreFrom=x",
-              "-Xlog:gc:file=/etc/x", "-Xlog:gc:/tmp/x", "-Xlog:gc:file=..\\x", "-Dfabric.addMods=/x.jar", "-Dloader.addMods=x",
-              "-XX:ArchiveClassesAtExit=x", "-XX:StartFlightRecording:filename=/x.jfr", "-XX:FlightRecorderOptions=repository=/x"):
+              "-Xlog:gc:file=/etc/x", "-Xlog:gc:/tmp/x", "-Dfabric.addMods=/x.jar", "-Dloader.addMods=x",
+              "-XX:ArchiveClassesAtExit=x", "-XX:StartFlightRecording:filename=/x.jfr", "-XX:FlightRecorderOptions=repository=/x") + (
+              # Windows keeps the \ when it launches Java; on Linux it is an escape and the flag becomes a harmless ..x
+              ("-Xlog:gc:file=..\\x",) if os.name == "nt" else ()):
         try:
             save(a); good = True
         except ValueError:
