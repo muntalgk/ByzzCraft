@@ -97,6 +97,24 @@ try:
     check("password change", st == 200 and json.loads(body)["ok"], body)
     check("other session of the user: 401", req("GET", "/api/health", headers=bob2)[0] == 401)
     check("session that changed it: still valid", req("GET", "/api/health", headers=bob)[0] == 403)
+    # connection cap: 100 idle connections fill it, the next one is closed, and it frees up when they go
+    idle = [socket.create_connection(("127.0.0.1", port), timeout=5) for _ in range(100)]
+    time.sleep(0.5)
+    try:
+        refused = req("GET", "/manifest.webmanifest")[0] != 200
+    except (OSError, http.client.HTTPException):
+        refused = True
+    check("connection cap: the 101st is closed", refused)
+    for so in idle:
+        so.close()
+    back = False
+    for _ in range(50):
+        try:
+            back = req("GET", "/manifest.webmanifest")[0] == 200
+            break
+        except (OSError, http.client.HTTPException):
+            time.sleep(0.1)
+    check("connection cap: free again after they close", back)
     # last: it also locks the address 127.0.0.1
     codes = [login("nessuno", "x")[0] for _ in range(6)]
     check("lock after 5 attempts", codes == [401] * 4 + [429] * 2, codes)   # the first wrong one is admin's, above

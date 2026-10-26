@@ -30,5 +30,6 @@ the advisory credits you unless you prefer otherwise.
   setup from another PC: on a network you do not trust, set up from the machine itself or with
   `panel.py setup` over SSH.
 - Two-factor login.
-- Many users at once: the built-in server is meant for a few users. Exposed directly on the internet, many slow
-  connections can tie it up, so put nginx, Caddy or Tailscale in front.
+- Many users at once: the built-in server takes at most 100 connections and drops one that sends nothing for
+  30 seconds, so slow connections cannot use up the machine; but a stranger can still fill those 100 and keep the
+  panel busy. Exposed on the internet, put nginx, Caddy or Tailscale in front.
