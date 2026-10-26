@@ -1,6 +1,6 @@
 import io, json, os, shutil, sys, tarfile, tempfile, zipfile
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # panel folder
-import runtime as RT
+from byzzcraft import runtime as RT
 
 OK = FAIL = 0
 def check(name, cond, extra=""):

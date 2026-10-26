@@ -4,9 +4,9 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # panel folder
-import i18n  # noqa: E402
-import activity as R  # noqa: E402
-from access import VERBS  # noqa: E402
+from byzzcraft import i18n  # noqa: E402
+from byzzcraft import activity as R  # noqa: E402
+from byzzcraft.access import VERBS  # noqa: E402
 
 TS = "2026-10-21 17:00:00  "
 # (panel.log line, category, user, start of the text)

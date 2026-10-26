@@ -10,9 +10,9 @@ Thanks for helping! Bug reports, translations and pull requests are welcome.
 - **No Mojang files in the repository** (textures, sounds, language files, jars). The panel downloads them on
   the user's machine.
 - **Interface texts in English**, wrapped in `t("...")` in Python, `{{...}}` in the HTML and `_t("...")` in the
-  JavaScript. Add the Italian line to `i18n/it.json`; a new language is a new `i18n/<code>.json`.
+  JavaScript. Add the Italian line to `byzzcraft/i18n/it.json`; a new language is a new `byzzcraft/i18n/<code>.json`.
 - **Code and comments in English.** Comment the why, not the what.
-- **Lines the panel writes to `panel.log`** (the activity log) are parsed by `activity.py`: if you add or change a
+- **Lines the panel writes to `panel.log`** (the activity log) are parsed by `byzzcraft/activity.py`: if you add or change a
   `log(...)`, add its rule there and a case in `tests/test_activity.py`.
 
 ## Tests

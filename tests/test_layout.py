@@ -1,6 +1,6 @@
 import os, shutil, sys, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # panel folder
-import players as P
+from byzzcraft import players as P
 
 OK = FAIL = 0
 def check(name, cond, extra=""):

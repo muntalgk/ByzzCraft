@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="ByzzCraft logo" width="128">
+  <img src="byzzcraft/static/logo.svg" alt="ByzzCraft logo" width="128">
 </p>
 
 <h1 align="center">ByzzCraft</h1>
@@ -285,8 +285,8 @@ The panel talks only to these services, and only to fetch things; it sends no da
 
 ## Translations
 
-Texts in the code are English. `i18n/it.json` maps them to Italian; a new language is a new
-`i18n/<code>.json` with the same keys (missing entries fall back to English).
+Texts in the code are English. `byzzcraft/i18n/it.json` maps them to Italian; a new language is a new
+`byzzcraft/i18n/<code>.json` with the same keys (missing entries fall back to English).
 
 ## Tests and contributing
 

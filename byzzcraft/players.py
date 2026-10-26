@@ -1,7 +1,7 @@
 """Player data for the panel: NBT from the files, SNBT from RCON, statistics, icons and skins."""
 import base64, gzip, json, os, re, shutil, struct, threading, time, urllib.request
 
-from paths import ASSETS, CACHE  # noqa: E402
+from .paths import ASSETS, CACHE  # noqa: E402
 UA = "byzzcraft (+https://github.com/muntalgk/byzzcraft)"
 
 

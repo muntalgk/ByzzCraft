@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="Logo di ByzzCraft" width="128">
+  <img src="byzzcraft/static/logo.svg" alt="Logo di ByzzCraft" width="128">
 </p>
 
 <h1 align="center">ByzzCraft</h1>
@@ -269,8 +269,8 @@ Il pannello parla solo con questi servizi, e solo per scaricare; non invia dati 
 
 ## Traduzioni
 
-I testi nel codice sono in inglese. `i18n/it.json` li associa all'italiano; una nuova lingua è un nuovo
-`i18n/<codice>.json` con le stesse chiavi (le voci mancanti ricadono sull'inglese).
+I testi nel codice sono in inglese. `byzzcraft/i18n/it.json` li associa all'italiano; una nuova lingua è un nuovo
+`byzzcraft/i18n/<codice>.json` con le stesse chiavi (le voci mancanti ricadono sull'inglese).
 
 ## Contribuire
 

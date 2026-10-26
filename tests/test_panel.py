@@ -18,7 +18,7 @@ try:
     with open(j(root, "data", "panel-config.json"), "w") as f:
         json.dump({"server_dir": srv_dir}, f)
     import panel
-    import paths; assert paths.DATA == os.path.abspath(os.environ["BYZZ_DATA"]), "run each test file in its own process: real data at risk"
+    from byzzcraft import paths; assert paths.DATA == os.path.abspath(os.environ["BYZZ_DATA"]), "run each test file in its own process: real data at risk"
 
     # crash detection: "Stopping server" is also logged after an exception, so stop_requested alone is not a stop
     def run_update(report):
