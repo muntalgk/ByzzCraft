@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0
 
 - Update from the Dashboard (an **Update** button when a release is out) or with `panel.py update`: a git clone
   moves to the release tag, the Windows zip is checked against the release's `SHA256SUMS` and only the code is
@@ -8,6 +8,12 @@
   keeps running.
 - Releases carry a `SHA256SUMS` next to the Windows zip.
 - Docker: `:latest` is now the latest release; builds of `main` are `:edge`.
+
+Upgrading from 1.1.0 (the button arrives with this release, so this once by hand):
+- git: `git pull`, then restart the panel. Later updates leave the clone on the release tag; `git checkout main`
+  follows `main` again;
+- Windows zip: unzip the 1.2.0 zip over the old folder, then restart the panel;
+- Docker: `docker compose pull && docker compose up -d` as before.
 
 ## 1.1.0
 
