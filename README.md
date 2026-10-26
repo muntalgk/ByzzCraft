@@ -84,6 +84,16 @@ If Python is missing, the `.bat` tells you how to get it (`winget install -e --i
 
 ### Docker
 
+On a Linux server, install Docker first if you don't have it (Debian, Ubuntu, Fedora, Raspberry Pi OS...), then
+log out and back in so your user can run it without `sudo`:
+
+```bash
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER
+```
+
+Then, in the folder where you want to keep the compose file:
+
 ```bash
 mkdir byzzcraft && cd byzzcraft
 curl -fsSLO https://raw.githubusercontent.com/muntalgk/byzzcraft/main/docker-compose.yml
@@ -91,9 +101,13 @@ docker compose up -d
 docker compose logs
 ```
 
-Open the setup link from the logs and leave `/minecraft` as the server folder. The compose file uses host
-networking, which works as is on Linux; on Docker Desktop turn it on in Settings > Resources > Network, or use
-the `ports:` lines commented in the file. On Windows type `curl.exe` instead of `curl`.
+Open the setup link from the logs and leave `/minecraft` as the server folder. The container restarts by itself
+after a reboot, so there's no service to set up. Open the ports as in the section above (8765 for the panel if you
+pick "home network", 25565 for the players).
+
+The compose file uses host networking, which works as is on Linux. With Docker Desktop on Windows or Mac turn it
+on in Settings > Resources > Network, or use the `ports:` lines commented in the file; on Windows type `curl.exe`
+instead of `curl`.
 
 To use a server you already have, mount its folder instead of the `minecraft` volume (`- ./minecraft:/minecraft`)
 after `sudo chown -R 1000:1000 ./minecraft`. If the container has a memory limit, set the RAM in Settings → Panel.

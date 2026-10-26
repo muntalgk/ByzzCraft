@@ -85,6 +85,16 @@ sulla pagina di configurazione. Se manca Python, il `.bat` ti dice come installa
 
 ### Docker
 
+Su un server Linux installa prima Docker, se non ce l'hai (Debian, Ubuntu, Fedora, Raspberry Pi OS...), poi esci e
+rientra così il tuo utente può usarlo senza `sudo`:
+
+```bash
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER
+```
+
+Poi, nella cartella dove vuoi tenere il file compose:
+
 ```bash
 mkdir byzzcraft && cd byzzcraft
 curl -fsSLO https://raw.githubusercontent.com/muntalgk/byzzcraft/main/docker-compose.yml
@@ -92,9 +102,13 @@ docker compose up -d
 docker compose logs
 ```
 
-Apri il link di configurazione dai log e lascia `/minecraft` come cartella del server. Il file compose usa la rete
-dell'host, che su Linux funziona così com'è; su Docker Desktop attivala in Settings > Resources > Network, oppure
-usa le righe `ports:` commentate nel file. Su Windows scrivi `curl.exe` invece di `curl`.
+Apri il link di configurazione dai log e lascia `/minecraft` come cartella del server. Il container riparte da solo
+dopo un riavvio, quindi non c'è nessun servizio da configurare. Apri le porte come nella sezione sopra (8765 per il
+pannello se scegli "rete di casa", 25565 per i giocatori).
+
+Il file compose usa la rete dell'host, che su Linux funziona così com'è. Con Docker Desktop su Windows o Mac
+attivala in Settings > Resources > Network, oppure usa le righe `ports:` commentate nel file; su Windows scrivi
+`curl.exe` invece di `curl`.
 
 Per usare un server che hai già, monta la sua cartella al posto del volume `minecraft` (`- ./minecraft:/minecraft`)
 dopo `sudo chown -R 1000:1000 ./minecraft`. Se il container ha un limite di memoria, imposta la RAM in
