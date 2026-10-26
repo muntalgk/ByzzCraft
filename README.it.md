@@ -1,76 +1,55 @@
-<p align="center">
-  <img src="byzzcraft/static/logo.svg" alt="Logo di ByzzCraft" width="128">
+<p align="center"><img src="byzzcraft/static/logo.svg" alt="" width="96"></p>
+
+# ByzzCraft
+
+[![release](https://img.shields.io/github/v/release/muntalgk/ByzzCraft)](https://github.com/muntalgk/ByzzCraft/releases/latest)
+[![ci](https://github.com/muntalgk/ByzzCraft/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/muntalgk/ByzzCraft/actions/workflows/ci.yml)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB)
+[![MIT](https://img.shields.io/badge/license-MIT-3fb950)](LICENSE)
+
+Un pannello web per un server Minecraft Java (vanilla, Paper o Fabric) che gira sulla tua macchina. Io lo uso per
+accendere il server dal telefono, vedere chi è online e dove, controllare gli inventari e fare i backup del mondo.
+
+È Python puro, senza dipendenze e senza database: legge i file del server e ci parla via RCON. Gira su Windows,
+Linux e Docker. [Read in English](README.md).
+
+<p>
+  <img src="docs/screenshots/dashboard.jpg" alt="Dashboard" width="49%">
+  <img src="docs/screenshots/map.jpg" alt="Mappa" width="49%">
+  <img src="docs/screenshots/settings.jpg" alt="Impostazioni" width="75%">
+  <img src="docs/screenshots/phone.jpg" alt="La dashboard sul telefono" width="22%">
 </p>
 
-<h1 align="center">ByzzCraft</h1>
+## Download
 
-<p align="center">
-  <b>Pannello web self-hosted per il tuo server Minecraft Java</b><br>
-  vanilla · Paper · Fabric &nbsp;—&nbsp; Windows · Linux · Docker
-</p>
+La versione attuale è nella [pagina delle release](https://github.com/muntalgk/ByzzCraft/releases/latest).
 
-<p align="center">
-  <a href="https://github.com/muntalgk/ByzzCraft/actions/workflows/ci.yml"><img alt="ci" src="https://github.com/muntalgk/ByzzCraft/actions/workflows/ci.yml/badge.svg?branch=main"></a>
-  <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white">
-  <img alt="Nessuna dipendenza" src="https://img.shields.io/badge/dipendenze-nessuna-3fb950">
-  <a href="LICENSE"><img alt="Licenza MIT" src="https://img.shields.io/badge/licenza-MIT-3fb950"></a>
-</p>
+- **Windows**: [ByzzCraft-windows.zip](https://github.com/muntalgk/ByzzCraft/releases/latest/download/ByzzCraft-windows.zip).
+  Scompattalo e fai doppio clic su `ByzzCraft.bat`.
+- **Docker**: `ghcr.io/muntalgk/byzzcraft` (x86 e ARM, quindi va anche su un Raspberry Pi). Vedi [Docker](#docker).
+- **Linux**: clona il repository, così per aggiornare basta un `git pull`.
 
-<p align="center"><a href="README.md">Read me in English</a></p>
-
-Accendi il server dal telefono, guarda chi è online e dove si trova, controlla l'inventario, fai il backup del mondo.
-Solo la libreria standard di Python: nessuna dipendenza, nessun database. Legge i file del server e gli parla via RCON.
-
-## Screenshot
-
-<table>
-  <tr>
-    <td colspan="2" width="70%">
-      <img src="docs/screenshots/dashboard.jpg" alt="Dashboard">
-      <p align="center"><b>Dashboard</b> · stato, giocatori online, CPU, RAM e tick in tempo reale</p>
-    </td>
-    <td rowspan="2" width="30%" align="center">
-      <img src="docs/screenshots/phone.jpg" alt="La dashboard sul telefono">
-      <p align="center"><b>Sul telefono</b> · aggiungilo alla schermata Home, si apre come un'app</p>
-    </td>
-  </tr>
-  <tr>
-    <td width="35%">
-      <img src="docs/screenshots/map.jpg" alt="Mappa">
-      <p align="center"><b>Mappa</b> · mondo esplorato, giocatori e segnaposto</p>
-    </td>
-    <td width="35%">
-      <img src="docs/screenshots/settings.jpg" alt="Impostazioni">
-      <p align="center"><b>Impostazioni</b> · server.properties e pannello, dal browser</p>
-    </td>
-  </tr>
-</table>
+Fuori da Docker serve Python 3.10 o successivo. Server Minecraft, Java e texture li scarica il pannello quando
+mancano.
 
 ## Cosa fa
 
-- **Accendi, spegni, riavvia** il server dal browser; si spegne da solo quando nessuno gioca da un po'.
-- **Dashboard dal vivo**: giocatori online, ora del giorno, luna e meteo, CPU, RAM, tempo per tick, heap Java.
-- **Mappa**: vista dall'alto del mondo esplorato (Overworld, Nether, End), posizioni dei giocatori, segnaposti condivisi.
-- **Giocatori**: skin 3D, vita, fame, armatura, esperienza, inventario ed ender chest, statistiche.
-- **Timeline**: sessioni di gioco, morti, progressi e chat, ricostruiti dai log del server.
-- **Console**: log dal vivo e comandi RCON.
-- **Impostazioni**: editor di `server.properties` che salva una copia del file a ogni modifica.
-- **Backup**: backup del mondo manuali e programmati (intervallo, fascia oraria, orari giornalieri e giorni), conservazione
-  per mondo per numero, età e spazio con anteprima, selezione multipla per eliminare e fissare, download, ripristino.
-- **Accessi**: whitelist, operatori, ban ed espulsioni, anche a server spento.
-- **Account**: ogni amico ha il suo login; gli admin vedono tutto, i giocatori possono accendere il server e guardare.
-- Interfaccia in inglese e italiano, Windows e Linux.
+- Accende, spegne e riavvia il server; si spegne da solo quando nessuno gioca da un po'
+- Dashboard in tempo reale: giocatori, ora del giorno e meteo, CPU, RAM, tick, heap di Java
+- Mappa del mondo esplorato con le posizioni dei giocatori in diretta e i segnaposto condivisi
+- Pagine dei giocatori: skin 3D, vita, inventario, ender chest, statistiche
+- Cronologia di sessioni, morti, progressi e chat, ricostruita dai log del server
+- Console con il log in diretta e i comandi RCON
+- Editor di `server.properties`, con un backup a ogni salvataggio
+- Backup del mondo manuali e programmati, con regole di pulizia, download e ripristino
+- Whitelist, operatori, ban e kick, anche a server spento
+- Un account per ogni amico: gli admin vedono tutto, i giocatori possono accendere il server e guardarsi intorno
 
-Può anche creare un server da zero: scarica `server.jar` da Mojang e Java da [Eclipse Temurin](https://adoptium.net)
-se mancano. Server vanilla, Paper (e derivati) e Fabric li riconosce dal jar; se il tuo ha un nome strano imposta
-`server_jar` in `data/panel-config.json`. Funziona con Minecraft Java 1.20.5 e successive, compreso il formato dei
-mondi della 26.x e le cartelle separate di Nether ed End di Paper.
+Funziona con Minecraft Java 1.20.5 e successivi, interfaccia in italiano e inglese.
 
 ## Installazione
 
-Serve **Python 3.10 o successivo**. Il resto (server Minecraft, Java, texture) lo può scaricare il pannello. Un Python più vecchio viene rifiutato con un messaggio chiaro.
-
-### Su un server senza schermo (Linux, via SSH)
+### Server Linux via SSH
 
 ```bash
 git clone https://github.com/muntalgk/byzzcraft.git
@@ -78,40 +57,43 @@ cd byzzcraft
 python3 panel.py
 ```
 
-Senza git: `curl -L https://github.com/muntalgk/byzzcraft/archive/refs/heads/main.tar.gz | tar xz && cd byzzcraft-main`
+Stampa un link con un codice usa e getta, tipo `http://192.168.1.20:8765/?setup=Xy3...`. Aprilo dal tuo computer:
+la configurazione chiede la cartella del server (o ne crea uno nuovo), il tuo utente admin, chi può aprire il
+pannello e se accetti l'[EULA di Minecraft](https://aka.ms/MinecraftEULA). Senza il codice nessun altro sulla rete
+può aprire quella pagina. Se il link non si carica, apri la porta (`sudo ufw allow 8765/tcp`, oppure
+`sudo firewall-cmd --permanent --add-port=8765/tcp && sudo firewall-cmd --reload`). Perso il link?
+`grep setup= data/logs/byzzcraft.log`.
 
-Il pannello stampa un link con un codice di configurazione monouso:
-
-```
-ByzzCraft is not set up yet.
-  From your computer open:  http://192.168.1.20:8765/?setup=Xy3...
-```
-
-Aprilo nel browser **del tuo computer**. La pagina chiede la cartella del server (o ne crea uno nuovo lì),
-la lingua, il tuo utente admin, chi può aprire il pannello (solo questa macchina o la rete di casa) e se
-accetti l'[EULA di Minecraft](https://aka.ms/MinecraftEULA). Senza codice la pagina non si apre, così nessun
-altro sulla rete può prendersi l'admin. Se il link non si apre proprio, il firewall blocca la porta:
-`sudo ufw allow 8765/tcp` (firewalld: `sudo firewall-cmd --permanent --add-port=8765/tcp && sudo firewall-cmd --reload`;
-su Windows con "La mia rete di casa": `netsh advfirewall firewall add rule name="ByzzCraft" dir=in action=allow protocol=TCP localport=8765`
-da un terminale come amministratore). Link perso? `grep setup= data/logs/byzzcraft.log`.
-
-Poi fai in modo che resti acceso quando chiudi SSH e dopo un riavvio (il comando stampa un'unit systemd per il
-tuo utente e la tua cartella; lancia `panel.py` col tuo utente normale, solo `tee` vuole `sudo`):
+Per tenerlo acceso quando esci e dopo un riavvio:
 
 ```bash
 python3 panel.py service | sudo tee /etc/systemd/system/byzzcraft.service
 sudo systemctl daemon-reload && sudo systemctl enable --now byzzcraft
 ```
 
-Preferisci fare tutto da shell? Configura senza browser:
+Puoi anche fare la configurazione dalla shell, senza browser:
+`python3 panel.py setup ~/minecraft --admin alex --new-server --accept-eula --lang it` (vedi `--help`).
+
+### Windows, o Linux con il desktop
+
+Scompatta lo [zip per Windows](https://github.com/muntalgk/ByzzCraft/releases/latest/download/ByzzCraft-windows.zip)
+e fai doppio clic su `ByzzCraft.bat`, oppure clona il repository e lancia `python panel.py`. Il browser si apre
+sulla pagina di configurazione. Se manca Python, il `.bat` ti dice come installarlo
+(`winget install -e --id Python.Python.3.12`).
+
+`python panel.py service` lo avvia a ogni accesso (su Windows va in Esecuzione automatica, senza admin).
+
+### Docker
+
+Su un server Linux installa prima Docker, se non ce l'hai (Debian, Ubuntu, Fedora, Raspberry Pi OS...), poi esci e
+rientra così il tuo utente può usarlo senza `sudo`:
 
 ```bash
-python3 panel.py setup ~/minecraft --admin alex --lang it --new-server --network --accept-eula
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER
 ```
 
-(Ci sono anche `--no-java` e `--help`; la password la chiede, oppure la legge da `PANEL_PASSWORD`.)
-
-### Con Docker
+Poi, nella cartella dove vuoi tenere il file compose:
 
 ```bash
 mkdir byzzcraft && cd byzzcraft
@@ -120,169 +102,87 @@ docker compose up -d
 docker compose logs
 ```
 
-L'immagine arriva pronta da GitHub (`ghcr.io/muntalgk/byzzcraft`, per x86 e ARM come il Raspberry Pi): niente
-clone, niente build. Su Windows scrivi `curl.exe` invece di `curl`.
+Apri il link di configurazione dai log e lascia `/minecraft` come cartella del server. Il container riparte da solo
+dopo un riavvio, quindi non c'è nessun servizio da configurare. Apri le porte come nella sezione sopra (8765 per il
+pannello se scegli "rete di casa", 25565 per i giocatori).
 
-Apri il link di configurazione dei log (contiene l'IP della macchina) e lascia `/minecraft` come cartella del server.
-Il container usa la rete dell'host: su Linux funziona così. Su Docker Desktop (Windows/Mac) attivala in
-Settings > Resources > Network (Docker Desktop 4.34 o successivo).
-Se non puoi attivarla, usa l'alternativa commentata con `ports:` in `docker-compose.yml`.
-Il pannello scarica server e Java nei due volumi di `docker-compose.yml`. Per aggiornare:
-`docker compose pull && docker compose up -d` (Minecraft viene fermato in modo pulito prima). Per costruire l'immagine
-da te, clona il repository e in `docker-compose.yml` sostituisci `image:` con `build: .`.
+Il file compose usa la rete dell'host, che su Linux funziona così com'è. Con Docker Desktop su Windows o Mac
+attivala in Settings > Resources > Network, oppure usa le righe `ports:` commentate nel file; su Windows scrivi
+`curl.exe` invece di `curl`.
 
-Server già esistente: mettilo in una cartella e montala al posto del volume, ad esempio `- ./minecraft:/minecraft`,
-dopo `sudo chown -R 1000:1000 ./minecraft` (il container gira con uid 1000).
-Se imposti un limite di memoria al container, imposta anche la RAM in **Impostazioni → Pannello** (la RAM automatica vede la memoria dell'host).
-
-### Sul tuo PC (Windows o Linux con desktop)
-
-```bash
-git clone https://github.com/muntalgk/byzzcraft.git
-cd byzzcraft
-python panel.py
-```
-
-Su Windows puoi fare doppio clic su `ByzzCraft.bat`: trova Python o dice come installarlo
-(`winget install -e --id Python.Python.3.12`), e al primo avvio il pannello apre il browser da solo.
-
-Apri <http://127.0.0.1:8765> sullo stesso PC: la configurazione si apre senza codice. Per avviarlo a ogni
-accesso: `python panel.py service` (su Windows lo aggiunge a Esecuzione automatica, senza admin).
-Se `python` non si trova, usa `py panel.py`. Senza git: "Code > Download ZIP" su GitHub e decomprimi.
+Per usare un server che hai già, monta la sua cartella al posto del volume `minecraft` (`- ./minecraft:/minecraft`)
+dopo `sudo chown -R 1000:1000 ./minecraft`. Se il container ha un limite di memoria, imposta la RAM in
+Impostazioni → Pannello.
 
 ### Dopo la configurazione
 
-Il pannello attiva RCON in `server.properties` e scarica le texture e i nomi che mostra (sono di Mojang,
-quindi non stanno nel repository). Se manca ancora qualcosa (Java, EULA) la **Dashboard** lo mostra con un
-pulsante per sistemarlo. Premi **Accendi**.
+Il pannello attiva RCON e scarica le texture. Quello che manca ancora (Java, l'EULA) compare nella Dashboard con un
+pulsante per sistemarlo. Aggiungi i tuoi amici in Account e apri loro la porta di Minecraft: `sudo ufw allow 25565/tcp`,
+oppure su Windows consenti Java quando lo chiede. Inoltrala sul router se giocano da fuori casa.
 
-**Amici**: apri **Account** e aggiungi un utente per ognuno. Gli admin possono usare anche console,
-impostazioni, backup e accessi. Per farli entrare in gioco apri la porta di Minecraft: `sudo ufw allow 25565/tcp` (firewalld: `sudo firewall-cmd --permanent --add-port=25565/tcp && sudo firewall-cmd --reload`)
-(su Windows: consenti Java quando Windows lo chiede, oppure da un terminale come amministratore
-`netsh advfirewall firewall add rule name="Minecraft" dir=in action=allow protocol=TCP localport=25565`),
-e inoltrala sul router se giocano da fuori casa.
+## Usarlo da fuori casa
 
-### Come parte il server
+L'opzione "rete di casa" della configurazione è HTTP senza cifratura: va bene in casa, non su internet. Altrimenti
+lascia "solo questa macchina" e mettici davanti qualcosa:
 
-Il pannello avvia Java da solo, con i [flag di Aikar](https://docs.papermc.io/paper/aikars-flags), e fa il backup
-del mondo prima di ogni avvio (`backups/world_*.zip`, dopo aver controllato lo spazio libero). RAM (automatica:
-metà della macchina, da 512 MB a 4 GB, mai più dell'80% di quella libera), flag Java in più, backup prima dell'avvio, spegnimento automatico e indirizzo
-per i giocatori stanno in **Impostazioni → Pannello**: si cambiano dal browser, senza SSH.
+- **Tailscale**, il più semplice: `sudo tailscale serve --bg --https=443 http://127.0.0.1:8765`, poi
+  `https://<macchina>.<tailnet>.ts.net` funziona sui tuoi dispositivi. Puoi [condividere la macchina](https://tailscale.com/kb/1084/sharing) con gli amici.
+- **nginx o Caddy** con un tuo dominio: parti da [`examples/nginx.conf`](examples/nginx.conf) o
+  [`examples/Caddyfile`](examples/Caddyfile). Il proxy deve girare sulla stessa macchina.
+- **Tunnel SSH**: `ssh -L 8765:127.0.0.1:8765 tu@server`, poi <http://127.0.0.1:8765>.
 
-Ti serve qualcosa che il pannello non fa? Metti un tuo script nella cartella del server e imposta
-`start_script` in `data/panel-config.json`: il pannello lo esegue e gli passa `JAVA` (il suo Java, se ne ha
-scaricato uno), `SERVER_JAR` e `PYTHON`. Gli esempi sono in `examples/`.
-
-## Raggiungerlo da altri dispositivi
-
-"La mia rete di casa" nella configurazione apre il pannello su `http://<ip-del-server>:8765`, senza HTTPS: va
-bene in casa, non su internet. Per il resto lascia "solo questa macchina" e scegli uno di questi:
-
-### Tailscale (il più semplice, privato)
-
-Installa [Tailscale](https://tailscale.com) sul server e sui tuoi dispositivi, poi sul server:
-
-```bash
-sudo tailscale serve --bg --https=443 http://127.0.0.1:8765
-```
-
-Il pannello è su `https://<macchina>.<tailnet>.ts.net`, solo per i dispositivi della tua tailnet, con HTTPS.
-Gli amici possono entrare nella tua tailnet, oppure puoi [condividere la macchina](https://tailscale.com/kb/1084/sharing).
-
-### nginx (dominio tuo)
-
-Fai puntare un dominio al server, apri le porte 80 e 443, copia `examples/nginx.conf` e prendi un certificato
-con certbot: i comandi sono nei commenti del file. Lascia `proxy_buffering off`: serve per gli aggiornamenti dal vivo.
-
-### Caddy (dominio tuo, HTTPS automatico)
-
-Fai puntare un dominio al server, apri le porte 80 e 443 e avvia Caddy con `examples/Caddyfile`. Il
-certificato lo prende Caddy da solo.
-
-### Tunnel SSH (nessuna configurazione)
-
-`ssh -L 8765:127.0.0.1:8765 tu@tuo-server`, poi apri <http://127.0.0.1:8765> sul tuo computer.
-
-Con nginx o Caddy il pannello è su internet: usa password lunghe. I login hanno un limite (5 tentativi, poi 15
-minuti di blocco). Il proxy deve girare sulla stessa macchina del pannello.
-
-## Log
-
-| File | Cosa contiene |
-|---|---|
-| `data/logs/byzzcraft.log` | log tecnico del pannello: avvio, download, errori con traceback (a rotazione, 5 × 1 MB) |
-| `data/logs/server-start.log` | output di Java (o del tuo script di avvio), solo l'ultimo: perché Minecraft non è partito |
-| `data/panel.log` | chi ha fatto cosa nel pannello (tab **Registro**) |
-| `<server>/logs/latest.log` | il log di Minecraft (tab **Console**) |
-
-Gli admin leggono i primi due anche nel tab **Registro**, senza SSH. Comandi utili:
-
-```bash
-journalctl -u byzzcraft -f                          # il pannello, quando gira come servizio
-tail -f data/logs/byzzcraft.log data/logs/server-start.log    # lo stesso, dai file
-sudo systemctl restart byzzcraft                    # riavvia il pannello (Minecraft resta acceso)
-python3 panel.py passwd NOME                        # password dimenticata
-python3 panel.py java                               # scarica il Java che serve a server.jar
-python3 panel.py assets                             # riscarica texture e nomi
-```
+Su internet usa password lunghe. Dopo 5 tentativi sbagliati un indirizzo resta bloccato per 15 minuti.
 
 ## Aggiornare
 
-```bash
-cd byzzcraft && git pull && sudo systemctl restart byzzcraft
-```
+- Linux: `git pull && sudo systemctl restart byzzcraft`
+- Windows: scompatta il nuovo zip sopra la vecchia cartella (la tua `data/` non è nello zip, quindi resta), oppure
+  `git pull`; poi riavvia il pannello (gira come `pythonw.exe` se parte all'accesso)
+- Docker: `docker compose pull && docker compose up -d`
 
-Su Windows: `git -C <cartella del pannello> pull`, poi riavvia il pannello. Un pannello avviato all'accesso gira
-come `pythonw.exe`: fermalo prima da Gestione attività.
-
-Docker: `docker compose pull && docker compose up -d` (Minecraft viene fermato in modo pulito prima).
-
-Impostazioni, utenti, backup e cache della mappa restano: stanno in `data/`, non nel repository (con `BYZZ_DATA`
-li tieni altrove). Le installazioni di prima della 1.0 li hanno accanto al codice e continuano a funzionare così. Quando esce una nuova
-release la Dashboard lo dice agli admin, con questo comando; la versione che usi è in fondo alla pagina **Account**.
-
-Backup e ripristini controllano prima lo spazio libero e si fermano con un messaggio invece di riempire il disco;
-la Dashboard avvisa quando non ci stanno più tre backup.
+Utenti, impostazioni, backup e cache stanno in `data/` e non vengono toccati. Quando esce una nuova release la
+Dashboard lo dice agli admin.
 
 ## Configurazione
 
-`data/panel-config.json` lo scrive la configurazione iniziale; puoi modificarlo e riavviare il pannello. Le chiavi
-sono descritte nel [README inglese](README.md#configuration).
+Quasi tutto è in Impostazioni → Pannello. Il resto sta in `data/panel-config.json` (riavvia il pannello dopo averlo
+modificato).
 
-## Problemi
-
-La Dashboard elenca cosa manca e, quando il server non parte, dice perché. Se non basta,
-`data/logs/server-start.log` ha l'output completo.
-
-- **"RCON non disponibile"**: riavvia una volta il server Minecraft dopo la configurazione, così legge RCON.
-  Se il server era già acceso durante la configurazione, scrivi `stop` una volta nella sua console (il pannello
-  non può ancora fermarlo), poi avvialo dal pannello.
-- **Porta 8765 occupata**: c'è già un pannello acceso, oppure cambia `port` in `data/panel-config.json`.
-- **Non avviarlo da root**: i file del server diventerebbero di root. Il pannello lo segnala nel log.
-
-## Rete e privacy
-
-Il pannello parla solo con questi servizi, e solo per scaricare; non invia dati su di te o sul tuo server:
-
-| Servizio | Quando | A cosa serve |
+| Chiave | Predefinito | |
 |---|---|---|
-| Mojang (`piston-meta`, `piston-data`) | setup, `panel.py assets`, server nuovo | jar del server, elenco versioni, texture e nomi |
-| Mojang (`sessionserver`, `textures.minecraft.net`, `api.mojang.com`) | apri la pagina di un giocatore, whitelist a server spento | skin e UUID (skin in cache per 6 ore) |
-| Adoptium (`api.adoptium.net`, files on GitHub) | manca Java | download di Java |
-| GitHub (`api.github.com`) | una volta al giorno | c'è una release nuova? (`update_check: false` lo spegne) |
+| `server_dir` | dalla configurazione | cartella del server Minecraft |
+| `listen`, `port` | `127.0.0.1`, `8765` | `0.0.0.0` lo apre alla rete di casa |
+| `ram` | automatica | es. `6G`; automatica è metà della macchina, da 512 MB a 4 GB |
+| `java_args` | | flag Java in più, oltre a quelli di [Aikar](https://docs.papermc.io/paper/aikars-flags) |
+| `backup_on_start` | `true` | backup del mondo prima di ogni avvio |
+| `auto_stop_minutes` | `30` | spegne dopo tanti minuti senza nessuno, `0` = mai |
+| `start_script` | | lancia un tuo script invece di Java (vedi [`examples/`](examples)) |
+| `server_jar` | rilevato | per un jar con un nome insolito |
+| `mc_address` | | indirizzo mostrato ai giocatori |
+| `lang`, `title` | `en`, `ByzzCraft` | |
+| `update_check` | `true` | chiede a GitHub una volta al giorno se c'è una nuova release |
 
-## Traduzioni
+## Quando qualcosa non va
 
-I testi nel codice sono in inglese. `byzzcraft/i18n/it.json` li associa all'italiano; una nuova lingua è un nuovo
-`byzzcraft/i18n/<codice>.json` con le stesse chiavi (le voci mancanti ricadono sull'inglese).
+La Dashboard dice cosa manca e perché il server non è partito. Se non basta:
+
+- `data/logs/server-start.log`: l'output di Java dell'ultimo avvio
+- `data/logs/byzzcraft.log`: il log del pannello (anche nella scheda Registro, o `journalctl -u byzzcraft -f`)
+- "RCON non disponibile" subito dopo la configurazione: riavvia una volta il server Minecraft, così legge le impostazioni RCON
+- Password dimenticata: `python3 panel.py passwd NOME`
+- Non lanciarlo come root, o i file del server diventano di root
+
+## A cosa si collega
+
+Solo per scaricare, mai per mandare dati su di te o sul tuo server: Mojang (jar del server, texture, skin e UUID),
+Adoptium (Java, quando manca) e GitHub (una volta al giorno, per le nuove release; `update_check: false` lo spegne).
 
 ## Contribuire
 
-I test girano con `for t in tests/test_*.py; do python3 "$t"; done` e su GitHub Actions (Ubuntu e Windows).
-Prima di una pull request leggi [CONTRIBUTING.md](CONTRIBUTING.md).
+Test: `for t in tests/test_*.py; do python3 "$t"; done` (la CI li fa girare su Windows e Linux). Le traduzioni sono
+in `byzzcraft/i18n/`; una nuova lingua è un file JSON in più. Leggi [CONTRIBUTING.md](CONTRIBUTING.md) prima di una
+pull request e [SECURITY.md](SECURITY.md) per segnalare una vulnerabilità.
 
 ## Licenza
 
-MIT, vedi [LICENSE](LICENSE).
-
-NON È UN PRODOTTO UFFICIALE DI MINECRAFT. NON APPROVATO DA MOJANG O MICROSOFT NÉ ASSOCIATO A ESSI.
+MIT. Non è un prodotto ufficiale Minecraft, non è approvato da Mojang o Microsoft né associato a loro.
