@@ -12,9 +12,9 @@ import urllib.request
 import zipfile
 import zlib
 
-from mapgen import _png
+from .mapgen import _png
 
-from paths import ASSETS, DATA  # noqa: E402
+from .paths import ASSETS, DATA  # noqa: E402
 MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
 TEX = "assets/minecraft/textures/"
 # folder in the jar -> folder in assets/ (subfolders become a prefix: hud/heart/full.png -> hud/heart_full.png)

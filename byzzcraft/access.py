@@ -12,8 +12,8 @@ import urllib.request
 import uuid as _uuid
 from datetime import datetime
 
-from i18n import t
-from paths import write_json
+from .i18n import t
+from .paths import write_json
 
 NAME_RE = re.compile(r"^[A-Za-z0-9_]{3,16}\Z")
 FILES = {"whitelist": "whitelist.json", "ops": "ops.json", "bans": "banned-players.json", "ipbans": "banned-ips.json"}

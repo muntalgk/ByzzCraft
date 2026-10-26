@@ -2,7 +2,7 @@ import ctypes, json, os, shutil, sys, tempfile, time, zipfile, traceback
 from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # panel folder
-import backups as B
+from byzzcraft import backups as B
 
 OK = FAIL = 0
 def check(name, cond, extra=""):

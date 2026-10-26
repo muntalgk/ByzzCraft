@@ -8,7 +8,7 @@ import json
 import os
 import time
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # the install folder (panel.py), not byzzcraft/
 _LEGACY = not os.path.isdir(os.path.join(HERE, "data")) and any(
     os.path.exists(os.path.join(HERE, n)) for n in ("panel-users.json", "panel-config.json"))
 DATA = os.path.abspath(os.environ.get("BYZZ_DATA") or (HERE if _LEGACY else os.path.join(HERE, "data")))

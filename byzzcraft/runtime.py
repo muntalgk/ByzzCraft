@@ -13,7 +13,7 @@ import tarfile
 import urllib.request
 import zipfile
 
-from paths import RUNTIME  # noqa: E402
+from .paths import RUNTIME  # noqa: E402
 API = "https://api.adoptium.net/v3/assets/latest/%d/hotspot?os=%s&architecture=%s&image_type=jre&vendor=eclipse"
 EXE = "java.exe" if os.name == "nt" else "java"
 
@@ -25,7 +25,7 @@ def _open(url):
 
 def required(server_dir, jar=None):
     """Java version the server jar asks for (vanilla, Paper, Fabric launcher), None if unknown."""
-    import assets   # here and not at the top: assets loads mapgen, which runtime.py alone does not need
+    from . import assets   # here and not at the top: assets loads mapgen, which runtime.py alone does not need
     return assets.jar_info(server_dir, jar or assets.find_jar(server_dir))[1]
 
 

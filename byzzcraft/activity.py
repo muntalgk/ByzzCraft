@@ -3,8 +3,8 @@ import os
 import re
 from datetime import datetime
 
-from access import VERBS
-from i18n import t
+from .access import VERBS
+from .i18n import t
 
 CATS = ("server", "login", "console", "settings", "players", "backup", "map", "system")
 _TS = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)  (.*)$")

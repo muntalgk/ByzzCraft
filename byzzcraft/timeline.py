@@ -1,7 +1,7 @@
 """Minecraft server timeline: events and play sessions rebuilt from the logs.
 
 Standard library only. The logs are only read.
-Test CLI:  python -I timeline.py <server_dir> <cache_dir>
+Test CLI:  python -m byzzcraft.timeline <server_dir> <cache_dir>
 """
 import datetime
 import gzip
@@ -12,10 +12,10 @@ import sys
 import threading
 import time
 
-import activity as ACT
-import i18n
-from i18n import t as tr
-from paths import ASSETS, write_json
+from . import activity as ACT
+from . import i18n
+from .i18n import t as tr
+from .paths import ASSETS, DATA, write_json
 
 CACHE_NAME = "timeline-cache-%s.json"   # %s = language: the event texts are already translated
 CACHE_VERSION = 1
@@ -102,7 +102,7 @@ class Timeline:
         self.server_dir = server_dir
         self.cache_dir = cache_dir
         self.logs_dir = os.path.join(server_dir, "logs")
-        self.panel_log = panel_log or os.path.join(os.path.dirname(os.path.abspath(__file__)), "panel.log")
+        self.panel_log = panel_log or os.path.join(DATA, "panel.log")
         self.cache_path = os.path.join(cache_dir, CACHE_NAME % i18n.LANG)
         self._lock = threading.RLock()
         self._deaths = _DeathMatcher(os.path.join(ASSETS, "lang.json"))
@@ -489,7 +489,7 @@ def _fmt_dur(s):
 
 def main(argv):
     if len(argv) < 3:
-        print("uso: python -I timeline.py <server_dir> <cache_dir>")
+        print("uso: python -m byzzcraft.timeline <server_dir> <cache_dir>")
         return 2
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")

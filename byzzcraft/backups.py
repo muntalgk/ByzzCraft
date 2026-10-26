@@ -11,8 +11,8 @@ import time
 import zipfile
 from datetime import datetime, timedelta
 
-from paths import write_json
-from i18n import t as tr   # t is used as a local variable (times)
+from .paths import write_json
+from .i18n import t as tr   # t is used as a local variable (times)
 
 if os.name == "nt":
     from ctypes import wintypes

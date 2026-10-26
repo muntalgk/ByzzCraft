@@ -1,6 +1,6 @@
 import json, os, shutil, sys, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # panel folder
-import access as A
+from byzzcraft import access as A
 
 d = tempfile.mkdtemp(prefix="acc_test_")
 for f in A.FILES.values():

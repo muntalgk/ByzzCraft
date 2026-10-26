@@ -1,8 +1,8 @@
 name: tests
 
+# run by ci.yml (pull requests, main, tags) before it builds the image and the Windows zip
 on:
-  push:
-  pull_request:
+  workflow_call:
 
 jobs:
   tests:

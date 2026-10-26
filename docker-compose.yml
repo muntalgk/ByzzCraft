@@ -1,8 +1,9 @@
 # docker compose up -d, then open the link that `docker compose logs` prints. The two volumes keep the panel's
-# data and the Minecraft server between updates (docker compose build --pull && docker compose up -d).
+# data and the Minecraft server between updates (docker compose pull && docker compose up -d).
 services:
   byzzcraft:
-    build: .
+    image: ghcr.io/muntalgk/byzzcraft:latest   # built by GitHub Actions for amd64 and arm64 (Raspberry Pi)
+    # build: .   # instead of image:, to build it from a clone of the repository (docker compose up -d --build)
     restart: unless-stopped
     # host networking: the panel sees the real client addresses (proxy, Tailscale, login limits) and the setup
     # choice "this machine only / home network" works as without Docker. Panel on 8765, Minecraft on 25565.

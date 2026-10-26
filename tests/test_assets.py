@@ -1,6 +1,6 @@
 import os, struct, sys, zlib
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # panel folder
-import assets as A
+from byzzcraft import assets as A
 
 OK = FAIL = 0
 def check(name, cond, extra=""):

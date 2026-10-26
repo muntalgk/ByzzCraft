@@ -3,13 +3,12 @@
 Standard library only. API used by the web panel:
     DIMS, list_regions, render_region, get_tile
 CLI:
-    python -I mapgen.py <world_dir> <dim> <rx> <rz> <out.png>
-    python -I mapgen.py <world_dir> <dim> --all <cache_dir>
+    python -m byzzcraft.mapgen <world_dir> <dim> <rx> <rz> <out.png>
+    python -m byzzcraft.mapgen <world_dir> <dim> --all <cache_dir>
 """
 import json, math, os, re, struct, sys, threading, time, zlib
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from players import ASSETS, dim_dir, nbt_parse  # noqa: E402
+from .players import ASSETS, dim_dir, nbt_parse  # noqa: E402
 
 DIMS = ("overworld", "the_nether", "the_end")
 SIZE = 512

@@ -21,21 +21,22 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+CODE = os.path.join(HERE, "byzzcraft")   # the page, translations and icons live with the code
 VERSION = "1.0.0"
 REPO = "muntalgk/byzzcraft"
 sys.path.insert(0, HERE)
-import players as PL  # noqa: E402
-import mapgen  # noqa: E402
-import timeline as TL  # noqa: E402
-import backups as BK  # noqa: E402
-import access as AC  # noqa: E402
-import activity as ACT  # noqa: E402
-import assets as AS  # noqa: E402
-import runtime as RT  # noqa: E402
-import i18n  # noqa: E402
-from i18n import t  # noqa: E402
-from sysinfo import NCPU, ProcSampler, listening_pid, pid_alive, system_memory, system_times  # noqa: E402
-from paths import CACHE, DATA, LOGS, ASSETS as MOJANG, write_json  # noqa: E402
+from byzzcraft import players as PL  # noqa: E402
+from byzzcraft import mapgen  # noqa: E402
+from byzzcraft import timeline as TL  # noqa: E402
+from byzzcraft import backups as BK  # noqa: E402
+from byzzcraft import access as AC  # noqa: E402
+from byzzcraft import activity as ACT  # noqa: E402
+from byzzcraft import assets as AS  # noqa: E402
+from byzzcraft import runtime as RT  # noqa: E402
+from byzzcraft import i18n  # noqa: E402
+from byzzcraft.i18n import t  # noqa: E402
+from byzzcraft.sysinfo import NCPU, ProcSampler, listening_pid, pid_alive, system_memory, system_times  # noqa: E402
+from byzzcraft.paths import CACHE, DATA, LOGS, ASSETS as MOJANG, write_json  # noqa: E402
 CONFIG_PATH = os.environ.get("PANEL_CONFIG", os.path.join(DATA, "panel-config.json"))
 DEFAULTS = {
     "server_dir": os.path.dirname(HERE),
@@ -1356,7 +1357,7 @@ button{width:100%;padding:13px;border:0;border-radius:10px;font-size:16px;font-w
 """
 
 
-with open(os.path.join(HERE, "assets", "logo.svg"), encoding="utf-8") as _f:
+with open(os.path.join(CODE, "static", "logo.svg"), encoding="utf-8") as _f:
     LOGO_SVG = _f.read().strip()
 # PNG, not SVG: Safari (also on the iPhone Home screen) does not use SVG icons
 # manifest and meta: from the phone's Home screen it opens like an app, without the browser bar
@@ -1364,7 +1365,7 @@ ICONS = {"/favicon.ico": "icon-32.png", "/apple-touch-icon.png": "icon-180.png"}
 # ?v= changes with the files: the icons are cached for a day, a new logo must not wait for it
 _v = hashlib.sha256()
 for _f in ICONS.values():
-    with open(os.path.join(HERE, "assets", _f), "rb") as _fh:
+    with open(os.path.join(CODE, "static", _f), "rb") as _fh:
         _v.update(_fh.read())
 ICON_V = _v.hexdigest()[:8]
 LOGO_ICON = ("<link rel=icon type=image/png href=/favicon.ico?v=%s><link rel=apple-touch-icon href=/apple-touch-icon.png?v=%s>"
@@ -1533,7 +1534,7 @@ LANG_NAMES = {"en": "English", "it": "Italiano"}
 
 def languages():
     """English plus one language per i18n/<code>.json."""
-    return ["en"] + sorted(f[:-5] for f in os.listdir(os.path.join(HERE, "i18n")) if f.endswith(".json"))
+    return ["en"] + sorted(f[:-5] for f in os.listdir(os.path.join(CODE, "i18n")) if f.endswith(".json"))
 
 
 # allowlist: -XX:OnError, -javaagent, @argfile, -cp... would run commands or code on the host
@@ -1787,7 +1788,7 @@ def health():
 
 
 UPDATE = {}   # latest release on GitHub: {"latest": "1.1.0", "newer": True}
-UPDATE_HINT = ("git pull && docker compose build --pull && docker compose up -d   (in the folder with docker-compose.yml)" if os.path.exists("/.dockerenv") else
+UPDATE_HINT = ("docker compose pull && docker compose up -d   (in the folder with docker-compose.yml)" if os.path.exists("/.dockerenv") else
                "https://github.com/%s/releases/latest" % REPO if not os.path.isdir(os.path.join(HERE, ".git")) else
                'git -C "%s" pull, then restart the panel' % HERE if os.name == "nt" else
                "cd %s && git pull && " % shlex.quote(HERE) + ("sudo systemctl restart byzzcraft" if os.environ.get("INVOCATION_ID") else "restart the panel"))
@@ -1834,7 +1835,7 @@ def fix_health(cid, who):
 
 
 def app_page(sess, nonce):
-    with open(os.path.join(HERE, "app.html"), encoding="utf-8") as f:
+    with open(os.path.join(CODE, "app.html"), encoding="utf-8") as f:
         tpl = f.read()
     boot = {"user": sess["user"], "admin": sess["admin"], "csrf": sess["csrf"], "title": CFG["title"],
             "address": CFG.get("mc_address") or "", "autostop": CFG["auto_stop_minutes"], "cores": NCPU,
@@ -1975,7 +1976,7 @@ class Handler(BaseHTTPRequestHandler):
         path, _, qs = self.path.partition("?")
         q = parse_qs(qs)
         if path in ICONS:
-            with open(os.path.join(HERE, "assets", ICONS[path]), "rb") as f:
+            with open(os.path.join(CODE, "static", ICONS[path]), "rb") as f:
                 return self.send(200, f.read(), "image/png", {"Cache-Control": "public, max-age=86400"})
         if path == "/" and not load_users():
             token = q.get("setup", [""])[0]
