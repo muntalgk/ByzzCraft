@@ -527,6 +527,7 @@
  "Wait for it to finish: %s in progress.": "Aspetta che finisca: %s in corso.",
  "Wait: %s in progress.": "Aspetta: %s in corso.",
  "Waiting for data...": "In attesa di dati...",
+ "Now: %s": "Ora: %s",
  "Waning crescent": "Falce calante",
  "Waning gibbous": "Gibbosa calante",
  "Watchdog: ms before the server is considered stuck": "Watchdog: ms prima di considerare bloccato il server",

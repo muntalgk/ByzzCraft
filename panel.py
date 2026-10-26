@@ -1849,7 +1849,7 @@ def app_page(sess, nonce):
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "byzzcraft"
-    timeout = 120   # a stuck connection does not hold a thread forever (the event stream pings every 15 s)
+    timeout = 30   # a stuck or slow-sending connection does not hold a thread for long (the event stream pings every 15 s)
     sys_version = ""
 
     def log_message(self, fmt, *args):
@@ -2453,10 +2453,30 @@ class Server(ThreadingHTTPServer):
     # on Windows SO_REUSEADDR lets two processes share a port: a second panel would steal the first one's requests
     allow_reuse_address = os.name != "nt"
 
+    # a few users with a few pages each (every open page keeps one connection for the live updates): past this a new
+    # connection is closed at once instead of taking a thread, so many slow ones cannot use up the machine
+    MAX_CONNECTIONS = 100
+
     def server_bind(self):
         if os.name == "nt":
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        self.conns = threading.BoundedSemaphore(self.MAX_CONNECTIONS)
         super().server_bind()
+
+    def process_request(self, request, client_address):
+        if not self.conns.acquire(blocking=False):
+            return self.shutdown_request(request)
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self.conns.release()   # the thread did not start: nobody else gives the slot back
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.conns.release()
 
 
 # ---------------------------------------------------------------- cli
