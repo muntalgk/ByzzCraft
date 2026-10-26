@@ -115,6 +115,16 @@ try:
     check("client_id: last X-Forwarded-For hop", panel.client_id(handler("127.0.0.1", "127.0.0.1", {"X-Forwarded-For": "9.9.9.9, 1.2.3.4", "Tailscale-User-Login": "a"})) == "1.2.3.4")
     check("client_id: tailscale login ignored", panel.client_id(handler("127.0.0.1", "127.0.0.1", {"Tailscale-User-Login": "a@b"})) == "127.0.0.1")
     check("client_id: headers ignored from another PC", panel.client_id(handler("192.168.1.30", "192.168.1.20", {"X-Forwarded-For": "1.1.1.1"})) == "192.168.1.30")
+    # login lock: an IPv6 /64 is one client, IPv4 and mapped addresses stay as they are
+    check("fail_key: IPv6 by /64", panel.fail_key(handler("2001:db8:1:2:aaaa::1", "::1")) == panel.fail_key(handler("2001:db8:1:2:bbbb::9", "::1")) == "c:2001:db8:1:2::/64")
+    check("fail_key: IPv4", panel.fail_key(handler("192.168.1.30", "192.168.1.20")) == "c:192.168.1.30")
+    check("fail_key: mapped IPv4", panel.fail_key(handler("::ffff:10.0.0.5", "::1")) == "c:::ffff:10.0.0.5")
+    # rotating addresses do not fill the memory: past 10000 keys the expired ones go
+    old = time.time() - panel.FAIL_WINDOW - 1
+    panel.FAILS.update({"c:x%d" % i: [old] for i in range(10001)}); panel.LOCKED.update({"c:y": old})
+    panel.note_fail(["c:new"])
+    check("note_fail prunes expired keys", set(panel.FAILS) == {"c:new"} and not panel.LOCKED, len(panel.FAILS))
+    panel.FAILS.clear(); panel.RECENT_FAILS.clear()
     # setup without the code: Host must be an IP or localhost, Origin the same host
     for host, want in (("127.0.0.1:8765", True), ("localhost:8765", True), ("[::1]:8765", True), ("192.168.1.20", True), ("evil.example.com:8765", False), ("", False)):
         check("host_is_literal %r" % host, panel.host_is_literal(handler("127.0.0.1", "127.0.0.1", {"Host": host})) == want)
@@ -131,14 +141,19 @@ try:
 
     # java flags allowlist
     save = lambda a: panel.save_panel_settings({"java_args": a, "lang": panel.CFG["lang"]}, "t")
-    for a in ("", "-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -Dfile.encoding=UTF-8 -Xss1M -Xlog:gc:file=gc.log --add-opens=java.base/java.lang=ALL-UNNAMED"):
+    for a in ("", "-XX:+UseG1GC -XX:MaxGCPauseMillis=200 -Dfile.encoding=UTF-8 -Xss1M -Xlog:gc:file=gc.log --add-opens=java.base/java.lang=ALL-UNNAMED",
+              "-XX:+HeapDumpOnOutOfMemoryError -Xlog:gc*:stdout:time -Xlog:disable -Xlog:gc:gc-%p.log -Dpaper.disableChannelLimit=true"):
         try:
             save(a); good = True
         except ValueError:
             good = False
         check("java_args ok %r" % a[:30], good)
     for a in ("-XX:OnError=calc", "-XX:+OnOutOfMemoryError=x", "-XX:Flags=f", "-XX:VMOptionsFile=f", "-javaagent:x.jar", "-agentlib:jdwp", "@args.txt", "-cp x", "-Xbootclasspath/a:x", "-jar x.jar", "-Xmx4G", "-XX:+UseG1GC"+chr(10)+"-cp x",
-              "-Dcom.sun.management.jmxremote.port=9010", "-Dlog4j.configurationFile=x", "-Djava.security.manager=x"):
+              "-Dcom.sun.management.jmxremote.port=9010", "-Dlog4j.configurationFile=x", "-Djava.security.manager=x",
+              # files written or loaded anywhere
+              "-XX:HeapDumpPath=/home/a/.bashrc", "-XX:ErrorFile=x", "-XX:SharedArchiveFile=x.jsa", "-XX:AOTCache=x", "-XX:CRaCRestoreFrom=x",
+              "-Xlog:gc:file=/etc/x", "-Xlog:gc:/tmp/x", "-Xlog:gc:file=..\\x", "-Dfabric.addMods=/x.jar", "-Dloader.addMods=x",
+              "-XX:ArchiveClassesAtExit=x", "-XX:StartFlightRecording:filename=/x.jfr", "-XX:FlightRecorderOptions=repository=/x"):
         try:
             save(a); good = True
         except ValueError:

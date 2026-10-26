@@ -18,6 +18,11 @@ the advisory credits you unless you prefer otherwise.
   printed at start-up.
 - Proxy headers (`X-Forwarded-For`, last hop; Tailscale) are trusted only from a proxy on the same machine.
 - Java flags from the panel: only an allowlist (no `-XX:OnError`, `-javaagent`, `@file`...).
+- Content-Security-Policy with a per-page nonce: no inline scripts besides the panel's own.
+- HSTS behind an HTTPS proxy.
+- The login limit also counts IPv6 addresses by /64, and every login is slowed down after many failures in a short time.
+- Java flags that write files or load code from a path are refused (`-XX:...File`, `-XX:...Path`, `-Xlog` writing outside the server folder, `-Dfabric.`).
+- The setup warns when "My home network" would mean a public address.
 
 ## What it does not do
 
@@ -25,3 +30,5 @@ the advisory credits you unless you prefer otherwise.
   setup from another PC: on a network you do not trust, set up from the machine itself or with
   `panel.py setup` over SSH.
 - Two-factor login.
+- Many users at once: the built-in server is meant for a few users. Exposed directly on the internet, many slow
+  connections can tie it up, so put nginx, Caddy or Tailscale in front.

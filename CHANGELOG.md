@@ -41,6 +41,11 @@
 - The page reconnects after a session or proxy error instead of "Reconnecting..." forever.
 - Long RCON answers no longer shift every later answer by one command; a crashed server's session is closed in
   the timeline; missing default skins no longer break the Players page; Docker image has a health check.
+- Windows: `ByzzCraft.bat` starts the panel with a double click (or says how to install Python); the first start opens the browser.
+- Python older than 3.10 gets a clear message instead of a traceback.
+- Security: Content-Security-Policy with a nonce, HSTS behind HTTPS, login limit per IPv6 /64 plus a global slowdown, more Java flags refused (and on Windows checked as they are really split: `..\` no longer slipped through), warning when "My home network" is a public address, hardened systemd unit.
+- Force stop shows only when the server does not answer or takes long to stop.
+- Docker: commented `ports:` alternative for Docker Desktop without host networking.
 
 Upgrading a Docker install from 1.0.0:
 - stop the Minecraft server from the panel first: the old container cannot stop it cleanly yet;

@@ -68,7 +68,7 @@ Minecraft Java 1.20.5 and newer, including the 26.x world layout and Paper's sep
 
 ## Install
 
-You need **Python 3.10 or newer**. Everything else (Minecraft server, Java, textures) the panel can download.
+You need **Python 3.10 or newer**. Everything else (Minecraft server, Java, textures) the panel can download. An older Python is refused with a clear message.
 
 ### On a server without a screen (Linux, over SSH)
 
@@ -91,7 +91,9 @@ Open it in the browser of **your computer**. The setup page asks for the server 
 server there), the language, your admin user, who can open the panel (this machine only, or your home
 network), and whether you accept the [Minecraft EULA](https://aka.ms/MinecraftEULA). Without the code the
 page does not open, so nobody else on the network can take the admin account. If the link does not open at
-all, the firewall blocks the port: `sudo ufw allow 8765/tcp`. Lost the link?
+all, the firewall blocks the port: `sudo ufw allow 8765/tcp` (firewalld: `sudo firewall-cmd --permanent --add-port=8765/tcp && sudo firewall-cmd --reload`;
+Windows with "My home network": `netsh advfirewall firewall add rule name="ByzzCraft" dir=in action=allow protocol=TCP localport=8765`
+from an administrator terminal). Lost the link?
 `grep setup= data/logs/byzzcraft.log`.
 
 Then keep the panel running after you close SSH and after a reboot (the command prints a systemd unit for
@@ -122,6 +124,7 @@ docker compose logs
 Open the setup link from the logs (it has the host's IP) and keep `/minecraft` as the server folder.
 The container uses host networking: it works as is on Linux. On Docker Desktop (Windows/Mac) enable it in
 Settings > Resources > Network (Docker Desktop 4.34 or newer).
+If host networking cannot be enabled, use the commented `ports:` alternative in `docker-compose.yml`.
 The panel downloads the server and Java into the two volumes of `docker-compose.yml`. Update with
 `git pull && docker compose build --pull && docker compose up -d` (Minecraft is stopped cleanly first).
 
@@ -137,6 +140,9 @@ cd byzzcraft
 python panel.py
 ```
 
+On Windows you can double-click `ByzzCraft.bat` instead: it finds Python or tells you how to install it
+(`winget install -e --id Python.Python.3.12`), and the panel opens the browser by itself on the first start.
+
 Open <http://127.0.0.1:8765> on the same PC: the setup page opens without a code. To start it at every
 login: `python panel.py service` (on Windows it adds ByzzCraft to the Startup folder, no admin needed).
 If `python` is not found, use `py panel.py`. No git: "Code > Download ZIP" on GitHub and unzip.
@@ -148,7 +154,7 @@ to Mojang, so they are not in this repository). If something is still missing (J
 **Dashboard** shows it with a button to fix it. Press **Start**.
 
 **Friends**: open **Account** and add a user for each of them. Admin users can also use the console,
-settings, backups and access lists. For them to join the game, open the Minecraft port: `sudo ufw allow 25565/tcp`
+settings, backups and access lists. For them to join the game, open the Minecraft port: `sudo ufw allow 25565/tcp` (firewalld: `sudo firewall-cmd --permanent --add-port=25565/tcp && sudo firewall-cmd --reload`)
 (on Windows: allow Java when Windows asks, or from an administrator terminal
 `netsh advfirewall firewall add rule name="Minecraft" dir=in action=allow protocol=TCP localport=25565`),
 and forward it on your router if they play from outside.
