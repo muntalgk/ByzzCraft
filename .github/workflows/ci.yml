@@ -1,0 +1,114 @@
+name: ci
+
+# Pull requests: tests, Docker image and Windows zip are built and smoke-tested, nothing is published.
+# Every merge on main: the image goes to GHCR (:latest and :sha-xxxxxxx, amd64 and arm64), the zip is a build artifact.
+# A tag v1.2.3 also gives :1.2.3 and :1.2 and a GitHub release with the zip.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+
+  image:
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/byzzcraft
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - name: Build for the smoke test (amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: byzzcraft:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test (the panel answers and prints the setup link)
+        run: |
+          docker run -d --name bc -p 8765:8765 byzzcraft:test
+          for i in $(seq 1 30); do curl -fsS -o /dev/null http://127.0.0.1:8765/ && break; sleep 1; done
+          curl -fsS http://127.0.0.1:8765/ | grep -q ByzzCraft || { docker logs bc; exit 1; }
+          docker logs bc 2>&1 | grep -q "setup=" || { docker logs bc; exit 1; }
+      - if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build (amd64, arm64) and push, except on pull requests
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  windows-zip:
+    needs: tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # git archive leaves out what .gitattributes marks export-ignore (tests, docs, CI) and gives the .bat CRLF
+      - name: Zip
+        shell: bash
+        run: git archive --format zip --prefix ByzzCraft/ -o ByzzCraft-windows.zip HEAD
+      - name: Smoke test (unzip, ByzzCraft.bat finds Python and runs the panel)
+        shell: pwsh
+        run: |
+          Expand-Archive ByzzCraft-windows.zip -DestinationPath zipcheck
+          cmd /c "zipcheck\ByzzCraft\ByzzCraft.bat users < NUL"
+          if ($LASTEXITCODE) { exit 1 }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ByzzCraft-windows
+          path: ByzzCraft-windows.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [image, windows-zip]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ByzzCraft-windows
+      - name: Release with the Windows zip (or add it to a release made by hand)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" ByzzCraft-windows.zip --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$GITHUB_REF_NAME" ByzzCraft-windows.zip --generate-notes --verify-tag --repo "$GITHUB_REPOSITORY"
+          fi

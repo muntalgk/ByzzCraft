@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/muntalgk/ByzzCraft/actions/workflows/tests.yml"><img alt="test" src="https://github.com/muntalgk/ByzzCraft/actions/workflows/tests.yml/badge.svg"></a>
+  <a href="https://github.com/muntalgk/ByzzCraft/actions/workflows/ci.yml"><img alt="ci" src="https://github.com/muntalgk/ByzzCraft/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white">
   <img alt="Nessuna dipendenza" src="https://img.shields.io/badge/dipendenze-nessuna-3fb950">
   <a href="LICENSE"><img alt="Licenza MIT" src="https://img.shields.io/badge/licenza-MIT-3fb950"></a>
@@ -114,18 +114,22 @@ python3 panel.py setup ~/minecraft --admin alex --lang it --new-server --network
 ### Con Docker
 
 ```bash
-git clone https://github.com/muntalgk/byzzcraft.git
-cd byzzcraft
+mkdir byzzcraft && cd byzzcraft
+curl -fsSLO https://raw.githubusercontent.com/muntalgk/byzzcraft/main/docker-compose.yml
 docker compose up -d
 docker compose logs
 ```
+
+L'immagine arriva pronta da GitHub (`ghcr.io/muntalgk/byzzcraft`, per x86 e ARM come il Raspberry Pi): niente
+clone, niente build. Su Windows scrivi `curl.exe` invece di `curl`.
 
 Apri il link di configurazione dei log (contiene l'IP della macchina) e lascia `/minecraft` come cartella del server.
 Il container usa la rete dell'host: su Linux funziona così. Su Docker Desktop (Windows/Mac) attivala in
 Settings > Resources > Network (Docker Desktop 4.34 o successivo).
 Se non puoi attivarla, usa l'alternativa commentata con `ports:` in `docker-compose.yml`.
 Il pannello scarica server e Java nei due volumi di `docker-compose.yml`. Per aggiornare:
-`git pull && docker compose build --pull && docker compose up -d` (Minecraft viene fermato in modo pulito prima).
+`docker compose pull && docker compose up -d` (Minecraft viene fermato in modo pulito prima). Per costruire l'immagine
+da te, clona il repository e in `docker-compose.yml` sostituisci `image:` con `build: .`.
 
 Server già esistente: mettilo in una cartella e montala al posto del volume, ad esempio `- ./minecraft:/minecraft`,
 dopo `sudo chown -R 1000:1000 ./minecraft` (il container gira con uid 1000).
@@ -231,7 +235,7 @@ cd byzzcraft && git pull && sudo systemctl restart byzzcraft
 Su Windows: `git -C <cartella del pannello> pull`, poi riavvia il pannello. Un pannello avviato all'accesso gira
 come `pythonw.exe`: fermalo prima da Gestione attività.
 
-Docker: `git pull && docker compose build --pull && docker compose up -d` (Minecraft viene fermato in modo pulito prima).
+Docker: `docker compose pull && docker compose up -d` (Minecraft viene fermato in modo pulito prima).
 
 Impostazioni, utenti, backup e cache della mappa restano: stanno in `data/`, non nel repository (con `BYZZ_DATA`
 li tieni altrove). Le installazioni di prima della 1.0 li hanno accanto al codice e continuano a funzionare così. Quando esce una nuova

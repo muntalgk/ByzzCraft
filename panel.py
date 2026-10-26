@@ -1788,7 +1788,7 @@ def health():
 
 
 UPDATE = {}   # latest release on GitHub: {"latest": "1.1.0", "newer": True}
-UPDATE_HINT = ("git pull && docker compose build --pull && docker compose up -d   (in the folder with docker-compose.yml)" if os.path.exists("/.dockerenv") else
+UPDATE_HINT = ("docker compose pull && docker compose up -d   (in the folder with docker-compose.yml)" if os.path.exists("/.dockerenv") else
                "https://github.com/%s/releases/latest" % REPO if not os.path.isdir(os.path.join(HERE, ".git")) else
                'git -C "%s" pull, then restart the panel' % HERE if os.name == "nt" else
                "cd %s && git pull && " % shlex.quote(HERE) + ("sudo systemctl restart byzzcraft" if os.environ.get("INVOCATION_ID") else "restart the panel"))

@@ -48,6 +48,11 @@
 - Docker: commented `ports:` alternative for Docker Desktop without host networking.
 - At most 100 connections at once, and 30 s (not 120) before a silent one is dropped.
 - "Reduce motion" in the system settings turns off the animations; charts tell screen readers their last value.
+- Docker image ready on GHCR (`ghcr.io/muntalgk/byzzcraft`, amd64 and arm64): `docker-compose.yml` uses it, so no
+  clone or build is needed; update with `docker compose pull && docker compose up -d`.
+- Every release has a Windows zip (the code and `ByzzCraft.bat`, without tests and docs).
+- CI: pull requests build and smoke-test the image and the zip; main and tags publish them.
+- The code moved into `byzzcraft/`; `panel.py` stays in the root and data stays where it was.
 
 Upgrading a Docker install from 1.0.0:
 - stop the Minecraft server from the panel first: the old container cannot stop it cleanly yet;

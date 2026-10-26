@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/muntalgk/ByzzCraft/actions/workflows/tests.yml"><img alt="tests" src="https://github.com/muntalgk/ByzzCraft/actions/workflows/tests.yml/badge.svg"></a>
+  <a href="https://github.com/muntalgk/ByzzCraft/actions/workflows/ci.yml"><img alt="ci" src="https://github.com/muntalgk/ByzzCraft/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white">
   <img alt="No dependencies" src="https://img.shields.io/badge/dependencies-none-3fb950">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-3fb950"></a>
@@ -115,18 +115,20 @@ python3 panel.py setup ~/minecraft --admin alex --new-server --network --accept-
 ### With Docker
 
 ```bash
-git clone https://github.com/muntalgk/byzzcraft.git
-cd byzzcraft
+mkdir byzzcraft && cd byzzcraft
+curl -fsSLO https://raw.githubusercontent.com/muntalgk/byzzcraft/main/docker-compose.yml
 docker compose up -d
 docker compose logs
 ```
 
-Open the setup link from the logs (it has the host's IP) and keep `/minecraft` as the server folder.
+The image comes ready from GitHub (`ghcr.io/muntalgk/byzzcraft`, for x86 and ARM such as the Raspberry Pi): no
+clone, no build. On Windows write `curl.exe` instead of `curl`. Open the setup link from the logs (it has the host's IP) and keep `/minecraft` as the server folder.
 The container uses host networking: it works as is on Linux. On Docker Desktop (Windows/Mac) enable it in
 Settings > Resources > Network (Docker Desktop 4.34 or newer).
 If host networking cannot be enabled, use the commented `ports:` alternative in `docker-compose.yml`.
 The panel downloads the server and Java into the two volumes of `docker-compose.yml`. Update with
-`git pull && docker compose build --pull && docker compose up -d` (Minecraft is stopped cleanly first).
+`docker compose pull && docker compose up -d` (Minecraft is stopped cleanly first). To build the image yourself
+instead, clone the repository and replace `image:` with `build: .` in `docker-compose.yml`.
 
 Existing server: put it in a folder and mount it instead of the named volume, e.g. `- ./minecraft:/minecraft`,
 after `sudo chown -R 1000:1000 ./minecraft` (the container runs as uid 1000).
@@ -232,7 +234,7 @@ cd byzzcraft && git pull && sudo systemctl restart byzzcraft
 On Windows: `git -C <panel folder> pull`, then restart the panel. A panel started at login runs as
 `pythonw.exe`: stop it from Task Manager first.
 
-Docker: `git pull && docker compose build --pull && docker compose up -d` (Minecraft is stopped cleanly first).
+Docker: `docker compose pull && docker compose up -d` (Minecraft is stopped cleanly first).
 
 Settings, users, backups and the map cache stay: they are in `data/`, not in the repository (set `BYZZ_DATA` to
 keep them somewhere else). Installs from before 1.0 keep them next to the code and go on working as they are. When a new release is out
