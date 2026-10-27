@@ -19,7 +19,7 @@ from collections import deque
 from datetime import datetime
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CODE = os.path.join(HERE, "byzzcraft")   # the page, translations and icons live with the code
@@ -1426,9 +1426,10 @@ def host_is_literal(handler):
 
 
 def same_origin(handler):
-    """No Origin (plain navigation, curl) or the same host as the page: blocks cross-site POSTs."""
+    """No Origin (plain navigation, curl) or the same host as the page: blocks cross-site POSTs.
+    By name, not port: a proxy may pass Host without the port the browser used (nginx's $host)."""
     o = handler.headers.get("Origin")
-    return not o or o.split("://", 1)[-1] == handler.headers.get("Host")
+    return not o or urlsplit(o).hostname == urlsplit("//" + (handler.headers.get("Host") or "")).hostname
 
 
 def setup_allowed(handler, token):
@@ -2178,6 +2179,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.first_setup()
         if self.path == "/login":
             f = self.form()
+            if not same_origin(self):   # a page on another site must not log this browser into its own account
+                return self.send(403, login_page(t("Invalid request.")))
             user = f.get("user", "").strip().lower(); keys = [fail_key(self)]   # not by name: anyone could lock out "admin"
             if locked(keys):
                 return self.send(429, login_page(t("Too many attempts: try again in 15 minutes.")))

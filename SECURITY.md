@@ -33,3 +33,9 @@ the advisory credits you unless you prefer otherwise.
 - Many users at once: the built-in server takes at most 100 connections and drops one that sends nothing for
   30 seconds, so slow connections cannot use up the machine; but a stranger can still fill those 100 and keep the
   panel busy. Exposed on the internet, put nginx, Caddy or Tailscale in front.
+- RCON on the network: the panel talks to Minecraft through RCON on this machine, but Minecraft opens the RCON
+  port (25575) on every interface when `server-ip` is empty. The password is long and random, yet RCON is not
+  encrypted: block the port in the firewall (on Windows a rule that allows Java lets it in too).
+- File permissions on Windows: `panel-users.json` and the sessions follow the permissions of their folder. On a
+  second drive (`D:\`, `F:\`) every user of the PC can usually change them: install the panel in your own user
+  folder, or allow only your account on its folder (`icacls`).

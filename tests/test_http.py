@@ -115,6 +115,17 @@ try:
         except (OSError, http.client.HTTPException):
             time.sleep(0.1)
     check("connection cap: free again after they close", back)
+    # login CSRF: another site cannot log this browser into its own account
+    body = "user=admin&password=%s" % PW
+    check("login from another site: 403", req("POST", "/login", body, dict(form, Origin="http://evil.example"))[0] == 403)
+    check("login from the same origin", req("POST", "/login", body, dict(form, Origin="http://127.0.0.1:%d" % port))[0] == 303)
+    # one request per connection (HTTP/1.0): a body the panel does not read cannot become a second request behind a proxy
+    with socket.create_connection(("127.0.0.1", port), timeout=5) as so:
+        so.sendall(b"GET /manifest.webmanifest HTTP/1.1\r\nHost: x\r\nConnection: keep-alive\r\n\r\n" * 2)
+        got = b""
+        while (chunk := so.recv(65536)):
+            got += chunk
+    check("no keep-alive: one answer per connection", got.count(b" 200 OK") == 1, got[:80])
     # last: it also locks the address 127.0.0.1
     codes = [login("nessuno", "x")[0] for _ in range(6)]
     check("lock after 5 attempts", codes == [401] * 4 + [429] * 2, codes)   # the first wrong one is admin's, above
