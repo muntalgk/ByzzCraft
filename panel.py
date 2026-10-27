@@ -1903,7 +1903,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Strict-Transport-Security", "max-age=31536000")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Referrer-Policy", "no-referrer")
+        # not no-referrer: with it the browser sends "Origin: null" on our own form posts and same_origin() refuses the login
+        self.send_header("Referrer-Policy", "same-origin")
         # scripts only with this response's nonce: HTML slipped into the page (a player's chat line) cannot run
         self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src %s; "
                          "connect-src 'self'; img-src 'self' data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'"
