@@ -116,6 +116,8 @@ try:
             time.sleep(0.1)
     check("connection cap: free again after they close", back)
     # login CSRF: another site cannot log this browser into its own account
+    # no-referrer would make the browser send "Origin: null" on the panel's own login form, refused like another site
+    check("Referrer-Policy keeps the origin on our own posts", req("GET", "/")[2].get("referrer-policy") == "same-origin")
     body = "user=admin&password=%s" % PW
     check("login from another site: 403", req("POST", "/login", body, dict(form, Origin="http://evil.example"))[0] == 403)
     check("login from the same origin", req("POST", "/login", body, dict(form, Origin="http://127.0.0.1:%d" % port))[0] == 303)

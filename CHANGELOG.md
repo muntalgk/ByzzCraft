@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Login refuses a form posted from another site (login CSRF).
+- Login refuses a form posted from another site (login CSRF). `Referrer-Policy` is now `same-origin`: with
+  `no-referrer` browsers send `Origin: null` on the panel's own forms, so the login and the first setup were refused.
 - Docker: the code in the image belongs to root, the panel can no longer change it.
 - Dependabot keeps the GitHub Actions up to date.
 - SECURITY.md: RCON is open on every interface when `server-ip` is empty; file permissions on Windows.
