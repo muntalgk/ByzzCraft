@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Login refuses a form posted from another site (login CSRF).
+- Docker: the code in the image belongs to root, the panel can no longer change it.
+- Dependabot keeps the GitHub Actions up to date.
+- SECURITY.md: RCON is open on every interface when `server-ip` is empty; file permissions on Windows.
+
 ## 1.2.0
 
 - Update from the Dashboard (an **Update** button when a release is out) or with `panel.py update`: a git clone

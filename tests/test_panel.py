@@ -133,6 +133,12 @@ try:
     check("same_origin: none", panel.same_origin(handler("127.0.0.1", "127.0.0.1", {"Host": "localhost:1"})))
     check("same_origin: same", panel.same_origin(handler("127.0.0.1", "127.0.0.1", {"Host": "localhost:1", "Origin": "http://localhost:1"})))
     check("same_origin: cross-site", not panel.same_origin(handler("127.0.0.1", "127.0.0.1", {"Host": "localhost:1", "Origin": "http://evil.com"})))
+    check("same_origin: proxy without the port", panel.same_origin(handler("127.0.0.1", "127.0.0.1", {"Host": "panel.example.com", "Origin": "https://panel.example.com:8443"})))
+    check("same_origin: IPv6", panel.same_origin(handler("127.0.0.1", "127.0.0.1", {"Host": "[::1]:1", "Origin": "http://[::1]:1"})))
+    check("same_origin: null", not panel.same_origin(handler("127.0.0.1", "127.0.0.1", {"Host": "localhost:1", "Origin": "null"})))
+    check("same_origin: null without Host", not panel.same_origin(handler("127.0.0.1", "127.0.0.1", {"Origin": "null"})))
+    check("same_origin: malformed IPv6", not panel.same_origin(handler("127.0.0.1", "127.0.0.1", {"Host": "localhost:1", "Origin": "http://[::1"})))
+    check("same_origin: look-alike", not panel.same_origin(handler("127.0.0.1", "127.0.0.1", {"Host": "localhost:1", "Origin": "http://localhost.evil.com:1"})))
 
     # "Stopping server" only as a system line, never in chat
     for line, want in (("[12:00:00] [Server thread/INFO]: Stopping server", True), ("[12:00:00 INFO]: Stopping the server", True),

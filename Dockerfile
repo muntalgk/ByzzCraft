@@ -5,7 +5,8 @@ FROM python:3.12-slim
 
 RUN useradd --create-home --uid 1000 byzz && mkdir /data /minecraft && chown byzz:byzz /data /minecraft
 WORKDIR /app
-COPY --chown=byzz:byzz . .
+# code owned by root: the panel (user byzz) reads it but cannot change it, its data is in /data
+COPY . .
 USER byzz
 
 # data/ of the panel (users, settings, logs, Java) and the Minecraft server folder: two volumes

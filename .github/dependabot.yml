@@ -1,0 +1,7 @@
+# weekly pull requests for new versions of the GitHub Actions in .github/workflows
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
