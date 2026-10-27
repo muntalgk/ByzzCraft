@@ -1429,7 +1429,13 @@ def same_origin(handler):
     """No Origin (plain navigation, curl) or the same host as the page: blocks cross-site POSTs.
     By name, not port: a proxy may pass Host without the port the browser used (nginx's $host)."""
     o = handler.headers.get("Origin")
-    return not o or urlsplit(o).hostname == urlsplit("//" + (handler.headers.get("Host") or "")).hostname
+    if not o:
+        return True
+    try:
+        host = urlsplit("//" + (handler.headers.get("Host") or "")).hostname
+        return host is not None and urlsplit(o).hostname == host
+    except ValueError:   # a [ without its ]: not something a browser sends
+        return False
 
 
 def setup_allowed(handler, token):
