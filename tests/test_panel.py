@@ -221,6 +221,18 @@ try:
                 pass
         if os.geteuid() != 0:
             check("ExecStart quotes the paths", 'ExecStart="' in buf.getvalue(), buf.getvalue())
+
+    # the update notice survives a restart (a language change restarts the panel) and goes away after the update
+    panel.known_update()
+    check("no saved check: no notice", not panel.UPDATE.get("newer"))
+    for saved, newer in (("99.0.0", True), (panel.VERSION, False)):
+        paths.write_json(panel.UPDATE_FILE, {"latest": saved})
+        panel.known_update()
+        check("saved check %s: newer=%s" % (saved, newer), panel.UPDATE.get("newer") is newer, panel.UPDATE)
+    with open(panel.UPDATE_FILE, "w") as f:
+        f.write("[1")
+    panel.known_update()
+    check("broken saved check: kept as it was", panel.UPDATE.get("newer") is False, panel.UPDATE)
 finally:
     shutil.rmtree(root, ignore_errors=True)
 

@@ -1806,23 +1806,32 @@ def health():
             ok, text = False, (t("Downloading %s...") % what if JOBS[cid] == "running" else t("Download of %s failed: %s") % (what, JOBS[cid]))
         if not ok:
             out.append({"id": cid, "text": text, "fix": None if JOBS.get(cid) == "running" else fix,
-                        "cmd": SERVICE_HINT if cid == "service" else UPDATE_HINT if cid == "update" else None})
+                        "cmd": SERVICE_HINT if cid == "service" else UPDATE_HINT if cid == "update" and not fix else None})
     return out
 
 
 UPDATE = {}   # latest release on GitHub: {"latest": "1.1.0", "newer": True}
-UPDATE_HINT = ("docker compose pull && docker compose up -d   (in the folder with docker-compose.yml)" if os.path.exists("/.dockerenv") else
-               '"%s" "%s" update' % (sys.executable, os.path.join(HERE, "panel.py")) if os.name == "nt" else
-               "cd %s && %s panel.py update" % (shlex.quote(HERE), sys.executable)
-               + (" && sudo systemctl restart byzzcraft" if os.environ.get("INVOCATION_ID") else ", then restart the panel"))
+UPDATE_FILE = os.path.join(CACHE, "update.json")   # the last answer: a restart (language change) shows the notice at once
+UPDATE_HINT = "docker compose pull && docker compose up -d"   # only Docker has no Update button
 
 
 def _vtuple(v):
     return tuple(int(x) for x in re.findall(r"\d+", v)[:3])
 
 
+def known_update():
+    """The release the last check found, compared again with this version (after an update it is no longer newer)."""
+    try:
+        tag = json.load(open(UPDATE_FILE, encoding="utf-8"))["latest"]
+        UPDATE.update(latest=tag, newer=_vtuple(tag) > _vtuple(VERSION))
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+
+
 def update_checker():
     """Once a day: is there a newer release on GitHub? One GET request, no data sent."""
+    if CFG.get("update_check", True):
+        known_update()
     time.sleep(60)
     while True:
         if CFG.get("update_check", True):
@@ -1832,6 +1841,7 @@ def update_checker():
                 with urllib.request.urlopen(req, timeout=15) as r:
                     tag = json.loads(r.read())["tag_name"].lstrip("v")
                 UPDATE.update(latest=tag, newer=_vtuple(tag) > _vtuple(VERSION))
+                write_json(UPDATE_FILE, {"latest": tag})
                 if UPDATE["newer"]:
                     L.info("ByzzCraft %s is available (running %s)", tag, VERSION)
                     HUB.publish("health", {})
