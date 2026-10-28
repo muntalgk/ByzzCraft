@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.3
 
 - Metrics: the charts with data (PC CPU and PC RAM, and the server ones while it runs) were left blank since 1.1.0:
   a script error stopped them before drawing.
