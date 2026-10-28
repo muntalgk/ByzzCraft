@@ -58,7 +58,7 @@ jobs:
           curl -fsS http://127.0.0.1:8765/ | grep -q ByzzCraft || { docker logs bc; exit 1; }
           docker logs bc 2>&1 | grep -q "setup=" || { docker logs bc; exit 1; }
       - if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
