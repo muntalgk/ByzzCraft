@@ -221,6 +221,27 @@ try:
                 pass
         if os.geteuid() != 0:
             check("ExecStart quotes the paths", 'ExecStart="' in buf.getvalue(), buf.getvalue())
+
+    # the update notice survives a restart (a language change restarts the panel) and goes away after the update
+    panel.known_update()
+    check("no saved check: no notice", not panel.UPDATE.get("newer"))
+    for saved, newer in (("99.0.0", True), (panel.VERSION, False)):
+        paths.write_json(panel.UPDATE_FILE, {"latest": saved})
+        panel.known_update()
+        check("saved check %s: newer=%s" % (saved, newer), panel.UPDATE.get("newer") is newer, panel.UPDATE)
+    with open(panel.UPDATE_FILE, "w") as f:
+        f.write("[1")
+    panel.known_update()
+    check("broken saved check: kept as it was", panel.UPDATE.get("newer") is False, panel.UPDATE)
+
+    # "Start at login" on Windows writes the Startup script (here a temp path, never the real Startup folder)
+    panel.STARTUP_CMD = j(root, "ByzzCraft.cmd")
+    if os.name == "nt":
+        with contextlib.redirect_stdout(io.StringIO()):
+            done = panel.fix_health("service", "admin")
+        check("start at login: Startup script", done and "panel.py" in open(panel.STARTUP_CMD, encoding="utf-8").read())
+    else:
+        check("start at login: no button on Linux (needs sudo)", not panel.fix_health("service", "admin") and not os.path.exists(panel.STARTUP_CMD))
 finally:
     shutil.rmtree(root, ignore_errors=True)
 

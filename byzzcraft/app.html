@@ -85,6 +85,8 @@ main{padding:22px 28px 60px;min-width:0}
 .banner{display:none;align-items:center;justify-content:space-between;gap:12px;border:1px solid #5b4a12;background:#221d0c;color:#f3d77a;border-radius:12px;padding:10px 14px;font-size:14px}
 .banner.show{display:flex}
 .banner .btn{padding:7px 12px}
+.banner.info{border-color:#1f3d63;background:#0c1726;color:#cfe3ff}.banner.info a{color:#9cc8ff;margin-left:6px}
+.banner code{font:12px var(--mono);user-select:all}
 /* ---------- KPI ---------- */
 .kpi .lab{color:var(--text2);font-size:13px;display:flex;align-items:center;gap:8px}
 .kpi .lab i{width:8px;height:8px;border-radius:2px;display:inline-block}
@@ -521,6 +523,7 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
       <div class="card wc" id="world" hidden><div class="orb" id="w-orb"></div>
         <div><div class="clock" id="w-clock"></div><div class="ph" id="w-ph"></div><div class="cyc"><i id="w-mark"></i></div></div>
         <div class="wchips" id="w-chips"></div></div>
+      <div class="banner info" id="upd"></div>
       <div class="card health adm-only" id="health" hidden><b>{{To do before playing}}</b><div id="health-list"></div></div>
       <div class="banner" id="banner"><span>{{You changed the settings: they apply at the next restart.}}</span><button class="btn" id="b-banner">{{Restart now}}</button></div>
       <div class="online-strip" id="online-strip"></div>
@@ -1415,14 +1418,19 @@ $("#version").innerHTML="ByzzCraft "+esc(BOOT.version)+" · "+(BOOT.latest?"<b>"
 
 /* ---------------- health checks (dashboard) and technical log (activity log) ---------------- */
 const HL={
-  async load(){if(!BOOT.admin)return;try{const r=await GET("/api/health");if(!r)return;const c=(await r.json()).checks;$("#health").hidden=!c.length;
+  async load(){if(!BOOT.admin)return;try{const r=await GET("/api/health");if(!r)return;const all=(await r.json()).checks;
+    /* a new release is news, not something to fix before playing: its own banner */
+    const u=all.find(x=>x.id=="update"),c=all.filter(x=>x!=u);$("#health").hidden=!c.length;
     $("#health-list").innerHTML=c.map(x=>"<div class='hc'><span>"+esc(x.text)+"</span>"+(x.fix?"<button class='btn' data-fix='"+esc(x.id)+"'>"+esc(HL.label(x.id))+"</button>":"")
-      +(x.cmd?"<code>"+esc(x.cmd)+"</code>":"")+"</div>").join("")}catch(e){}},
-  label(id){return {java:_t("Download Java"),eula:_t("I accept the EULA"),rcon:_t("Turn on RCON"),script:_t("Copy the start script"),assets:_t("Download"),update:_t("Update")}[id]||_t("Fix")},
+      +(x.cmd?"<code>"+esc(x.cmd)+"</code>":"")+"</div>").join("");
+    $("#upd").classList.toggle("show",!!u);
+    $("#upd").innerHTML=u?"<span>"+esc(u.text)+"<a href='https://github.com/"+esc(BOOT.repo)+"/releases/latest' target=_blank rel=noopener>"+esc(_t("What's new"))+"</a></span>"
+      +(u.fix?"<button class='btn primary' data-fix='update'>"+esc(_t("Update"))+"</button>":"")+(u.cmd?"<code>"+esc(u.cmd)+"</code>":""):""}catch(e){}},
+  label(id){return {java:_t("Download Java"),eula:_t("I accept the EULA"),rcon:_t("Turn on RCON"),script:_t("Copy the start script"),assets:_t("Download"),update:_t("Update"),service:_t("Start at login")}[id]||_t("Fix")},
   async fix(id,b){if(id=="eula"&&!await ask("EULA",_t("Accept the Minecraft EULA? Read it at https://aka.ms/MinecraftEULA"),_t("I accept the EULA"),{primary:true}))return;
     if(id=="update"&&!await ask(_t("Update"),_t("Download the new version and restart the panel? Minecraft keeps running. What changed: https://github.com/%s/releases/latest",BOOT.repo),_t("Update"),{primary:true}))return;
     b.disabled=true;const j=await api("/api/health/fix",{id});toast(j.message,j.ok?"good":"bad");this.load()}};
-$("#health-list").onclick=e=>{const b=e.target.closest("[data-fix]");if(b&&!b.disabled)HL.fix(b.dataset.fix,b)};
+$("#health-list").onclick=$("#upd").onclick=e=>{const b=e.target.closest("[data-fix]");if(b&&!b.disabled)HL.fix(b.dataset.fix,b)};
 setInterval(()=>{if(CUR=="dash")HL.load()},30000);
 $("#rg-mode").onclick=async e=>{const b=e.target.closest("button");if(!b)return;$$("#rg-mode button").forEach(x=>x.classList.toggle("on",x==b));const m=b.dataset.m;
   ["#rg-tools","#rg-cats","#rg-feed"].forEach(x=>$(x).hidden=!!m);$("#rg-more").hidden=!!m||RGV.items.length>=RGV.total;$("#rg-sys").hidden=!m;
