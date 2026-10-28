@@ -24,6 +24,7 @@ CASES = [
     ("panel downloaded Java 25", "system", "panel", "downloaded Java 25"),
     ("panel downloaded the Minecraft assets", "system", "panel", "downloaded the textures"),
     ("admin updated ByzzCraft to 1.2.0", "system", "admin", "updated ByzzCraft to 1.2.0"),
+    ("admin made the panel start at login", "system", "admin", "made the panel start at login"),
     ("java error: no Java 25 for linux/riscv", "system", None, "Java error"),
     ("panel (restart) started the server", "server", "panel", "started the server"),
     ("panel stopped the server (empty for 30 minutes)", "server", "panel", "stopped the server"),

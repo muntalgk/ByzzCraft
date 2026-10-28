@@ -233,6 +233,15 @@ try:
         f.write("[1")
     panel.known_update()
     check("broken saved check: kept as it was", panel.UPDATE.get("newer") is False, panel.UPDATE)
+
+    # "Start at login" on Windows writes the Startup script (here a temp path, never the real Startup folder)
+    panel.STARTUP_CMD = j(root, "ByzzCraft.cmd")
+    if os.name == "nt":
+        with contextlib.redirect_stdout(io.StringIO()):
+            done = panel.fix_health("service", "admin")
+        check("start at login: Startup script", done and "panel.py" in open(panel.STARTUP_CMD, encoding="utf-8").read())
+    else:
+        check("start at login: no button on Linux (needs sudo)", not panel.fix_health("service", "admin") and not os.path.exists(panel.STARTUP_CMD))
 finally:
     shutil.rmtree(root, ignore_errors=True)
 

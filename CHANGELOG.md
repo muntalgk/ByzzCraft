@@ -6,6 +6,8 @@
   fix before playing and without the command line full of paths. Only Docker, which has no Update button, shows a command.
 - The new release stays on the Dashboard after the panel restarts (changing the language restarts it): before, it
   came back only with the next check.
+- Windows: "The panel does not start by itself" has a **Start at login** button instead of a command line to copy
+  (Linux keeps the command: it needs sudo).
 
 ## 1.2.1
 

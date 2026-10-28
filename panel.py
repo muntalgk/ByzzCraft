@@ -1789,7 +1789,7 @@ def health():
         ("assets", AS.present(), t("Map textures and item icons are not downloaded yet."), "assets"),
         # systemd sets INVOCATION_ID; on Windows pythonw (no console) means started at login, not from a terminal
         ("service", bool(os.environ.get("INVOCATION_ID")) or os.path.exists("/.dockerenv") or os.name == "nt" and (os.path.exists(STARTUP_CMD) or not sys.stdout),
-         t("The panel does not start by itself after a reboot."), None),
+         t("The panel does not start by itself after a reboot."), "service" if os.name == "nt" else None),   # Linux needs sudo: a command
     ]
     sizes = [e["size"] for e in BACKUPS.list() if e.get("folder") == "backups"]
     free = shutil.disk_usage(sd).free
@@ -1806,7 +1806,7 @@ def health():
             ok, text = False, (t("Downloading %s...") % what if JOBS[cid] == "running" else t("Download of %s failed: %s") % (what, JOBS[cid]))
         if not ok:
             out.append({"id": cid, "text": text, "fix": None if JOBS.get(cid) == "running" else fix,
-                        "cmd": SERVICE_HINT if cid == "service" else UPDATE_HINT if cid == "update" and not fix else None})
+                        "cmd": None if fix else SERVICE_HINT if cid == "service" else UPDATE_HINT if cid == "update" else None})
     return out
 
 
@@ -1862,6 +1862,9 @@ def fix_health(cid, who):
         log("%s accepted the Minecraft EULA" % who)
     elif cid == "update" and UP.kind(HERE) != "docker":
         do_update(who)
+    elif cid == "service" and os.name == "nt":
+        service()
+        log("%s made the panel start at login" % who)
     elif cid in ("rcon", "script"):
         prepare_server(sd, False)
     else:

@@ -1426,7 +1426,7 @@ const HL={
     $("#upd").classList.toggle("show",!!u);
     $("#upd").innerHTML=u?"<span>"+esc(u.text)+"<a href='https://github.com/"+esc(BOOT.repo)+"/releases/latest' target=_blank rel=noopener>"+esc(_t("What's new"))+"</a></span>"
       +(u.fix?"<button class='btn primary' data-fix='update'>"+esc(_t("Update"))+"</button>":"")+(u.cmd?"<code>"+esc(u.cmd)+"</code>":""):""}catch(e){}},
-  label(id){return {java:_t("Download Java"),eula:_t("I accept the EULA"),rcon:_t("Turn on RCON"),script:_t("Copy the start script"),assets:_t("Download"),update:_t("Update")}[id]||_t("Fix")},
+  label(id){return {java:_t("Download Java"),eula:_t("I accept the EULA"),rcon:_t("Turn on RCON"),script:_t("Copy the start script"),assets:_t("Download"),update:_t("Update"),service:_t("Start at login")}[id]||_t("Fix")},
   async fix(id,b){if(id=="eula"&&!await ask("EULA",_t("Accept the Minecraft EULA? Read it at https://aka.ms/MinecraftEULA"),_t("I accept the EULA"),{primary:true}))return;
     if(id=="update"&&!await ask(_t("Update"),_t("Download the new version and restart the panel? Minecraft keeps running. What changed: https://github.com/%s/releases/latest",BOOT.repo),_t("Update"),{primary:true}))return;
     b.disabled=true;const j=await api("/api/health/fix",{id});toast(j.message,j.ok?"good":"bad");this.load()}};
