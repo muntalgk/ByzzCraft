@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Metrics: the charts with data (PC CPU and PC RAM, and the server ones while it runs) were left blank since 1.1.0:
+  a script error stopped them before drawing.
+
 ## 1.2.2
 
 - A new release shows as its own banner on the Dashboard (with a "What's new" link), no longer among the things to
