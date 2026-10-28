@@ -79,7 +79,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       # git archive leaves out what .gitattributes marks export-ignore (tests, docs, CI) and gives the .bat CRLF
