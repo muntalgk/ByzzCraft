@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.1
 
 - Login refuses a form posted from another site (login CSRF). `Referrer-Policy` is now `same-origin`: with
   `no-referrer` browsers send `Origin: null` on the panel's own forms, so the login and the first setup were refused.
