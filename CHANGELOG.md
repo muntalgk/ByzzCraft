@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.2
 
 - A new release shows as its own banner on the Dashboard (with a "What's new" link), no longer among the things to
   fix before playing and without the command line full of paths. Only Docker, which has no Update button, shows a command.
