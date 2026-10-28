@@ -745,7 +745,7 @@ class Chart{
     const now=Date.now(),t0=now-WINDOW;const pts=this.pts.filter(p=>p[0]>=t0&&p[1]!=null);
     this.msg.textContent=pts.length<2?(this.emptyMsg||_t("Waiting for data...")):"";this.tip.style.display="none";
     /* screen readers: the last value, since the line itself is only pixels */
-    c.setAttribute("aria-label",pts.length?_t("Now: %s",o.fmtTip(pts[pts.length-1][1])):this.msg.textContent);
+    c.setAttribute("aria-label",pts.length?_t("Now: %s",this.o.fmtTip(pts[pts.length-1][1])):this.msg.textContent);
     const L=40,R=10,T=10,B=22,pw=w-L-R,ph=h-T-B;const o=this.o;
     let max=Math.max(o.minMax||1,...pts.map(p=>p[1]),o.cap||0)*1.12;if(o.fixedMax)max=o.fixedMax;
     const nice=niceStep(max/4);max=Math.ceil(max/nice)*nice;
