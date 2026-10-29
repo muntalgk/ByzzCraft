@@ -74,7 +74,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now byzzcraft
 ```
 
 You can also skip the browser and do the setup from the shell:
-`python3 panel.py setup ~/minecraft --admin alex --new-server paper --accept-eula` (see `--help`).
+`python3 panel.py setup ~/minecraft --admin alex --new-server --server-type paper --accept-eula` (see `--help`).
 
 ### Windows, or Linux with a desktop
 

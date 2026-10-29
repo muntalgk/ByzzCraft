@@ -1,5 +1,8 @@
 """Plugins from Hangar (PaperMC's store) for Paper and its forks: search, install/update, list, remove."""
+import http.client
+import io
 import json
+import zlib
 import os
 import re
 import zipfile
@@ -14,7 +17,7 @@ CDN = "hangarcdn.papermc.io"
 MAX_BYTES = 100 * 1048576
 JAR = re.compile(r"[\w.+-]+\.jar")
 SLUG = re.compile(r"[\w.-]{1,64}")
-ERR = (OSError, ValueError, KeyError, TypeError, AttributeError)   # network, bad JSON or an unexpected shape: a message, never a 500
+ERR = (OSError, ValueError, KeyError, TypeError, AttributeError, http.client.HTTPException)   # network, bad JSON or an unexpected shape: a message, never a 500
 
 
 def _json(path, **q):
@@ -71,7 +74,7 @@ def _meta(path):
         with zipfile.ZipFile(path) as z:
             n = next(x for x in ("paper-plugin.yml", "plugin.yml") if x in z.namelist())
             txt = z.read(n)[:65536].decode("utf-8", "replace")
-    except (OSError, StopIteration, zipfile.BadZipFile):
+    except (OSError, StopIteration, zipfile.BadZipFile, zlib.error, EOFError):   # a truncated jar must not break the list
         return None, None
     g = lambda k: (re.search(r"^%s:\s*['\"]?([^'\"\r\n]+)" % k, txt, re.M) or [None, None])[1]
     return g("name"), g("version")
@@ -134,7 +137,12 @@ def install(server_dir, slug, mc):
             if JAR.fullmatch(n) and os.path.isfile(os.path.join(pd, n)):
                 _to_trash(server_dir, n)
             tr.pop(n, None)
-        have = {(_meta(os.path.join(pd, x["file"]))[0] or "").lower() for x in installed(server_dir)}
+        name = (_meta(io.BytesIO(data))[0] or "").lower()
+        for x in installed(server_dir):   # the same plugin under another file name (copied by hand): Paper refuses duplicates
+            if name and (_meta(os.path.join(pd, x["file"]))[0] or "").lower() == name:
+                _to_trash(server_dir, x["file"])
+                tr.pop(x["file"], None)
+        have = {(_meta(os.path.join(pd, x["file"]))[0] or "").lower() for x in installed(server_dir)} | {name}
         tmp = os.path.join(pd, v["file"] + ".panel-tmp")
         with open(tmp, "wb") as f:
             f.write(data)

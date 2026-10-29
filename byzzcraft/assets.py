@@ -115,8 +115,11 @@ def paper_jar():
     """(version, file name, jar) of the newest Paper version whose latest build is stable, SHA256 checked."""
     for group in json.loads(_get(PAPER))["versions"].values():
         for v in group:
-            b = json.loads(_get("%s/versions/%s/builds/latest" % (PAPER, v)))
-            if b.get("channel") == "STABLE":
+            try:
+                b = json.loads(_get("%s/versions/%s/builds/latest" % (PAPER, v)))
+            except OSError:   # a version without builds yet
+                continue
+            if b.get("channel") in ("STABLE", "RECOMMENDED"):
                 d = b["downloads"]["server:default"]
                 return v, d["name"], _get(d["url"], sha256=d["checksums"]["sha256"])
     raise ValueError("Paper has no stable build")

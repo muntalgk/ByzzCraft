@@ -76,6 +76,11 @@ try:
     check("update replaces", r["ok"] and sorted(os.listdir(pd)) == ["Foo-2.0.jar"], (r, os.listdir(pd)))
     check("old jar in trash", any(n.endswith("Foo-1.0.jar") for n in os.listdir(os.path.join(sd, "trash"))))
     check("tracking follows", list(json.load(open(os.path.join(paths.DATA, "plugins.json")))) == ["Foo-2.0.jar"])
+    # the same plugin copied by hand under another name: replaced too, Paper refuses two jars with one name
+    with open(os.path.join(pd, "foo-manual.jar"), "wb") as f:
+        f.write(jar("Foo", "0.9"))
+    r = P.install(sd, "Foo", "26.3")
+    check("same plugin name replaced", r["ok"] and sorted(os.listdir(pd)) == ["Foo-2.0.jar"], (r, os.listdir(pd)))
 
     # a dependency that is installed is not reported
     open(os.path.join(pd, "Vault.jar"), "wb").write(jar("Vault", "1"))
@@ -108,8 +113,9 @@ try:
     check("remove traversal", not P.remove(sd, "../x.jar")["ok"])
     check("remove missing", not P.remove(sd, "nope.jar")["ok"])
     check("remove non-jar", not P.remove(sd, "plugins")["ok"])
-    r = P.remove(sd, "Foo-2.0.jar")
-    check("remove ok", r["ok"] and not os.path.exists(os.path.join(pd, "Foo-2.0.jar")), r)
+    left = sorted(os.listdir(pd))[0]   # the last Foo installed: every install replaces the jar with the same plugin name
+    r = P.remove(sd, left)
+    check("remove ok", r["ok"] and not os.path.exists(os.path.join(pd, left)), r)
     check("untracked on remove", "Foo-2.0.jar" not in json.load(open(os.path.join(paths.DATA, "plugins.json"))))
 finally:
     shutil.rmtree(root, ignore_errors=True)

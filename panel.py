@@ -315,7 +315,7 @@ def config_files():
         pass
     for n in names:
         p = os.path.join(sd, *n.split("/"))
-        if os.path.isfile(p):
+        if os.path.isfile(p) and not os.path.islink(p):   # a link would be replaced by a plain file
             out[n] = p
     return out
 
@@ -355,7 +355,7 @@ def config_save(name, text, who):
     if err:
         return False, err
     with open(path, "rb") as f:
-        backup_file(name.replace("/", "_"), f.read())   # the whole name: config/a/x.json and config/b/x.json stay apart
+        backup_file(name.replace("/", "_"), f.read())   # the whole name: config/a/x.json and config/b/x.json stay apart (almost always)
     tmp = path + ".panel-tmp"
     with open(tmp, "w", encoding="utf-8", newline="") as f:
         f.write(text)
@@ -1606,13 +1606,13 @@ def setup_page(error="", form=None, token="", remote=False):
     network = f.get("network", "1" if remote else "") == "1"
     has_jar = bool(sd) and bool(AS.find_jar(sd))
     chk = lambda on: " checked" if on else ""
-    new = f.get("new_server", "" if has_jar or os.path.exists(os.path.join(sd, "server.properties")) else "paper")
+    new = f.get("new_server", "none" if has_jar or os.path.exists(os.path.join(sd, "server.properties")) else "paper")
     kinds = "".join('<label class=kind><input type=radio name=new_server value="%s"%s><span><b>%s</b>%s<small>%s</small></span></label>' % (
         k, chk(k == new), e(t(n)), " <em>%s</em>" % e(t("recommended")) if k == "paper" else "", e(t(d))) for k, n, d in (
         ("paper", "Paper", "Vanilla gameplay, faster, runs plugins"),
         ("vanilla", "Vanilla", "Mojang's official server, no plugins or mods"),
         ("fabric", "Fabric", "For server-side mods"),
-        ("", "I have the jar already", "It is in the folder (Spigot too, built with BuildTools)")))
+        ("none", "I have the jar already", "It is in the folder (Spigot too, built with BuildTools)")))
     body = """<main><div class=logo>%s</div><h1>%s</h1><p>%s</p>
 <form method=post action=/setup><input type=hidden name=token value="%s">
 <label for=d>%s</label><input id=d name=server_dir value="%s" required>
@@ -2731,8 +2731,8 @@ def cli(args):
         ap.add_argument("--lang", default="en", choices=languages())
         ap.add_argument("--network", action="store_true", help="open the panel to the home network (http://IP:%d)" % CFG["port"])
         ap.add_argument("--accept-eula", action="store_true", help="accept the Minecraft EULA (https://aka.ms/MinecraftEULA)")
-        ap.add_argument("--new-server", nargs="?", const="vanilla", choices=AS.SERVERS,
-                        help="download the latest Minecraft server if the folder has none (default vanilla)")
+        ap.add_argument("--new-server", action="store_true", help="download the latest Minecraft server if the folder has none")
+        ap.add_argument("--server-type", choices=AS.SERVERS, default="vanilla", help="server --new-server downloads (default vanilla)")
         ap.add_argument("--no-java", action="store_true", help="do not download Java if it is missing")
         a = ap.parse_args(args[1:])
         if users:
@@ -2745,7 +2745,7 @@ def cli(args):
             CFG["port"] = free_port(CFG["port"] + 1)
             L.warning("port in use, the panel will use %d", CFG["port"])
         err = do_setup({"server_dir": a.server_dir, "user": a.admin, "password": pw, "lang": a.lang, "network": "1" if a.network else "",
-                        "eula": "1" if a.accept_eula else "", "new_server": a.new_server or "", "java": "" if a.no_java else "1"})
+                        "eula": "1" if a.accept_eula else "", "new_server": a.server_type if a.new_server else "", "java": "" if a.no_java else "1"})
         if err:
             sys.exit(err)
         need = RT.required(CFG["server_dir"], server_jar())

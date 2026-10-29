@@ -9,8 +9,8 @@
 - Dashboard: without an address set in the panel settings, players see this machine's Tailscale IP (or the home
   network one), with the port when it is not 25565.
 - Setup: choose the server to download into an empty folder, from cards with a short description: Paper
-  (recommended), vanilla or Fabric (latest stable). From the command line: `panel.py setup DIR --new-server paper`
-  (plain `--new-server` is still vanilla).
+  (recommended), vanilla or Fabric (latest stable). From the command line: `panel.py setup DIR --new-server --server-type paper`
+  (without `--server-type` it is still vanilla).
 - Spigot: the panel finds `spigot-<version>.jar` by itself (before it started the vanilla `server.jar` next to it, or
   nothing) and reads the Minecraft version from its name, so it picks the right Java and the map textures.
 
