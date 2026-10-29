@@ -928,7 +928,7 @@ $("#p-filter").oninput=renderProps;$("#p-undo").onclick=()=>{S.edits={};renderPr
 async function saveProps(restart){const j=await api("/api/properties",{changes:S.edits,restart});toast(j.message,j.ok?"good":"bad");if(j.ok){await loadProps();if(restart)go("dash")}}
 const PS={async load(){if(!BOOT.admin)return;const r=await GET("/api/panel-settings");if(r)this.render(await r.json())},
   render(j){$("#ps-ram").value=j.ram;$("#ps-ram").placeholder=_t("automatic: %s",j.ram_auto);$("#ps-stop").value=j.auto_stop_minutes;
-    $("#ps-addr").value=j.mc_address;$("#ps-args").value=j.java_args;$("#ps-bk").checked=j.backup_on_start;$("#ps-ar").checked=j.auto_restart;
+    $("#ps-addr").value=j.mc_address;$("#ps-addr").placeholder=BOOT.auto_address||_t("e.g. play.example.com");$("#ps-args").value=j.java_args;$("#ps-bk").checked=j.backup_on_start;$("#ps-ar").checked=j.auto_restart;
     $("#ps-lang").innerHTML=j.langs.map(([c,n])=>"<option value='"+esc(c)+"'>"+esc(n)+"</option>").join("");$("#ps-lang").value=j.lang;
     ["#ps-ram","#ps-args","#ps-bk"].forEach(s=>$(s).disabled=!!j.start_script);
     $("#ps-info").textContent=j.start_script?_t("Started by your script %s: RAM, Java flags and the backup before the start are set there.",j.start_script)
@@ -937,7 +937,7 @@ const PS={async load(){if(!BOOT.admin)return;const r=await GET("/api/panel-setti
   async save(){const j=await api("/api/panel-settings",{ram:$("#ps-ram").value,java_args:$("#ps-args").value,backup_on_start:$("#ps-bk").checked,auto_restart:$("#ps-ar").checked,
     auto_stop_minutes:+$("#ps-stop").value||0,mc_address:$("#ps-addr").value,lang:$("#ps-lang").value});toast(j.message,j.ok?"good":"bad");
     if(j.restart){const again=()=>fetch("/manifest.webmanifest").then(r=>r.ok?location.reload():setTimeout(again,1000)).catch(()=>setTimeout(again,1000));setTimeout(again,2500);return}   /* the panel restarts in the new language */
-    if(j.ok){this.render(j.settings);BOOT.address=j.settings.mc_address;renderStatus()}}};
+    if(j.ok){this.render(j.settings);BOOT.address=j.settings.mc_address||BOOT.auto_address;renderStatus()}}};
 $("#ps-save").onclick=()=>PS.save();
 $("#p-save").onclick=()=>saveProps(false);$("#p-save-r").onclick=async()=>{if(S.status.state!="on"||await ask(_t("Save and restart"),_t("Save and restart the server now?"),_t("Save and restart"),{primary:true}))saveProps(S.status.state=="on")};
 

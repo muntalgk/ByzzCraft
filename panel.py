@@ -1377,6 +1377,9 @@ form{background:var(--card);border:1px solid var(--line);border-radius:16px;padd
 label{display:block;font-size:13px;color:var(--mute);margin:12px 0 6px}
 select{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:#0c0e12;color:var(--text);font-size:16px}
 label.chk{display:flex;gap:8px;align-items:center;margin-top:16px}label.chk input{width:auto}a{color:var(--accent)}
+.kinds{display:grid;gap:8px}label.kind{display:flex;gap:10px;align-items:flex-start;margin:0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;cursor:pointer;color:var(--text);font-size:15px}
+label.kind:has(input:checked){border-color:var(--accent);background:#3fb95014}label.kind input{width:auto;margin:4px 0 0;accent-color:var(--accent)}
+label.kind small{display:block;color:var(--mute);font-size:13px}label.kind em{font-style:normal;font-size:11px;color:var(--accent);border:1px solid var(--accent);border-radius:99px;padding:0 6px;margin-left:6px}
 input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:#0c0e12;color:var(--text);font-size:16px}
 input:focus{outline:2px solid #3fb95055;border-color:var(--accent)}
 button{width:100%;padding:13px;border:0;border-radius:10px;font-size:16px;font-weight:650;cursor:pointer;margin-top:18px;background:var(--accent);color:#06210c}
@@ -1485,6 +1488,27 @@ def lan_ip():
         return "SERVER-IP"
 
 
+def tailnet_ip():
+    """This machine's Tailscale IP, None without Tailscale."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as so:
+            so.connect(("100.100.100.100", 53))   # Tailscale's resolver: only the tailnet interface routes there
+            ip = so.getsockname()[0]
+        return ip if ipaddress.ip_address(ip) in ipaddress.ip_network("100.64.0.0/10") else None
+    except (OSError, ValueError):
+        return None
+
+
+def auto_address():
+    """Address for players when mc_address is empty: the Tailscale IP, otherwise the home network one, with the port
+    when it is not Minecraft's default."""
+    ip = tailnet_ip() or lan_ip()
+    if ip == "SERVER-IP":
+        return ""
+    port = server_props().get("server-port", "25565").strip()
+    return ip if port in ("", "25565") else "%s:%s" % (ip, port)
+
+
 def lan_is_public():
     """A VPS: the "home network" address is on the internet (Tailscale's 100.64/10 is not global)."""
     try:
@@ -1506,14 +1530,17 @@ def setup_page(error="", form=None, token="", remote=False):
     network = f.get("network", "1" if remote else "") == "1"
     has_jar = bool(sd) and bool(AS.find_jar(sd))
     chk = lambda on: " checked" if on else ""
-    new = f.get("new_server", "" if has_jar or os.path.exists(os.path.join(sd, "server.properties")) else "vanilla")
-    kinds = "".join("<option value=\"%s\"%s>%s</option>" % (k, " selected" if k == new else "", e(t(n))) for k, n in (
-        ("", "None: the server jar is already in the folder (Spigot: build it with BuildTools)"),
-        ("vanilla", "Vanilla: Mojang's server"), ("paper", "Paper: plugins, faster"), ("fabric", "Fabric: mods")))
+    new = f.get("new_server", "" if has_jar or os.path.exists(os.path.join(sd, "server.properties")) else "paper")
+    kinds = "".join('<label class=kind><input type=radio name=new_server value="%s"%s><span><b>%s</b>%s<small>%s</small></span></label>' % (
+        k, chk(k == new), e(t(n)), " <em>%s</em>" % e(t("recommended")) if k == "paper" else "", e(t(d))) for k, n, d in (
+        ("paper", "Paper", "Vanilla gameplay, faster, runs plugins"),
+        ("vanilla", "Vanilla", "Mojang's official server, no plugins or mods"),
+        ("fabric", "Fabric", "For server-side mods"),
+        ("", "I have the jar already", "It is in the folder (Spigot too, built with BuildTools)")))
     body = """<main><div class=logo>%s</div><h1>%s</h1><p>%s</p>
 <form method=post action=/setup><input type=hidden name=token value="%s">
 <label for=d>%s</label><input id=d name=server_dir value="%s" required>
-<label for=n>%s</label><select id=n name=new_server>%s</select>
+<label>%s</label><div class=kinds>%s</div>
 <label for=l>%s</label><select id=l name=lang>%s</select>
 <label for=u>%s</label><input id=u name=user autocomplete=username required pattern="[a-z0-9_.\\-]{1,32}" value="%s">
 <label for=p>%s</label><input id=p name=password type=password autocomplete=new-password required minlength=10>
@@ -1898,7 +1925,7 @@ def app_page(sess, nonce):
     with open(os.path.join(CODE, "app.html"), encoding="utf-8") as f:
         tpl = f.read()
     boot = {"user": sess["user"], "admin": sess["admin"], "csrf": sess["csrf"], "title": CFG["title"],
-            "address": CFG.get("mc_address") or "", "autostop": CFG["auto_stop_minutes"], "cores": NCPU,
+            "address": CFG.get("mc_address") or auto_address(), "auto_address": auto_address(), "autostop": CFG["auto_stop_minutes"], "cores": NCPU,
             "mc": mc_names().get(sess["user"], ""), "lang": i18n.LANG, "i18n": i18n.TABLE,
             "version": VERSION, "latest": UPDATE.get("latest") if UPDATE.get("newer") else None, "repo": REPO}
     tpl = tpl.replace("{{TITLE}}", html.escape(CFG["title"])).replace("{{LANG}}", i18n.LANG)

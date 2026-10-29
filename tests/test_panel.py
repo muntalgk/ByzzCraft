@@ -206,6 +206,16 @@ try:
     panel.write_props({"level-name": "w2"}, "t")
     check("write_props rewrites as UTF-8", open(props, "rb").read() == ("motd=caf"+chr(233)+NL+"level-name=w2"+NL).encode("utf-8"))
 
+    # players' address when none is set: Tailscale IP before the home network one, the port only if not 25565
+    real_ts = panel.tailnet_ip
+    panel.tailnet_ip = lambda: "100.64.1.2"
+    check("auto address: Tailscale, default port", panel.auto_address() == "100.64.1.2")
+    panel.write_props({"server-port": "25566"}, "t")
+    check("auto address: other port", panel.auto_address() == "100.64.1.2:25566")
+    panel.tailnet_ip = lambda: None
+    check("auto address: home network without Tailscale", panel.auto_address() == panel.lan_ip() + ":25566" or panel.lan_ip() == "SERVER-IP")
+    panel.tailnet_ip = real_ts
+
     # usercache: bad entries are skipped
     with open(j(srv_dir, "usercache.json"), "w") as f:
         json.dump([{"name": "x"}, {"uuid": "../../etc", "name": "y"}, {"uuid": "12345678-1234-1234-1234-123456789abc", "name": "ok"}], f)
