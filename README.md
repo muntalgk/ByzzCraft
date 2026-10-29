@@ -42,6 +42,7 @@ panel when they're missing.
 - Timeline of sessions, deaths, advancements and chat, rebuilt from the server logs
 - Console with the live log and RCON commands
 - `server.properties` editor, backed up on every save
+- Plugins for Paper servers: search and install from Hangar, update and remove
 - Scheduled and manual world backups with retention rules, download and restore
 - Whitelist, ops, bans and kicks, also with the server off
 - One login per friend: admins see everything, players can start the server and look around

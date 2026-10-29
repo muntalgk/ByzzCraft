@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Plugins: on Paper servers (and Purpur, Folia, Pufferfish) admins can search Hangar and install, update or remove
+  plugins from the panel; downloads are hash-checked and removed jars go to the trash.
 - Config files: admins can edit the files of the server type in use (Paper, Spigot, Purpur, mod configs) from the
   panel; JSON, YAML tabs and TOML are checked before saving and every save keeps a backup.
 - Dashboard: without an address set in the panel settings, players see this machine's Tailscale IP (or the home

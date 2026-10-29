@@ -42,6 +42,7 @@ mancano.
 - Cronologia di sessioni, morti, progressi e chat, ricostruita dai log del server
 - Console con il log in diretta e i comandi RCON
 - Editor di `server.properties`, con un backup a ogni salvataggio
+- Plugin per i server Paper: cerca e installa da Hangar, aggiorna e rimuovi
 - Backup del mondo manuali e programmati, con regole di pulizia, download e ripristino
 - Whitelist, operatori, ban e kick, anche a server spento
 - Un account per ogni amico: gli admin vedono tutto, i giocatori possono accendere il server e guardarsi intorno

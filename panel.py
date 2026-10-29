@@ -33,6 +33,7 @@ from byzzcraft import backups as BK  # noqa: E402
 from byzzcraft import access as AC  # noqa: E402
 from byzzcraft import activity as ACT  # noqa: E402
 from byzzcraft import assets as AS  # noqa: E402
+from byzzcraft import plugins as PLG  # noqa: E402
 from byzzcraft import runtime as RT  # noqa: E402
 from byzzcraft import updater as UP  # noqa: E402
 from byzzcraft import i18n  # noqa: E402
@@ -1830,6 +1831,14 @@ def server_jar():
     return AS.find_jar(CFG["server_dir"], CFG.get("server_jar"))
 
 
+def plugins_mc():
+    """Minecraft version when the server is Paper or a fork (Hangar plugins make sense), else None."""
+    sd, jar = CFG["server_dir"], server_jar()
+    if (jar or "").lower().startswith(("paper", "purpur", "folia", "pufferfish")) or os.path.isfile(os.path.join(sd, "config", "paper-global.yml")):
+        return AS.jar_info(sd, jar)[0] or ""
+    return None
+
+
 def download_java():
     need = RT.required(CFG["server_dir"], server_jar())
 
@@ -2044,7 +2053,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "same-origin")
         # scripts only with this response's nonce: HTML slipped into the page (a player's chat line) cannot run
         self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src %s; "
-                         "connect-src 'self'; img-src 'self' data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'"
+                         "connect-src 'self'; img-src 'self' data: https://hangarcdn.papermc.io; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'"
                          % ("'nonce-%s'" % self.nonce if self.nonce else "'none'"))
 
     def send_file(self, path, name):
@@ -2241,7 +2250,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(200, {"events": evs[:qint(q, "limit", 200, 1, 500)]})
         if path == "/api/sessions":
             return self.json(200, {"sessions": TLINE.sessions(limit=qint(q, "limit", 30, 1, 200), running=SRV.state != "off")})
-        if path in ("/api/backups", "/api/backups/download", "/api/access", "/api/audit", "/api/users", "/api/health", "/api/syslog", "/api/configs") and not s["admin"]:
+        if path in ("/api/backups", "/api/backups/download", "/api/access", "/api/audit", "/api/users", "/api/health", "/api/syslog", "/api/configs", "/api/plugins", "/api/plugins/search") and not s["admin"]:
             return self.json(403, {"error": "admins only"})
         if path == "/api/configs":
             files = config_files()
@@ -2256,6 +2265,13 @@ class Handler(BaseHTTPRequestHandler):
                     return self.json(200, {"name": name, "text": f.read()})
             except (OSError, UnicodeDecodeError):
                 return self.json(404, {"error": t("File not available")})
+        if path == "/api/plugins":
+            mc = plugins_mc()
+            return self.json(200, {"enabled": mc is not None, "mc": mc or "", "installed": PLG.installed(CFG["server_dir"]) if mc is not None else []})
+        if path == "/api/plugins/search":
+            if plugins_mc() is None:
+                return self.json(200, {"ok": False, "message": t("Plugins need a Paper server.")})
+            return self.json(200, PLG.search(q.get("q", [""])[0][:60], qint(q, "offset", 0, 0, 10000), plugins_mc()))
         if path == "/api/access":
             p = server_props()
             return self.json(200, {**AC.snapshot(CFG["server_dir"]), "online": sorted(online_names()), "state": SRV.state,
@@ -2513,6 +2529,23 @@ class Handler(BaseHTTPRequestHandler):
                 SRV.stop(s["user"], "new settings", restart=True)
                 HUB.publish("status", SRV.snapshot())
             return self.json(200, {"ok": ok, "message": msg})
+        if self.path in ("/api/plugins/install", "/api/plugins/remove"):
+            mc, sd = plugins_mc(), CFG["server_dir"]
+            if mc is None:
+                return self.json(200, {"ok": False, "message": t("Plugins need a Paper server.")})
+            if self.path.endswith("install"):
+                slug = str(data.get("slug", ""))
+                r = PLG.install(sd, slug, mc)
+                if r["ok"]:
+                    log("%s installed plugin %s %s" % (s["user"], slug, r["version"]))
+            else:
+                r = PLG.remove(sd, str(data.get("file", "")))
+                if r["ok"]:
+                    log("%s removed plugin %s" % (s["user"], data["file"]))
+            if r["ok"] and data.get("restart") and SRV.state == "on":
+                SRV.stop(s["user"], "new settings", restart=True)
+                HUB.publish("status", SRV.snapshot())
+            return self.json(200, r)
         self.json(404, {"ok": False, "message": t("not found")})
 
 
