@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- Plugins: on Paper servers (and Purpur, Folia, Pufferfish) admins can search Hangar and install, update or remove
+  plugins from the panel; downloads are hash-checked and removed jars go to the trash.
+- Config files: admins can edit the files of the server type in use (Paper, Spigot, Purpur, mod configs) from the
+  panel; JSON, YAML tabs and TOML are checked before saving and every save keeps a backup.
+- Dashboard: without an address set in the panel settings, players see this machine's Tailscale IP (or the home
+  network one), with the port when it is not 25565.
+- Setup: choose the server to download into an empty folder, from cards with a short description: Paper
+  (recommended), vanilla or Fabric (latest stable). From the command line: `panel.py setup DIR --new-server --server-type paper`
+  (without `--server-type` it is still vanilla).
+- Spigot: the panel finds `spigot-<version>.jar` by itself (before it started the vanilla `server.jar` next to it, or
+  nothing) and reads the Minecraft version from its name, so it picks the right Java and the map textures.
+
 ## 1.2.4
 
 - Players online come from the server's own player list: those who turned off "Allow Server Listings", every player

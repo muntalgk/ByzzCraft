@@ -73,6 +73,41 @@ try:
     check("jar from config", A.find_jar(d, "paper-26.3-218.jar") == "paper-26.3-218.jar" and A.find_jar(d, "manca.jar") is None)
     jar("forge-installer.jar", {})
     check("installer ignored", A.find_jar(d) == "fabric-server-launch.jar")
+    for n in ("fabric-server-launch.jar", "paper-26.3-218.jar", "forge-installer.jar"):
+        os.remove(os.path.join(d, n))
+    jar("spigot-1.21.4.jar", {"META-INF/MANIFEST.MF": "Main-Class: org.bukkit.craftbukkit.bootstrap.Main\n"})
+    jar("server.jar", {"version.json": json.dumps({"id": "1.21.4", "java_version": 21})})
+    check("Spigot before vanilla", A.find_jar(d) == "spigot-1.21.4.jar")
+    os.remove(os.path.join(d, "server.jar"))
+    check("Spigot: version from the jar name", A.jar_info(d, "spigot-1.21.4.jar") == ("1.21.4", 21))
+    # setup downloads: Paper's newest stable build (SHA256 checked), Fabric's launcher for the stable versions
+    import hashlib
+    web = {A.PAPER: {"versions": {"26.4": ["26.4-pre1"], "26.3": ["26.3"]}},
+           A.PAPER + "/versions/26.4-pre1/builds/latest": {"channel": "ALPHA"},
+           A.PAPER + "/versions/26.3/builds/latest": {"channel": "STABLE", "downloads": {"server:default": {
+               "name": "paper-26.3-230.jar", "url": "https://x/paper.jar", "checksums": {"sha256": hashlib.sha256(b"PAPER").hexdigest()}}}},
+           A.FABRIC + "/game": [{"version": "26.4-pre1", "stable": False}, {"version": "26.3", "stable": True}],
+           A.FABRIC + "/loader": [{"version": "0.20.1", "stable": True}],
+           A.FABRIC + "/installer": [{"version": "1.1.3", "stable": False}, {"version": "1.1.2", "stable": True}]}
+    files = {"https://x/paper.jar": b"PAPER", A.FABRIC + "/loader/26.3/0.20.1/1.1.2/server/jar": b"FABRIC"}
+    import contextlib, urllib.request
+    real_open = urllib.request.urlopen
+    urllib.request.urlopen = lambda req, timeout: contextlib.nullcontext(io.BytesIO(
+        files.get(req.full_url) or json.dumps(web[req.full_url]).encode()))
+    try:
+        new = os.path.join(d, "new")
+        check("download Paper", A.download_server(new, log=lambda *_: None, kind="paper") == "26.3"
+              and open(os.path.join(new, "paper-26.3-230.jar"), "rb").read() == b"PAPER")
+        check("download Fabric", A.download_server(new, log=lambda *_: None, kind="fabric") == "26.3"
+              and os.path.isfile(os.path.join(new, "fabric-server-mc.26.3-loader.0.20.1-launcher.1.1.2.jar")))
+        files["https://x/paper.jar"] = b"BROKEN"
+        try:
+            A.paper_jar()
+            check("Paper: corrupted download refused", False)
+        except OSError:
+            check("Paper: corrupted download refused", True)
+    finally:
+        urllib.request.urlopen = real_open
 finally:
     shutil.rmtree(d, ignore_errors=True)
 # biome-colored icons: grey ones get the inventory color, colored ones (a resource pack) and other ids stay as they are

@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import struct
 import urllib.request
@@ -16,6 +17,9 @@ from .mapgen import _png
 
 from .paths import ASSETS, DATA  # noqa: E402
 MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
+PAPER = "https://fill.papermc.io/v3/projects/paper"
+FABRIC = "https://meta.fabricmc.net/v2/versions"
+SERVERS = ("vanilla", "paper", "fabric")   # what the setup can download; Spigot is built with BuildTools, not downloaded
 TEX = "assets/minecraft/textures/"
 # folder in the jar -> folder in assets/ (subfolders become a prefix: hud/heart/full.png -> hud/heart_full.png)
 DIRS = {TEX + "block/": "block", TEX + "item/": "item", TEX + "gui/sprites/hud/": "hud", TEX + "entity/player/": "skin"}
@@ -28,7 +32,7 @@ def present():
 
 
 # known names, in order: the Fabric/Quilt launchers and forks like Paper come with the vanilla server.jar too
-JAR_PREFIXES = ("fabric-server-launch", "fabric-server", "quilt-server", "paper", "purpur", "folia", "pufferfish", "server")
+JAR_PREFIXES = ("fabric-server-launch", "fabric-server", "quilt-server", "paper", "purpur", "folia", "pufferfish", "spigot", "server")
 
 
 def find_jar(server_dir, configured=None):
@@ -67,6 +71,8 @@ def jar_info(server_dir, jar=None):
                     ver = ver or props.get("game-version")
         except (OSError, ValueError, KeyError, zipfile.BadZipFile):
             pass
+    m = not ver and jar and re.search(r"-(\d+\.\d+(?:\.\d+)?)\.jar$", jar)   # BuildTools names it spigot-1.21.4.jar
+    ver = m.group(1) if m else ver
     if ver and not java:
         if ver not in _JAVA:
             try:
@@ -85,10 +91,11 @@ def server_version(server_dir, jar=None):
     return ver
 
 
-def _get(url, sha1=None):
-    with urllib.request.urlopen(url, timeout=60) as r:
+def _get(url, sha1=None, sha256=None):
+    # PaperMC asks every client to say who it is
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "ByzzCraft (github.com/muntalgk/ByzzCraft)"}), timeout=60) as r:
         data = r.read()
-    if sha1 and hashlib.sha1(data).hexdigest() != sha1:
+    if sha1 and hashlib.sha1(data).hexdigest() != sha1 or sha256 and hashlib.sha256(data).hexdigest() != sha256:
         raise OSError("Corrupted download: %s" % url)
     return data
 
@@ -104,16 +111,45 @@ def mojang_jar(version, kind="client"):
     return version, _get(c["url"], c["sha1"])
 
 
-def download_server(server_dir, version=None, log=print):
-    """New server: Mojang's server.jar into the folder (created if missing). Returns the version."""
-    log("Downloading the Minecraft server%s from Mojang..." % (" " + version if version else ""))
-    version, jar = mojang_jar(version, "server")
+def paper_jar():
+    """(version, file name, jar) of the newest Paper version whose latest build is stable, SHA256 checked."""
+    for group in json.loads(_get(PAPER))["versions"].values():
+        for v in group:
+            try:
+                b = json.loads(_get("%s/versions/%s/builds/latest" % (PAPER, v)))
+            except OSError:   # a version without builds yet
+                continue
+            if b.get("channel") in ("STABLE", "RECOMMENDED"):
+                d = b["downloads"]["server:default"]
+                return v, d["name"], _get(d["url"], sha256=d["checksums"]["sha256"])
+    raise ValueError("Paper has no stable build")
+
+
+def fabric_jar():
+    """(version, file name, jar) of Fabric's server launcher for the latest stable game, loader and installer:
+    a single jar that downloads the vanilla server and the libraries at its first start."""
+    game, loader, inst = (next(x["version"] for x in json.loads(_get("%s/%s" % (FABRIC, k))) if x.get("stable"))
+                          for k in ("game", "loader", "installer"))
+    return (game, "fabric-server-mc.%s-loader.%s-launcher.%s.jar" % (game, loader, inst),
+            _get("%s/loader/%s/%s/%s/server/jar" % (FABRIC, game, loader, inst)))
+
+
+def download_server(server_dir, version=None, log=print, kind="vanilla"):
+    """New server: vanilla (Mojang's server.jar, version None = latest), Paper or Fabric (latest stable) into the
+    folder, created if missing. Returns the version."""
+    log("Downloading the Minecraft server (%s%s)..." % (kind, " " + version if version else ""))
+    if kind == "paper":
+        version, name, jar = paper_jar()
+    elif kind == "fabric":
+        version, name, jar = fabric_jar()
+    else:
+        (version, jar), name = mojang_jar(version, "server"), "server.jar"
     os.makedirs(server_dir, exist_ok=True)
-    tmp = os.path.join(server_dir, "server.jar.part")
+    tmp = os.path.join(server_dir, name + ".part")
     with open(tmp, "wb") as f:
         f.write(jar)
-    os.replace(tmp, os.path.join(server_dir, "server.jar"))
-    log("Minecraft server %s saved in %s" % (version, server_dir))
+    os.replace(tmp, os.path.join(server_dir, name))
+    log("Minecraft server %s saved in %s" % (name, server_dir))
     return version
 
 

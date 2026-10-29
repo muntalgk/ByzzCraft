@@ -361,6 +361,14 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
 .modal ul{margin:0 0 12px;padding-left:18px;color:var(--text2);font-size:13.5px}
 .modal input{width:100%;background:var(--surface);border:1px solid var(--line2);border-radius:10px;padding:10px 12px;color:var(--text);font:600 15px var(--mono);letter-spacing:.06em}
 .modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.pl-row{display:flex;gap:12px;align-items:center;padding:12px 14px;margin-bottom:8px;flex-wrap:wrap}.pl-row .pl-i{flex:1;min-width:160px}.pl-row small{display:block;color:var(--mute);font-size:12px}
+.pl-row .btn{padding:7px 12px}.pl-note{color:var(--warn);font-size:13px;margin:0 0 12px}
+.modal.pl-m{max-width:720px;max-height:calc(100vh - 32px);display:flex;flex-direction:column}.modal.pl-m h3{display:flex;justify-content:space-between;align-items:center}
+.modal.pl-m .search{width:100%;box-sizing:border-box;font-weight:400;letter-spacing:0;font-family:inherit}
+.pl-res{overflow:auto;margin-top:12px;display:grid;gap:8px}.pl-card{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px}
+.pl-card img,.pl-card .pl-av{width:48px;height:48px;border-radius:10px;flex:none;background:var(--card2)}.pl-card .pl-i{flex:1;min-width:0}
+.pl-card b a{color:var(--text);text-decoration:none}.pl-card b a:hover{text-decoration:underline}.pl-card p{margin:2px 0 4px;font-size:13px;color:var(--text2);overflow-wrap:anywhere}.pl-card small{color:var(--mute);font-size:12px}
+@media(max-width:600px){.modal-bg:has(.pl-m){padding:0}.modal.pl-m{max-width:none;height:100%;max-height:none;border-radius:0}.pl-card{flex-wrap:wrap}}
 @media (max-width:1100px){.bk-top{grid-template-columns:1fr 1fr}.bk-now{grid-column:1/-1}.bk-wrap{grid-template-columns:minmax(0,1fr)}}
 /* backup row on phones: the kind as a colored edge (the badge says it too), title, details, then the actions spread evenly */
 @media (max-width:520px){.bk-top{grid-template-columns:1fr}
@@ -492,6 +500,8 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
     <p class="nav-sec adm">{{Administration}}</p>
     <button class="tab nb adm" data-v="console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-5-6-5M12 19h8"/></svg>Console</button>
     <button class="tab adm" data-v="props" data-s="Config"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>{{Settings}}</button>
+    <button class="tab adm" data-v="configs" id="tab-cf" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>{{Config files}}</button>
+    <button class="tab adm" data-v="plugins" id="tab-pl" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/></svg>{{Plugins}}</button>
     <button class="tab adm" data-v="backups"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></svg>Backup<span class="cnt" id="cnt-bk"></span></button>
     <button class="tab adm" data-v="access"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>{{Access}}</button>
     <button class="tab adm" data-v="audit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>{{Log}}</button>
@@ -608,6 +618,20 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
       <div class="savebar" id="savebar"><span id="p-count"></span><div class="actions"><button class="btn" id="p-undo">{{Cancel}}</button><button class="btn" id="p-save">{{Save}}</button><button class="btn primary" id="p-save-r">{{Save and restart}}</button></div></div>
     </section>
 
+    <!-- CONFIG FILES -->
+    <section id="v-configs" hidden>
+      <div class="toolbar"><select class="search" id="cf-file" aria-label="{{Config files}}"></select><span class="lock">{{Changes apply at the next server restart. Every save backs up the file.}}</span></div>
+      <textarea class="search" id="cf-text" spellcheck="false" autocomplete="off" style="display:block;width:100%;box-sizing:border-box;min-height:55vh;font:13px var(--mono);white-space:pre;tab-size:2;resize:vertical"></textarea>
+      <div class="row" style="margin-top:12px;flex-wrap:wrap"><button class="btn" id="cf-save">{{Save}}</button><button class="btn primary" id="cf-save-r">{{Save and restart}}</button></div>
+    </section>
+
+    <!-- PLUGINS -->
+    <section id="v-plugins" hidden>
+      <div class="toolbar"><button class="btn primary" id="pl-browse">{{Browse Hangar}}</button><span class="lock">{{Plugins load when the server starts.}}</span></div>
+      <p class="pl-note" id="pl-note" hidden>{{Restart the server to apply the changes.}} <button class="btn" id="pl-restart">{{Restart}}</button></p>
+      <div id="plg-list"></div>
+    </section>
+
     <!-- BACKUP -->
     <section id="v-backups" hidden>
       <div class="bk-top">
@@ -709,14 +733,14 @@ if(!BOOT.admin){$$(".adm,.adm-only").forEach(e=>e.hidden=true);$(".tab[data-v=ti
 function renderMe(){const f=$("#me-face");const me=BOOT.mc&&(P.roster||[]).find(p=>p.name.toLowerCase()==BOOT.mc.toLowerCase());
   if(me){if(f.dataset.u!=me.uuid){f.dataset.u=me.uuid;f.className="me-face fc";f.style.cssText=faceStyle(me.uuid,32);f.textContent=""}}
   else if(!f.dataset.u)f.textContent=(BOOT.mc||BOOT.user).charAt(0).toUpperCase()}
-const TITLES={dash:"Dashboard",map:_t("Map"),players:_t("Players"),timeline:"Timeline",metrics:_t("Metrics"),console:"Console",props:_t("Server settings"),backups:"Backup",access:_t("Access"),audit:_t("Panel log"),account:_t("Account")};
+const TITLES={dash:"Dashboard",map:_t("Map"),players:_t("Players"),timeline:"Timeline",metrics:_t("Metrics"),console:"Console",props:_t("Server settings"),configs:_t("Config files"),plugins:_t("Plugins"),backups:"Backup",access:_t("Access"),audit:_t("Panel log"),account:_t("Account")};
 const SUBS={dash:()=>_t("Server and world"),map:()=>matchMedia("(pointer:coarse)").matches?_t("Drag and pinch"):_t("Right-click to add a marker"),
   players:()=>{const r=P.roster||[],n=r.filter(p=>p.online).length;return _t("%s players",r.length)+" · "+(n?_t("%s online",n):_t("nobody online"))},
-  timeline:()=>_t("Sessions and events"),metrics:()=>_t("Last 10 minutes"),console:()=>_t("Log and commands"),props:()=>"server.properties",access:()=>_t("Whitelist, OP and bans"),audit:()=>_t("Who did what"),account:()=>BOOT.admin?_t("Password and users"):_t("Your password"),
+  timeline:()=>_t("Sessions and events"),metrics:()=>_t("Last 10 minutes"),console:()=>_t("Log and commands"),props:()=>"server.properties",configs:()=>_t("Paper, Spigot and mods"),plugins:()=>PL.mc?_t("Hangar · Minecraft %s",PL.mc):"Hangar",access:()=>_t("Whitelist, OP and bans"),audit:()=>_t("Who did what"),account:()=>BOOT.admin?_t("Password and users"):_t("Your password"),
   backups:()=>BK.items?_t("%s backups",BK.items.length)+" · "+gb(BK.items.reduce((a,e)=>a+e.size,0))+" · "+_t("%s free",gb(BK.disk.free)):_t("World backups")};
 let CUR="dash";function setSub(){$("#v-sub").textContent=SUBS[CUR]?SUBS[CUR]():""}
 function go(v){if(!TITLES[v])v="dash";CUR=v;document.body.dataset.v=v;$$(".tab").forEach(t=>{t.classList.toggle("on",t.dataset.v==v);});$("#more").classList.toggle("on",!!$(".tab.on:not(.nb)"));navMore(0);Object.keys(TITLES).forEach(x=>$("#v-"+x).hidden=x!=v);
-  $("#v-title").textContent=TITLES[v];setSub();if(v=="props"){loadProps();PS.load()}if(v=="console"){renderConsole();setTimeout(()=>$("#cmd").focus(),50)}if(v=="metrics")charts.forEach(c=>c.draw());
+  $("#v-title").textContent=TITLES[v];setSub();if(v=="props"){loadProps();PS.load()}if(v=="configs")CF.load();if(v=="plugins")PL.load();if(v=="console"){renderConsole();setTimeout(()=>$("#cmd").focus(),50)}if(v=="metrics")charts.forEach(c=>c.draw());
   if(v=="players")loadPlayers();if(v=="map")MAPF.show();if(v=="timeline")TLV.open();if(v=="dash")MAPM.show();if(v=="backups")BK.load();if(v=="access")ACV.load();if(v=="audit")RGV.load();if(v=="account")ACC.load();location.hash=v;scrollTo(0,0)}
 $$(".tab").forEach(t=>t.onclick=()=>go(t.dataset.v));
 function navMore(o){$("nav").classList.toggle("open",o);$("#nav-bd").hidden=!o}
@@ -925,10 +949,52 @@ function propRow(p,m){const v=p.key in S.edits?S.edits[p.key]:p.value;const dis=
   return "<div class='prop"+(p.key in S.edits?" changed":"")+"'><div><div class=k>"+esc(p.key)+(p.locked?" <span class=lock>"+_t("locked")+"</span>":"")+"</div><div class=d>"+esc(m[1]||"")+"</div></div><div>"+ctl+"</div></div>"}
 function savebar(){const n=Object.keys(S.edits).length;$("#savebar").classList.toggle("show",n>0);$("#p-count").textContent=(n==1?_t("%s unsaved change",n):_t("%s unsaved changes",n))}
 $("#p-filter").oninput=renderProps;$("#p-undo").onclick=()=>{S.edits={};renderProps()};
+/* config files of the server type (Paper, Spigot, mods) */
+const CF={async load(){if(!BOOT.admin)return;const r=await GET("/api/configs");if(!r)return;const fs=(await r.json()).files,sel=$("#cf-file"),cur=sel.value;
+    $("#tab-cf").hidden=!fs.length;sel.textContent="";fs.forEach(f=>{const o=document.createElement("option");o.value=f.name;o.textContent=f.name;sel.appendChild(o)});
+    if(!fs.length){$("#cf-text").value="";return}sel.value=fs.some(f=>f.name==cur)?cur:fs[0].name;this.open()},
+  async open(){const r=await GET("/api/configs?file="+encodeURIComponent($("#cf-file").value));$("#cf-text").value=r?(await r.json()).text:""},
+  async save(restart){const j=await api("/api/configs",{file:$("#cf-file").value,text:$("#cf-text").value,restart});toast(j.message,j.ok?"good":"bad");if(j.ok&&restart&&S.status.state=="on")go("dash")}};
+$("#cf-file").onchange=()=>CF.open();$("#cf-save").onclick=()=>CF.save(false);
+$("#cf-save-r").onclick=async()=>{if(S.status.state!="on"||await ask(_t("Save and restart"),_t("Save and restart the server now?"),_t("Save and restart"),{primary:true}))CF.save(S.status.state=="on")};
+if(BOOT.admin)GET("/api/configs").then(async r=>{if(r)$("#tab-cf").hidden=!(await r.json()).files.length});
+/* plugins from Hangar (Paper and forks) */
+const PL={mc:"",inst:[],
+  async load(){if(!BOOT.admin)return;const r=await GET("/api/plugins");if(!r)return;const j=await r.json();$("#tab-pl").hidden=!j.enabled;if(!j.enabled){if(CUR=="plugins")go("dash");return}
+    this.mc=j.mc;this.inst=j.installed;setSub();const l=$("#plg-list");l.textContent="";
+    if(!this.inst.length)l.innerHTML="<p class='lock'>"+esc(_t("No plugins installed."))+"</p>";
+    this.inst.forEach(p=>{const d=document.createElement("div");d.className="card pl-row";
+      d.innerHTML="<div class='pl-i'><b>"+esc(p.name)+"</b> <span class='lock'>"+esc(p.version)+"</span><small>"+esc(p.file)+" · "+nf(p.size/1048576,2)+" MB"+"</small></div><button class='btn danger'>"+esc(_t("Remove"))+"</button>";
+      d.querySelector("button").onclick=()=>this.remove(p);l.append(d)})},
+  note(){$("#pl-note").hidden=S.status.state!="on"},
+  async remove(p){if(!await ask(_t("Remove"),_t("Remove %s? The file goes to the trash.",p.file),_t("Remove")))return;const j=await api("/api/plugins/remove",{file:p.file});toast(j.message,j.ok?"good":"bad");if(j.ok)this.note();this.load()},
+  browse(){const bg=document.createElement("div");bg.className="modal-bg";let off=0,tm,seq=0;
+    bg.innerHTML="<div class='modal pl-m' role='dialog' aria-modal='true' aria-labelledby='pl-t'><h3><span id='pl-t'>"+esc(_t("Browse Hangar"))+"</span><button class='btn' data-x aria-label='"+esc(_t("Close"))+"'>×</button></h3>"
+      +"<input class='search' type='search' placeholder='"+esc(_t("Search plugins"))+"' aria-label='"+esc(_t("Search plugins"))+"'><div class='pl-res' aria-live='polite'></div></div>";
+    document.body.append(bg);const m=bg.firstChild,inp=m.querySelector("input"),res=m.querySelector(".pl-res"),prev=document.activeElement;
+    const close=()=>{bg.remove();document.removeEventListener("keydown",kd);prev&&prev.focus&&prev.focus()},
+      kd=e=>{if(e.key=="Escape"){close();return}if(e.key!="Tab")return;const f=[...m.querySelectorAll("input,button:not(:disabled),a[href]")];if(!f.length)return;
+        const a=f[0],z=f[f.length-1];if(e.shiftKey&&(document.activeElement==a||!m.contains(document.activeElement))){e.preventDefault();z.focus()}else if(!e.shiftKey&&document.activeElement==z){e.preventDefault();a.focus()}};
+    document.addEventListener("keydown",kd);m.querySelector("[data-x]").onclick=close;bg.onclick=e=>{if(e.target==bg)close()};
+    const run=async more=>{const my=++seq;if(!more){off=0;res.textContent=""}const old=res.querySelector("[data-more]");if(old)old.remove();
+      const r=await GET("/api/plugins/search?q="+encodeURIComponent(inp.value.trim())+"&offset="+off);if(my!=seq)return;const j=r?await r.json():{ok:false,message:_t("Panel unreachable")};
+      if(!j.ok){toast(j.message,"bad");return}if(!j.results.length&&!more)res.innerHTML="<p class='lock'>"+esc(_t("No results."))+"</p>";
+      j.results.forEach(x=>{const inst=this.inst.some(p=>p.slug==x.slug),c=document.createElement("div");c.className="pl-card";
+        c.innerHTML=(x.avatar?"<img alt='' loading='lazy' referrerpolicy='no-referrer' src='"+esc(x.avatar)+"'>":"<div class='pl-av'></div>")
+          +"<div class='pl-i'><b><a href='"+esc(x.url)+"' target='_blank' rel='noopener'>"+esc(x.name)+"</a></b> <small>"+esc(_t("by %s",x.owner))+"</small><p>"+esc(x.description)+"</p><small>"+esc(_t("%s downloads",x.downloads.toLocaleString(LOC)))+"</small></div>"
+          +"<button class='btn "+(inst?"":"primary")+"'>"+esc(inst?_t("Update"):_t("Install"))+"</button>";
+        const b=c.querySelector("button");b.onclick=async()=>{b.disabled=true;b.textContent=_t("Installing...");const k=await api("/api/plugins/install",{slug:x.slug});
+          toast(k.message,k.ok?"good":"bad");if(k.ok){b.textContent=_t("Installed, restart to load");this.note();(k.deps||[]).length&&toast(_t("Also needs: %s",k.deps.join(", ")),"bad");this.load()}else{b.disabled=false;b.textContent=inst?_t("Update"):_t("Install")}};
+        res.append(c)});
+      off+=j.results.length;if(j.more){const b=document.createElement("button");b.className="btn";b.dataset.more=1;b.textContent=_t("Load more");b.onclick=()=>run(true);res.append(b)}};
+    inp.oninput=()=>{clearTimeout(tm);tm=setTimeout(()=>run(false),350)};run(false);setTimeout(()=>inp.focus(),30)}};
+$("#pl-browse").onclick=()=>PL.browse();
+$("#pl-restart").onclick=async()=>{await act("/api/restart",S.status.online?_t("Players are online: they will be disconnected. Restart?"):_t("Restart the server?"),_t("Restart"),true);$("#pl-note").hidden=true};
+if(BOOT.admin)PL.load();
 async function saveProps(restart){const j=await api("/api/properties",{changes:S.edits,restart});toast(j.message,j.ok?"good":"bad");if(j.ok){await loadProps();if(restart)go("dash")}}
 const PS={async load(){if(!BOOT.admin)return;const r=await GET("/api/panel-settings");if(r)this.render(await r.json())},
   render(j){$("#ps-ram").value=j.ram;$("#ps-ram").placeholder=_t("automatic: %s",j.ram_auto);$("#ps-stop").value=j.auto_stop_minutes;
-    $("#ps-addr").value=j.mc_address;$("#ps-args").value=j.java_args;$("#ps-bk").checked=j.backup_on_start;$("#ps-ar").checked=j.auto_restart;
+    $("#ps-addr").value=j.mc_address;$("#ps-addr").placeholder=BOOT.auto_address||_t("e.g. play.example.com");$("#ps-args").value=j.java_args;$("#ps-bk").checked=j.backup_on_start;$("#ps-ar").checked=j.auto_restart;
     $("#ps-lang").innerHTML=j.langs.map(([c,n])=>"<option value='"+esc(c)+"'>"+esc(n)+"</option>").join("");$("#ps-lang").value=j.lang;
     ["#ps-ram","#ps-args","#ps-bk"].forEach(s=>$(s).disabled=!!j.start_script);
     $("#ps-info").textContent=j.start_script?_t("Started by your script %s: RAM, Java flags and the backup before the start are set there.",j.start_script)
@@ -937,7 +1003,7 @@ const PS={async load(){if(!BOOT.admin)return;const r=await GET("/api/panel-setti
   async save(){const j=await api("/api/panel-settings",{ram:$("#ps-ram").value,java_args:$("#ps-args").value,backup_on_start:$("#ps-bk").checked,auto_restart:$("#ps-ar").checked,
     auto_stop_minutes:+$("#ps-stop").value||0,mc_address:$("#ps-addr").value,lang:$("#ps-lang").value});toast(j.message,j.ok?"good":"bad");
     if(j.restart){const again=()=>fetch("/manifest.webmanifest").then(r=>r.ok?location.reload():setTimeout(again,1000)).catch(()=>setTimeout(again,1000));setTimeout(again,2500);return}   /* the panel restarts in the new language */
-    if(j.ok){this.render(j.settings);BOOT.address=j.settings.mc_address;renderStatus()}}};
+    if(j.ok){this.render(j.settings);BOOT.address=j.settings.mc_address||BOOT.auto_address;renderStatus()}}};
 $("#ps-save").onclick=()=>PS.save();
 $("#p-save").onclick=()=>saveProps(false);$("#p-save-r").onclick=async()=>{if(S.status.state!="on"||await ask(_t("Save and restart"),_t("Save and restart the server now?"),_t("Save and restart"),{primary:true}))saveProps(S.status.state=="on")};
 
@@ -1438,7 +1504,7 @@ $("#rg-mode").onclick=async e=>{const b=e.target.closest("button");if(!b)return;
   box.innerHTML=ls.length?ls.map(l=>"<div class='l"+(/ ERROR | WARNING |Exception|Error:/.test(l)?" err":"")+"'><span class=m>"+esc(l)+"</span></div>").join(""):esc(_t("Empty."));box.scrollTop=box.scrollHeight};
 
 connect();loadRoster();   /* health: loaded by the "init" event of connect() */
-function fromHash(){const h=location.hash.slice(1);const v=h in TITLES&&(BOOT.admin||!["console","props","backups","access","audit"].includes(h))?h:"dash";if($("#v-"+v).hidden||!h||!fromHash.done){fromHash.done=true;go(v)}}
+function fromHash(){const h=location.hash.slice(1);const v=h in TITLES&&(BOOT.admin||!["console","props","configs","plugins","backups","access","audit"].includes(h))?h:"dash";if($("#v-"+v).hidden||!h||!fromHash.done){fromHash.done=true;go(v)}}
 window.addEventListener("hashchange",fromHash);fromHash();
 </script>
 </body>

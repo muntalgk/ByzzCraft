@@ -7,7 +7,7 @@
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB)
 [![MIT](https://img.shields.io/badge/license-MIT-3fb950)](LICENSE)
 
-A web panel for a Minecraft Java server (vanilla, Paper or Fabric) that runs on your own machine. I use it to
+A web panel for a Minecraft Java server (vanilla, Paper, Spigot or Fabric) that runs on your own machine. I use it to
 start the server from my phone, see who's online and where, check inventories and keep backups of the world.
 
 It's plain Python with no dependencies and no database: it reads the server's own files and talks to it over RCON.
@@ -42,6 +42,7 @@ panel when they're missing.
 - Timeline of sessions, deaths, advancements and chat, rebuilt from the server logs
 - Console with the live log and RCON commands
 - `server.properties` editor, backed up on every save
+- Plugins for Paper servers: search and install from Hangar, update and remove
 - Scheduled and manual world backups with retention rules, download and restore
 - Whitelist, ops, bans and kicks, also with the server off
 - One login per friend: admins see everything, players can start the server and look around
@@ -73,7 +74,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now byzzcraft
 ```
 
 You can also skip the browser and do the setup from the shell:
-`python3 panel.py setup ~/minecraft --admin alex --new-server --accept-eula` (see `--help`).
+`python3 panel.py setup ~/minecraft --admin alex --new-server --server-type paper --accept-eula` (see `--help`).
 
 ### Windows, or Linux with a desktop
 

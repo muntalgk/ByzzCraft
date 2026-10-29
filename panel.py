@@ -33,6 +33,7 @@ from byzzcraft import backups as BK  # noqa: E402
 from byzzcraft import access as AC  # noqa: E402
 from byzzcraft import activity as ACT  # noqa: E402
 from byzzcraft import assets as AS  # noqa: E402
+from byzzcraft import plugins as PLG  # noqa: E402
 from byzzcraft import runtime as RT  # noqa: E402
 from byzzcraft import updater as UP  # noqa: E402
 from byzzcraft import i18n  # noqa: E402
@@ -283,15 +284,90 @@ def server_props():
     return props
 
 
+def backup_file(base, data):
+    """Backup copy in backup-properties (shared with server.properties), the last 15 per file name."""
+    bdir = os.path.join(DATA, "backup-properties")
+    os.makedirs(bdir, exist_ok=True)
+    with open(os.path.join(bdir, "%s.%s" % (base, datetime.now().strftime("%Y%m%d-%H%M%S"))), "wb") as f:
+        f.write(data)
+    for old in sorted(x for x in os.listdir(bdir) if re.fullmatch(re.escape(base) + r"\.\d{8}-\d{6}", x))[:-15]:
+        os.remove(os.path.join(bdir, old))
+
+
+# ---------------------------------------------------------------- config files of the server type (Paper, Spigot, mods)
+CONF_FIXED = ("config/paper-global.yml", "config/paper-world-defaults.yml", "paper.yml", "spigot.yml", "bukkit.yml", "purpur.yml")
+CONF_EXT = (".json", ".json5", ".toml", ".properties", ".yml", ".yaml", ".cfg")
+CONF_MAX = 1048576
+
+
+def config_files():
+    """{name: path} of the existing editable files; the client only sends a name from here, never a path."""
+    sd, out = CFG["server_dir"], {}
+    names = list(CONF_FIXED)
+    cd = os.path.join(sd, "config")
+    try:
+        for e in sorted(os.listdir(cd)):
+            sub = os.path.join(cd, e)
+            for x in ([e] if os.path.isfile(sub) else ["%s/%s" % (e, y) for y in sorted(os.listdir(sub))] if os.path.isdir(sub) else []):
+                if x.lower().endswith(CONF_EXT) and "config/" + x not in CONF_FIXED:
+                    names.append("config/" + x)
+    except OSError:
+        pass
+    for n in names:
+        p = os.path.join(sd, *n.split("/"))
+        if os.path.isfile(p) and not os.path.islink(p):   # a link would be replaced by a plain file
+            out[n] = p
+    return out
+
+
+def config_check(name, text):
+    """Error message (with the line) or None."""
+    low = name.lower()
+    if low.endswith(".json"):
+        try:
+            json.loads(text)
+        except ValueError as e:
+            return t("Invalid JSON at line %d: %s") % (getattr(e, "lineno", 1), getattr(e, "msg", e))
+    elif low.endswith((".yml", ".yaml")):
+        for i, line in enumerate(text.split("\n"), 1):
+            if re.match(r"[ ]*\t", line):
+                return t("Tab in the indentation at line %d: YAML only allows spaces.") % i
+    elif low.endswith(".toml"):
+        try:
+            import tomllib
+        except ImportError:   # Python < 3.11: saved unchecked
+            return None
+        try:
+            tomllib.loads(text)
+        except ValueError as e:
+            return t("Invalid TOML: %s") % e
+    return None
+
+
+def config_save(name, text, who):
+    """(ok, message). The previous content is backed up, the new one written atomically."""
+    path = config_files().get(name)
+    if not path:
+        return False, t("Not editable: %s") % name
+    if len(text.encode("utf-8")) > CONF_MAX:
+        return False, t("File too big (max 1 MB).")
+    err = config_check(name, text)
+    if err:
+        return False, err
+    with open(path, "rb") as f:
+        backup_file(name.replace("/", "_"), f.read())   # the whole name: config/a/x.json and config/b/x.json stay apart (almost always)
+    tmp = path + ".panel-tmp"
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
+    os.replace(tmp, path)
+    log("%s edited %s" % (who, name))
+    return True, t("%s saved. The server applies it at the next restart.") % name
+
+
 def write_props(changes, who):
     path = props_path()
     lines = read_props_text().splitlines()
-    bdir = os.path.join(DATA, "backup-properties")
-    os.makedirs(bdir, exist_ok=True)
-    with open(os.path.join(bdir, "server.properties.%s" % datetime.now().strftime("%Y%m%d-%H%M%S")), "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
-    for old in sorted(os.listdir(bdir))[:-15]:
-        os.remove(os.path.join(bdir, old))
+    backup_file("server.properties", ("\n".join(lines) + "\n").encode("utf-8"))
     out, done, seen = [], [], set()
     for line in lines:
         if "=" in line and not line.lstrip().startswith("#"):
@@ -1377,6 +1453,9 @@ form{background:var(--card);border:1px solid var(--line);border-radius:16px;padd
 label{display:block;font-size:13px;color:var(--mute);margin:12px 0 6px}
 select{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:#0c0e12;color:var(--text);font-size:16px}
 label.chk{display:flex;gap:8px;align-items:center;margin-top:16px}label.chk input{width:auto}a{color:var(--accent)}
+.kinds{display:grid;gap:8px}label.kind{display:flex;gap:10px;align-items:flex-start;margin:0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;cursor:pointer;color:var(--text);font-size:15px}
+label.kind:has(input:checked){border-color:var(--accent);background:#3fb95014}label.kind input{width:auto;margin:4px 0 0;accent-color:var(--accent)}
+label.kind small{display:block;color:var(--mute);font-size:13px}label.kind em{font-style:normal;font-size:11px;color:var(--accent);border:1px solid var(--accent);border-radius:99px;padding:0 6px;margin-left:6px}
 input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:#0c0e12;color:var(--text);font-size:16px}
 input:focus{outline:2px solid #3fb95055;border-color:var(--accent)}
 button{width:100%;padding:13px;border:0;border-radius:10px;font-size:16px;font-weight:650;cursor:pointer;margin-top:18px;background:var(--accent);color:#06210c}
@@ -1485,6 +1564,27 @@ def lan_ip():
         return "SERVER-IP"
 
 
+def tailnet_ip():
+    """This machine's Tailscale IP, None without Tailscale."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as so:
+            so.connect(("100.100.100.100", 53))   # Tailscale's resolver: only the tailnet interface routes there
+            ip = so.getsockname()[0]
+        return ip if ipaddress.ip_address(ip) in ipaddress.ip_network("100.64.0.0/10") else None
+    except (OSError, ValueError):
+        return None
+
+
+def auto_address():
+    """Address for players when mc_address is empty: the Tailscale IP, otherwise the home network one, with the port
+    when it is not Minecraft's default."""
+    ip = tailnet_ip() or lan_ip()
+    if ip == "SERVER-IP":
+        return ""
+    port = server_props().get("server-port", "25565").strip()
+    return ip if port in ("", "25565") else "%s:%s" % (ip, port)
+
+
 def lan_is_public():
     """A VPS: the "home network" address is on the internet (Tailscale's 100.64/10 is not global)."""
     try:
@@ -1506,10 +1606,17 @@ def setup_page(error="", form=None, token="", remote=False):
     network = f.get("network", "1" if remote else "") == "1"
     has_jar = bool(sd) and bool(AS.find_jar(sd))
     chk = lambda on: " checked" if on else ""
+    new = f.get("new_server", "none" if has_jar or os.path.exists(os.path.join(sd, "server.properties")) else "paper")
+    kinds = "".join('<label class=kind><input type=radio name=new_server value="%s"%s><span><b>%s</b>%s<small>%s</small></span></label>' % (
+        k, chk(k == new), e(t(n)), " <em>%s</em>" % e(t("recommended")) if k == "paper" else "", e(t(d))) for k, n, d in (
+        ("paper", "Paper", "Vanilla gameplay, faster, runs plugins"),
+        ("vanilla", "Vanilla", "Mojang's official server, no plugins or mods"),
+        ("fabric", "Fabric", "For server-side mods"),
+        ("none", "I have the jar already", "It is in the folder (Spigot too, built with BuildTools)")))
     body = """<main><div class=logo>%s</div><h1>%s</h1><p>%s</p>
 <form method=post action=/setup><input type=hidden name=token value="%s">
 <label for=d>%s</label><input id=d name=server_dir value="%s" required>
-<label class=chk><input type=checkbox name=new_server value=1%s> %s</label>
+<label>%s</label><div class=kinds>%s</div>
 <label for=l>%s</label><select id=l name=lang>%s</select>
 <label for=u>%s</label><input id=u name=user autocomplete=username required pattern="[a-z0-9_.\\-]{1,32}" value="%s">
 <label for=p>%s</label><input id=p name=password type=password autocomplete=new-password required minlength=10>
@@ -1521,8 +1628,7 @@ def setup_page(error="", form=None, token="", remote=False):
 <label class=chk><input type=checkbox name=eula value=1> %s <a href="https://aka.ms/MinecraftEULA" target=_blank rel=noopener>EULA</a></label>
 <button type=submit>%s</button><p class=note>%s</p>%s</form></main>""" % (
         LOGO_SVG, e(t("Welcome to ByzzCraft")), e(t("First setup of the panel.")), e(token),
-        e(t("Minecraft server folder")), e(sd), chk(f.get("new_server") == "1" or not has_jar and not os.path.exists(os.path.join(sd, "server.properties"))),
-        e(t("No server yet: download the latest Minecraft server into this folder")),
+        e(t("Minecraft server folder")), e(sd), e(t("Server to download if the folder has none")), kinds,
         e(t("Language")), opts, e(t("Admin user")), e(f.get("user", "")), e(t("Password (at least 10 characters)")), e(t("Repeat the password")),
         e(t("Who can open the panel")), chk(not network), e(t("Only this machine (then Tailscale, nginx or an SSH tunnel)"))
         + (" " + e(t("- from this device the panel will not open any more after the setup")) if remote else ""),
@@ -1627,13 +1733,14 @@ def do_setup(f):
         return t("Invalid user name: lowercase letters, digits, . _ -")
     if len(pw) < 10:
         return t("Password too short: at least 10 characters.")
+    kind = {"1": "vanilla"}.get(f.get("new_server"), f.get("new_server"))   # "1": the checkbox before 1.3
     if not AS.find_jar(sd):
-        if f.get("new_server") != "1":
+        if kind not in AS.SERVERS:
             return t("No Minecraft server (.jar) in %s.") % sd
         if os.path.isdir(sd) and any(os.path.isfile(os.path.join(sd, d, "level.dat")) for d in os.listdir(sd)):
             return t("%s already has a world but no server jar the panel recognises: set server_jar in panel-config.json.") % sd
         try:
-            AS.download_server(sd, log=L.info)
+            AS.download_server(sd, log=L.info, kind=kind)
         except Exception as e:  # noqa: BLE001
             L.exception("server download failed")
             return t("Could not download the Minecraft server: %s") % e
@@ -1722,6 +1829,14 @@ def download_assets():
 
 def server_jar():
     return AS.find_jar(CFG["server_dir"], CFG.get("server_jar"))
+
+
+def plugins_mc():
+    """Minecraft version when the server is Paper or a fork (Hangar plugins make sense), else None."""
+    sd, jar = CFG["server_dir"], server_jar()
+    if (jar or "").lower().startswith(("paper", "purpur", "folia", "pufferfish")) or os.path.isfile(os.path.join(sd, "config", "paper-global.yml")):
+        return AS.jar_info(sd, jar)[0] or ""
+    return None
 
 
 def download_java():
@@ -1894,7 +2009,7 @@ def app_page(sess, nonce):
     with open(os.path.join(CODE, "app.html"), encoding="utf-8") as f:
         tpl = f.read()
     boot = {"user": sess["user"], "admin": sess["admin"], "csrf": sess["csrf"], "title": CFG["title"],
-            "address": CFG.get("mc_address") or "", "autostop": CFG["auto_stop_minutes"], "cores": NCPU,
+            "address": CFG.get("mc_address") or auto_address(), "auto_address": auto_address(), "autostop": CFG["auto_stop_minutes"], "cores": NCPU,
             "mc": mc_names().get(sess["user"], ""), "lang": i18n.LANG, "i18n": i18n.TABLE,
             "version": VERSION, "latest": UPDATE.get("latest") if UPDATE.get("newer") else None, "repo": REPO}
     tpl = tpl.replace("{{TITLE}}", html.escape(CFG["title"])).replace("{{LANG}}", i18n.LANG)
@@ -1938,7 +2053,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "same-origin")
         # scripts only with this response's nonce: HTML slipped into the page (a player's chat line) cannot run
         self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src %s; "
-                         "connect-src 'self'; img-src 'self' data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'"
+                         "connect-src 'self'; img-src 'self' data: https://hangarcdn.papermc.io; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'"
                          % ("'nonce-%s'" % self.nonce if self.nonce else "'none'"))
 
     def send_file(self, path, name):
@@ -2135,8 +2250,28 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(200, {"events": evs[:qint(q, "limit", 200, 1, 500)]})
         if path == "/api/sessions":
             return self.json(200, {"sessions": TLINE.sessions(limit=qint(q, "limit", 30, 1, 200), running=SRV.state != "off")})
-        if path in ("/api/backups", "/api/backups/download", "/api/access", "/api/audit", "/api/users", "/api/health", "/api/syslog") and not s["admin"]:
+        if path in ("/api/backups", "/api/backups/download", "/api/access", "/api/audit", "/api/users", "/api/health", "/api/syslog", "/api/configs", "/api/plugins", "/api/plugins/search") and not s["admin"]:
             return self.json(403, {"error": "admins only"})
+        if path == "/api/configs":
+            files = config_files()
+            name = q.get("file", [""])[0]
+            if not name:
+                return self.json(200, {"files": [{"name": n, "size": os.path.getsize(p)} for n, p in files.items()]})
+            p = files.get(name)
+            try:
+                if not p or os.path.getsize(p) > CONF_MAX:
+                    raise OSError
+                with open(p, encoding="utf-8") as f:
+                    return self.json(200, {"name": name, "text": f.read()})
+            except (OSError, UnicodeDecodeError):
+                return self.json(404, {"error": t("File not available")})
+        if path == "/api/plugins":
+            mc = plugins_mc()
+            return self.json(200, {"enabled": mc is not None, "mc": mc or "", "installed": PLG.installed(CFG["server_dir"]) if mc is not None else []})
+        if path == "/api/plugins/search":
+            if plugins_mc() is None:
+                return self.json(200, {"ok": False, "message": t("Plugins need a Paper server.")})
+            return self.json(200, PLG.search(q.get("q", [""])[0][:60], qint(q, "offset", 0, 0, 10000), plugins_mc()))
         if path == "/api/access":
             p = server_props()
             return self.json(200, {**AC.snapshot(CFG["server_dir"]), "online": sorted(online_names()), "state": SRV.state,
@@ -2385,6 +2520,32 @@ class Handler(BaseHTTPRequestHandler):
             HUB.publish("status", SRV.snapshot())
             n = len(done)
             return self.json(200, {"ok": True, "message": (t("%d settings saved") % n) if n else t("No changes")})
+        if self.path == "/api/configs":
+            try:
+                ok, msg = config_save(str(data.get("file", "")), str(data.get("text", "")), s["user"])
+            except OSError as e:
+                ok, msg = False, str(e)
+            if ok and data.get("restart") and SRV.state == "on":
+                SRV.stop(s["user"], "new settings", restart=True)
+                HUB.publish("status", SRV.snapshot())
+            return self.json(200, {"ok": ok, "message": msg})
+        if self.path in ("/api/plugins/install", "/api/plugins/remove"):
+            mc, sd = plugins_mc(), CFG["server_dir"]
+            if mc is None:
+                return self.json(200, {"ok": False, "message": t("Plugins need a Paper server.")})
+            if self.path.endswith("install"):
+                slug = str(data.get("slug", ""))
+                r = PLG.install(sd, slug, mc)
+                if r["ok"]:
+                    log("%s installed plugin %s %s" % (s["user"], slug, r["version"]))
+            else:
+                r = PLG.remove(sd, str(data.get("file", "")))
+                if r["ok"]:
+                    log("%s removed plugin %s" % (s["user"], data["file"]))
+            if r["ok"] and data.get("restart") and SRV.state == "on":
+                SRV.stop(s["user"], "new settings", restart=True)
+                HUB.publish("status", SRV.snapshot())
+            return self.json(200, r)
         self.json(404, {"ok": False, "message": t("not found")})
 
 
@@ -2571,6 +2732,7 @@ def cli(args):
         ap.add_argument("--network", action="store_true", help="open the panel to the home network (http://IP:%d)" % CFG["port"])
         ap.add_argument("--accept-eula", action="store_true", help="accept the Minecraft EULA (https://aka.ms/MinecraftEULA)")
         ap.add_argument("--new-server", action="store_true", help="download the latest Minecraft server if the folder has none")
+        ap.add_argument("--server-type", choices=AS.SERVERS, default="vanilla", help="server --new-server downloads (default vanilla)")
         ap.add_argument("--no-java", action="store_true", help="do not download Java if it is missing")
         a = ap.parse_args(args[1:])
         if users:
@@ -2583,7 +2745,7 @@ def cli(args):
             CFG["port"] = free_port(CFG["port"] + 1)
             L.warning("port in use, the panel will use %d", CFG["port"])
         err = do_setup({"server_dir": a.server_dir, "user": a.admin, "password": pw, "lang": a.lang, "network": "1" if a.network else "",
-                        "eula": "1" if a.accept_eula else "", "new_server": "1" if a.new_server else "", "java": "" if a.no_java else "1"})
+                        "eula": "1" if a.accept_eula else "", "new_server": a.server_type if a.new_server else "", "java": "" if a.no_java else "1"})
         if err:
             sys.exit(err)
         need = RT.required(CFG["server_dir"], server_jar())

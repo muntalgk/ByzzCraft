@@ -7,7 +7,7 @@
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB)
 [![MIT](https://img.shields.io/badge/license-MIT-3fb950)](LICENSE)
 
-Un pannello web per un server Minecraft Java (vanilla, Paper o Fabric) che gira sulla tua macchina. Io lo uso per
+Un pannello web per un server Minecraft Java (vanilla, Paper, Spigot o Fabric) che gira sulla tua macchina. Io lo uso per
 accendere il server dal telefono, vedere chi è online e dove, controllare gli inventari e fare i backup del mondo.
 
 È Python puro, senza dipendenze e senza database: legge i file del server e ci parla via RCON. Gira su Windows,
@@ -42,6 +42,7 @@ mancano.
 - Cronologia di sessioni, morti, progressi e chat, ricostruita dai log del server
 - Console con il log in diretta e i comandi RCON
 - Editor di `server.properties`, con un backup a ogni salvataggio
+- Plugin per i server Paper: cerca e installa da Hangar, aggiorna e rimuovi
 - Backup del mondo manuali e programmati, con regole di pulizia, download e ripristino
 - Whitelist, operatori, ban e kick, anche a server spento
 - Un account per ogni amico: gli admin vedono tutto, i giocatori possono accendere il server e guardarsi intorno
@@ -73,7 +74,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now byzzcraft
 ```
 
 Puoi anche fare la configurazione dalla shell, senza browser:
-`python3 panel.py setup ~/minecraft --admin alex --new-server --accept-eula --lang it` (vedi `--help`).
+`python3 panel.py setup ~/minecraft --admin alex --new-server --server-type paper --accept-eula --lang it` (vedi `--help`).
 
 ### Windows, o Linux con il desktop
 
