@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Setup: choose the server to download into an empty folder: Paper, vanilla or Fabric (latest stable). From the
+  command line: `panel.py setup DIR --new-server paper` (plain `--new-server` is still vanilla).
 - Spigot: the panel finds `spigot-<version>.jar` by itself (before it started the vanilla `server.jar` next to it, or
   nothing) and reads the Minecraft version from its name, so it picks the right Java and the map textures.
 

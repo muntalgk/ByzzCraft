@@ -1506,10 +1506,14 @@ def setup_page(error="", form=None, token="", remote=False):
     network = f.get("network", "1" if remote else "") == "1"
     has_jar = bool(sd) and bool(AS.find_jar(sd))
     chk = lambda on: " checked" if on else ""
+    new = f.get("new_server", "" if has_jar or os.path.exists(os.path.join(sd, "server.properties")) else "vanilla")
+    kinds = "".join("<option value=\"%s\"%s>%s</option>" % (k, " selected" if k == new else "", e(t(n))) for k, n in (
+        ("", "None: the server jar is already in the folder (Spigot: build it with BuildTools)"),
+        ("vanilla", "Vanilla: Mojang's server"), ("paper", "Paper: plugins, faster"), ("fabric", "Fabric: mods")))
     body = """<main><div class=logo>%s</div><h1>%s</h1><p>%s</p>
 <form method=post action=/setup><input type=hidden name=token value="%s">
 <label for=d>%s</label><input id=d name=server_dir value="%s" required>
-<label class=chk><input type=checkbox name=new_server value=1%s> %s</label>
+<label for=n>%s</label><select id=n name=new_server>%s</select>
 <label for=l>%s</label><select id=l name=lang>%s</select>
 <label for=u>%s</label><input id=u name=user autocomplete=username required pattern="[a-z0-9_.\\-]{1,32}" value="%s">
 <label for=p>%s</label><input id=p name=password type=password autocomplete=new-password required minlength=10>
@@ -1521,8 +1525,7 @@ def setup_page(error="", form=None, token="", remote=False):
 <label class=chk><input type=checkbox name=eula value=1> %s <a href="https://aka.ms/MinecraftEULA" target=_blank rel=noopener>EULA</a></label>
 <button type=submit>%s</button><p class=note>%s</p>%s</form></main>""" % (
         LOGO_SVG, e(t("Welcome to ByzzCraft")), e(t("First setup of the panel.")), e(token),
-        e(t("Minecraft server folder")), e(sd), chk(f.get("new_server") == "1" or not has_jar and not os.path.exists(os.path.join(sd, "server.properties"))),
-        e(t("No server yet: download the latest Minecraft server into this folder")),
+        e(t("Minecraft server folder")), e(sd), e(t("Server to download if the folder has none")), kinds,
         e(t("Language")), opts, e(t("Admin user")), e(f.get("user", "")), e(t("Password (at least 10 characters)")), e(t("Repeat the password")),
         e(t("Who can open the panel")), chk(not network), e(t("Only this machine (then Tailscale, nginx or an SSH tunnel)"))
         + (" " + e(t("- from this device the panel will not open any more after the setup")) if remote else ""),
@@ -1627,13 +1630,14 @@ def do_setup(f):
         return t("Invalid user name: lowercase letters, digits, . _ -")
     if len(pw) < 10:
         return t("Password too short: at least 10 characters.")
+    kind = {"1": "vanilla"}.get(f.get("new_server"), f.get("new_server"))   # "1": the checkbox before 1.3
     if not AS.find_jar(sd):
-        if f.get("new_server") != "1":
+        if kind not in AS.SERVERS:
             return t("No Minecraft server (.jar) in %s.") % sd
         if os.path.isdir(sd) and any(os.path.isfile(os.path.join(sd, d, "level.dat")) for d in os.listdir(sd)):
             return t("%s already has a world but no server jar the panel recognises: set server_jar in panel-config.json.") % sd
         try:
-            AS.download_server(sd, log=L.info)
+            AS.download_server(sd, log=L.info, kind=kind)
         except Exception as e:  # noqa: BLE001
             L.exception("server download failed")
             return t("Could not download the Minecraft server: %s") % e
@@ -2570,7 +2574,8 @@ def cli(args):
         ap.add_argument("--lang", default="en", choices=languages())
         ap.add_argument("--network", action="store_true", help="open the panel to the home network (http://IP:%d)" % CFG["port"])
         ap.add_argument("--accept-eula", action="store_true", help="accept the Minecraft EULA (https://aka.ms/MinecraftEULA)")
-        ap.add_argument("--new-server", action="store_true", help="download the latest Minecraft server if the folder has none")
+        ap.add_argument("--new-server", nargs="?", const="vanilla", choices=AS.SERVERS,
+                        help="download the latest Minecraft server if the folder has none (default vanilla)")
         ap.add_argument("--no-java", action="store_true", help="do not download Java if it is missing")
         a = ap.parse_args(args[1:])
         if users:
@@ -2583,7 +2588,7 @@ def cli(args):
             CFG["port"] = free_port(CFG["port"] + 1)
             L.warning("port in use, the panel will use %d", CFG["port"])
         err = do_setup({"server_dir": a.server_dir, "user": a.admin, "password": pw, "lang": a.lang, "network": "1" if a.network else "",
-                        "eula": "1" if a.accept_eula else "", "new_server": "1" if a.new_server else "", "java": "" if a.no_java else "1"})
+                        "eula": "1" if a.accept_eula else "", "new_server": a.new_server or "", "java": "" if a.no_java else "1"})
         if err:
             sys.exit(err)
         need = RT.required(CFG["server_dir"], server_jar())
