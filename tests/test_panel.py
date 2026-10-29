@@ -234,6 +234,31 @@ try:
     panel.known_update()
     check("broken saved check: kept as it was", panel.UPDATE.get("newer") is False, panel.UPDATE)
 
+    # who is online comes from "list", not from the ping sample (Anonymous Player, hide-online-players, max 12)
+    check("list: vanilla/Paper", panel.list_names("There are 2 of a max of 10 players online: Zed, Alice") == ["Alice", "Zed"])
+    check("list: nobody", panel.list_names("There are 0 of a max of 10 players online: ") == [])
+    check("list: Spigot, colors", panel.list_names("§6There are §c1§6/§c20§6 players online:\n§fAlice") == ["Alice"])
+    check("list: other answer -> ping fallback", panel.list_names("Unknown command") is None)
+    check("list: EssentialsX groups", panel.list_names("There are 3 out of maximum 10 players online.\nDefault: A, C\nAdmin: B")
+          == ["A", "B", "C"])
+    ping_sample, rcon_out = (0, 10, []), "There are 1 of a max of 10 players online: Alice"   # hide-online-players
+    real, calls = (panel.ping, panel.RCON.command), []
+    panel.ping = lambda port: ping_sample
+    panel.RCON.command = lambda text, timeout=5: calls.append(text) or rcon_out
+    panel.SAMPLE_SECONDS, sleep = 0, panel.time.sleep
+    def stop(_):
+        raise SystemExit
+    panel.time.sleep = stop
+    try:
+        with contextlib.suppress(SystemExit):
+            panel.sampler()
+    finally:
+        panel.ping, panel.RCON.command = real
+        panel.time.sleep = sleep
+    check("sampler: hidden players found by list", panel.online_names() == {"Alice"}, panel.online_names())
+    check("sampler: count from list, so not 'empty'", panel.SRV.info[0] == 1 and panel.SRV.empty_since is None, panel.SRV.info)
+    check("sampler: list asked once", calls.count("list") == 1, calls)
+
     # "Start at login" on Windows writes the Startup script (here a temp path, never the real Startup folder)
     panel.STARTUP_CMD = j(root, "ByzzCraft.cmd")
     if os.name == "nt":

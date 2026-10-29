@@ -121,6 +121,19 @@ try:
     body = "user=admin&password=%s" % PW
     check("login from another site: 403", req("POST", "/login", body, dict(form, Origin="http://evil.example"))[0] == 403)
     check("login from the same origin", req("POST", "/login", body, dict(form, Origin="http://127.0.0.1:%d" % port))[0] == 303)
+    # /api/properties: a line separator in a value could inject a locked key (splitlines() splits on \x85, \u2028, \u2029)
+    props_file = os.path.join(srv, "server.properties")
+    open(props_file, "w", encoding="utf-8").write("motd=old\n")
+    post_props = lambda changes: req("POST", "/api/properties", json.dumps({"changes": changes}, ensure_ascii=True),
+                                     dict(js, **{"X-CSRF": csrf}))
+    for sep in ("\x85", "\u2028", "\u2029", "\n"):
+        st, body, _ = post_props({"motd": "x%srcon.port=1" % sep})
+        check("properties: separator %r refused" % sep, st == 200 and json.loads(body)["ok"] is False, (st, body))
+        txt = open(props_file, encoding="utf-8").read()
+        check("properties: file untouched after %r" % sep, txt == "motd=old\n", txt)
+    st, body, _ = post_props({"motd": "hello world"})
+    check("properties: normal value accepted", st == 200 and json.loads(body)["ok"] is True, (st, body))
+    check("properties: normal value written", open(props_file, encoding="utf-8").read() == "motd=hello world\n")
     # one request per connection (HTTP/1.0): a body the panel does not read cannot become a second request behind a proxy
     with socket.create_connection(("127.0.0.1", port), timeout=5) as so:
         so.sendall(b"GET /manifest.webmanifest HTTP/1.1\r\nHost: x\r\nConnection: keep-alive\r\n\r\n" * 2)

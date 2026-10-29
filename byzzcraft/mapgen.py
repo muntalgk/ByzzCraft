@@ -210,6 +210,54 @@ def _biome_cells(sec):
     return [pal[v] for v in _unpack(data, bits, 64)]
 
 
+def _lz4_block(src, out):
+    """Appends to out one LZ4 block (sequences of literals + a match copied from what is already written)."""
+    i, n = 0, len(src)
+    while i < n:
+        tok = src[i]; i += 1
+        ln = tok >> 4
+        if ln == 15:
+            while True:
+                b = src[i]; i += 1; ln += b
+                if b != 255:
+                    break
+        out += src[i:i + ln]; i += ln
+        if i >= n:   # the last sequence has no match
+            break
+        off = src[i] | src[i + 1] << 8; i += 2
+        ml = (tok & 15) + 4
+        if ml == 19:
+            while True:
+                b = src[i]; i += 1; ml += b
+                if b != 255:
+                    break
+        if not 0 < off <= len(out):
+            raise ValueError("lz4: bad offset")
+        s = len(out) - off
+        # a match longer than its offset repeats the last off bytes
+        out += out[s:s + ml] if off >= ml else (out[s:] * (ml // off + 1))[:ml]
+
+
+def lz4_java(data):
+    """Region compression 4 (region-file-compression=lz4): the blocks of lz4-java's LZ4BlockOutputStream,
+    each "LZ4Block" + method + compressed length + length + checksum (not checked: the length is, and NBT fails on junk)."""
+    out, i = bytearray(), 0
+    while data[i:i + 8] == b"LZ4Block":
+        meth = data[i + 8] & 0xF0
+        clen, dlen = struct.unpack_from("<ii", data, i + 9)
+        body = data[i + 21:i + 21 + clen]; i += 21 + clen
+        if dlen == 0:   # end mark
+            break
+        before = len(out)
+        if meth == 0x10:   # stored as it is
+            out += body
+        elif meth == 0x20:
+            _lz4_block(body, out)
+        if len(out) - before != dlen:
+            raise ValueError("lz4: bad length")
+    return bytes(out)
+
+
 def _read_chunks(path):
     """Generator of NBT chunks (dict) from a .mca; tolerates unreadable chunks."""
     with open(path, "rb") as f:
@@ -231,6 +279,8 @@ def _read_chunks(path):
                 data = zlib.decompress(data)
             elif comp == 3:
                 pass
+            elif comp == 4:
+                data = lz4_java(data)
             elif comp == 1:
                 import gzip
                 data = gzip.decompress(data)
@@ -478,6 +528,7 @@ def get_tile(world_dir, cache_dir, dim, rx, rz):
         tmp = out + ".tmp%d" % threading.get_ident()
         with open(tmp, "wb") as f:
             f.write(png)
+        os.utime(tmp, (mt, mt))   # the region as it was read: if it is saved again while rendering, the tile is stale
         os.replace(tmp, out)
         return out
 

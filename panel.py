@@ -14,7 +14,7 @@ Update:           python panel.py update   (to the latest release; in Docker: do
 import sys
 if sys.version_info < (3, 10):   # before the other modules: they need 3.10 and would fail with a traceback
     sys.exit("ByzzCraft needs Python 3.10 or newer (this is %s)." % sys.version.split()[0])
-import getpass, hashlib, hmac, html, ipaddress, json, logging, logging.handlers, os, queue, re, secrets, shlex, shutil, signal, socket, struct, subprocess, threading, time, urllib.request, webbrowser
+import getpass, hashlib, hmac, html, ipaddress, json, logging, logging.handlers, os, queue, re, secrets, shlex, shutil, signal, socket, struct, subprocess, threading, time, webbrowser
 from collections import deque
 from datetime import datetime
 from http.cookies import SimpleCookie
@@ -366,6 +366,17 @@ def ping(port):
         return None
 
 
+def list_names(out):
+    """Names from the "list" command ("There are 2 of a max of 10 players online: A, B"; Spigot puts them on the next
+    line, EssentialsX one line per group "Admin: B"), None if the answer has another shape. The ping sample cannot be
+    trusted for this: it shows at most 12 players, "Anonymous Player" for those who turned off server listings and
+    nobody with hide-online-players."""
+    head, sep, names = re.sub("§.", "", out).partition(":")
+    if not sep or "online" not in head:
+        return None
+    return sorted(n.split(":")[-1].strip() for n in re.split(r"[,\n]", names) if n.split(":")[-1].strip())
+
+
 class Rcon:
     """One RCON connection, reused (no 'RCON Client started' line for every command)."""
 
@@ -489,7 +500,7 @@ RCON = Rcon()
 # ---------------------------------------------------------------- tail of latest.log and gc.log
 class Tailer:
     def __init__(self, path, initial_lines=0):
-        self.path = path; self.pos = None; self.rest = b""; self.initial = initial_lines
+        self.path = path; self.pos = None; self.rest = b""; self.initial = initial_lines; self.ino = None
 
     def read(self):
         try:
@@ -498,9 +509,10 @@ class Tailer:
             if self.pos is not None:
                 self.pos = 0  # file rotated: the next one is read from the start
             return []
-        if self.pos is None or st.st_size < self.pos:
+        # a new file (rotation) can already be longer than the old one was: the inode tells
+        if self.pos is None or st.st_size < self.pos or st.st_ino != self.ino:
             first = self.pos is None and self.initial
-            self.pos, self.rest = 0, b""
+            self.pos, self.rest, self.ino = 0, b"", st.st_ino
             if first:
                 with open(self.path, "rb") as f:
                     data = f.read()
@@ -855,6 +867,13 @@ def sampler():
         try:
             port = SRV.port()
             info = ping(port)
+            if info is not None:   # also at 0 online: some servers send no count with hide-online-players
+                try:
+                    names = list_names(RCON.command("list", timeout=2))
+                    if names is not None:
+                        info = (len(names), info[1], names)
+                except Exception:  # noqa: BLE001
+                    pass   # RCON down: the ping sample is all there is
             SRV.update(info)
             pid = listening_pid(port) if info is not None else None
             if pid:
@@ -1688,9 +1707,9 @@ def download_assets():
     def run():
         AS.install(CFG["server_dir"], log=L.info, jar=server_jar())
         log("panel downloaded the Minecraft assets")
-        shutil.rmtree(os.path.join(CACHE, "map"), ignore_errors=True)
         while SRV.state in ("starting", "stopping") or backup_busy() or OP_PENDING.is_set() or JOBS.get("java") == "running":
             time.sleep(5)   # a restart now would lose a start, a backup or a restore in progress
+        shutil.rmtree(os.path.join(CACHE, "map"), ignore_errors=True)   # after the wait: tiles drawn meanwhile have the old colours
         restart_soon()   # colours, item names and death phrases are read once per process: the stale ones must go
     job("assets", run)
 
@@ -1815,15 +1834,11 @@ UPDATE_FILE = os.path.join(CACHE, "update.json")   # the last answer: a restart 
 UPDATE_HINT = "docker compose pull && docker compose up -d"   # only Docker has no Update button
 
 
-def _vtuple(v):
-    return tuple(int(x) for x in re.findall(r"\d+", v)[:3])
-
-
 def known_update():
     """The release the last check found, compared again with this version (after an update it is no longer newer)."""
     try:
         tag = json.load(open(UPDATE_FILE, encoding="utf-8"))["latest"]
-        UPDATE.update(latest=tag, newer=_vtuple(tag) > _vtuple(VERSION))
+        UPDATE.update(latest=tag, newer=UP.vtuple(tag) > UP.vtuple(VERSION))
     except (OSError, ValueError, KeyError, TypeError):
         pass
 
@@ -1836,11 +1851,8 @@ def update_checker():
     while True:
         if CFG.get("update_check", True):
             try:
-                req = urllib.request.Request("https://api.github.com/repos/%s/releases/latest" % REPO,
-                                             headers={"User-Agent": "byzzcraft/" + VERSION, "Accept": "application/vnd.github+json"})
-                with urllib.request.urlopen(req, timeout=15) as r:
-                    tag = json.loads(r.read())["tag_name"].lstrip("v")
-                UPDATE.update(latest=tag, newer=_vtuple(tag) > _vtuple(VERSION))
+                tag = UP.latest_release(REPO)["version"]
+                UPDATE.update(latest=tag, newer=UP.vtuple(tag) > UP.vtuple(VERSION))
                 write_json(UPDATE_FILE, {"latest": tag})
                 if UPDATE["newer"]:
                     L.info("ByzzCraft %s is available (running %s)", tag, VERSION)

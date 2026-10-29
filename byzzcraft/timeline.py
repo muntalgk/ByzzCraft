@@ -113,6 +113,7 @@ class Timeline:
         self._all = []
         self._keys = set()
         self._sessions = None
+        self._dirty, self._saved = False, 0
         self._load_cache()
         self._load_usercache()
         self._rebuild()   # events already cached: they count as "known" only after the first refresh
@@ -373,8 +374,11 @@ class Timeline:
             ch = self._read_panel() or ch
             if ch or not self._all and not self._keys:
                 self._rebuild()
-                if ch:
-                    self._save_cache()
+            self._dirty = self._dirty or bool(ch)
+            # at most once a minute: the cache only spares re-reading the logs, it is rewritten whole
+            if self._dirty and time.time() - self._saved >= 60:
+                self._save_cache()
+                self._dirty, self._saved = False, time.time()
             new = []
             for e in self._all:
                 k = _key(e)
