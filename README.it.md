@@ -7,7 +7,7 @@
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB)
 [![MIT](https://img.shields.io/badge/license-MIT-3fb950)](LICENSE)
 
-Un pannello web per un server Minecraft Java (vanilla, Paper o Fabric) che gira sulla tua macchina. Io lo uso per
+Un pannello web per un server Minecraft Java (vanilla, Paper, Spigot o Fabric) che gira sulla tua macchina. Io lo uso per
 accendere il server dal telefono, vedere chi è online e dove, controllare gli inventari e fare i backup del mondo.
 
 È Python puro, senza dipendenze e senza database: legge i file del server e ci parla via RCON. Gira su Windows,

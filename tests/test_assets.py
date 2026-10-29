@@ -73,6 +73,13 @@ try:
     check("jar from config", A.find_jar(d, "paper-26.3-218.jar") == "paper-26.3-218.jar" and A.find_jar(d, "manca.jar") is None)
     jar("forge-installer.jar", {})
     check("installer ignored", A.find_jar(d) == "fabric-server-launch.jar")
+    for n in ("fabric-server-launch.jar", "paper-26.3-218.jar", "forge-installer.jar"):
+        os.remove(os.path.join(d, n))
+    jar("spigot-1.21.4.jar", {"META-INF/MANIFEST.MF": "Main-Class: org.bukkit.craftbukkit.bootstrap.Main\n"})
+    jar("server.jar", {"version.json": json.dumps({"id": "1.21.4", "java_version": 21})})
+    check("Spigot before vanilla", A.find_jar(d) == "spigot-1.21.4.jar")
+    os.remove(os.path.join(d, "server.jar"))
+    check("Spigot: version from the jar name", A.jar_info(d, "spigot-1.21.4.jar") == ("1.21.4", 21))
 finally:
     shutil.rmtree(d, ignore_errors=True)
 # biome-colored icons: grey ones get the inventory color, colored ones (a resource pack) and other ids stay as they are

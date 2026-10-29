@@ -7,7 +7,7 @@
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB)
 [![MIT](https://img.shields.io/badge/license-MIT-3fb950)](LICENSE)
 
-A web panel for a Minecraft Java server (vanilla, Paper or Fabric) that runs on your own machine. I use it to
+A web panel for a Minecraft Java server (vanilla, Paper, Spigot or Fabric) that runs on your own machine. I use it to
 start the server from my phone, see who's online and where, check inventories and keep backups of the world.
 
 It's plain Python with no dependencies and no database: it reads the server's own files and talks to it over RCON.

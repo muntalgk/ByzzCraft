@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Spigot: the panel finds `spigot-<version>.jar` by itself (before it started the vanilla `server.jar` next to it, or
+  nothing) and reads the Minecraft version from its name, so it picks the right Java and the map textures.
+
 ## 1.2.4
 
 - Players online come from the server's own player list: those who turned off "Allow Server Listings", every player

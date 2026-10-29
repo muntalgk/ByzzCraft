@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import struct
 import urllib.request
@@ -28,7 +29,7 @@ def present():
 
 
 # known names, in order: the Fabric/Quilt launchers and forks like Paper come with the vanilla server.jar too
-JAR_PREFIXES = ("fabric-server-launch", "fabric-server", "quilt-server", "paper", "purpur", "folia", "pufferfish", "server")
+JAR_PREFIXES = ("fabric-server-launch", "fabric-server", "quilt-server", "paper", "purpur", "folia", "pufferfish", "spigot", "server")
 
 
 def find_jar(server_dir, configured=None):
@@ -67,6 +68,8 @@ def jar_info(server_dir, jar=None):
                     ver = ver or props.get("game-version")
         except (OSError, ValueError, KeyError, zipfile.BadZipFile):
             pass
+    m = not ver and jar and re.search(r"-(\d+\.\d+(?:\.\d+)?)\.jar$", jar)   # BuildTools names it spigot-1.21.4.jar
+    ver = m.group(1) if m else ver
     if ver and not java:
         if ver not in _JAVA:
             try:
