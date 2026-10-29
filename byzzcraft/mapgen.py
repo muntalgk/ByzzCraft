@@ -6,7 +6,7 @@ CLI:
     python -m byzzcraft.mapgen <world_dir> <dim> <rx> <rz> <out.png>
     python -m byzzcraft.mapgen <world_dir> <dim> --all <cache_dir>
 """
-import json, math, os, re, struct, sys, threading, time, zlib
+import contextlib, json, marshal, math, os, re, struct, sys, threading, time, zlib
 
 from .players import ASSETS, dim_dir, nbt_parse  # noqa: E402
 
@@ -210,13 +210,62 @@ def _biome_cells(sec):
     return [pal[v] for v in _unpack(data, bits, 64)]
 
 
-def _read_chunks(path):
-    """Generator of NBT chunks (dict) from a .mca; tolerates unreadable chunks."""
-    with open(path, "rb") as f:
-        buf = f.read()
+def _lz4_block(src, out):
+    """Appends to out one LZ4 block (sequences of literals + a match copied from what is already written)."""
+    i, n = 0, len(src)
+    while i < n:
+        tok = src[i]; i += 1
+        ln = tok >> 4
+        if ln == 15:
+            while True:
+                b = src[i]; i += 1; ln += b
+                if b != 255:
+                    break
+        out += src[i:i + ln]; i += ln
+        if i >= n:   # the last sequence has no match
+            break
+        off = src[i] | src[i + 1] << 8; i += 2
+        ml = (tok & 15) + 4
+        if ml == 19:
+            while True:
+                b = src[i]; i += 1; ml += b
+                if b != 255:
+                    break
+        if not 0 < off <= len(out):
+            raise ValueError("lz4: bad offset")
+        s = len(out) - off
+        # a match longer than its offset repeats the last off bytes
+        out += out[s:s + ml] if off >= ml else (out[s:] * (ml // off + 1))[:ml]
+
+
+def lz4_java(data):
+    """Region compression 4 (region-file-compression=lz4): the blocks of lz4-java's LZ4BlockOutputStream,
+    each "LZ4Block" + method + compressed length + length + checksum (not checked: the length is, and NBT fails on junk)."""
+    out, i = bytearray(), 0
+    while data[i:i + 8] == b"LZ4Block":
+        meth = data[i + 8] & 0xF0
+        clen, dlen = struct.unpack_from("<ii", data, i + 9)
+        body = data[i + 21:i + 21 + clen]; i += 21 + clen
+        if dlen == 0:   # end mark
+            break
+        before = len(out)
+        if meth == 0x10:   # stored as it is
+            out += body
+        elif meth == 0x20:
+            _lz4_block(body, out)
+        if len(out) - before != dlen:
+            raise ValueError("lz4: bad length")
+    return bytes(out)
+
+
+def _read_chunks(path, only=None, buf=None):
+    """Generator of NBT chunks (dict) from a .mca (or its bytes); only: the chunk numbers to read. Tolerates unreadable chunks."""
+    if buf is None:
+        with open(path, "rb") as f:
+            buf = f.read()
     if len(buf) < 8192:
         return
-    for n in range(1024):
+    for n in range(1024) if only is None else only:
         o = 4 * n
         off = (buf[o] << 16) | (buf[o + 1] << 8) | buf[o + 2]
         if off == 0 or buf[o + 3] == 0:
@@ -231,6 +280,8 @@ def _read_chunks(path):
                 data = zlib.decompress(data)
             elif comp == 3:
                 pass
+            elif comp == 4:
+                data = lz4_java(data)
             elif comp == 1:
                 import gzip
                 data = gzip.decompress(data)
@@ -396,21 +447,73 @@ def region_path(world_dir, dim, rx, rz):
     return os.path.join(dim_dir(world_dir, dim), "region", "r.%d.%d.mca" % (rx, rz))
 
 
-def render_region(world_dir, dim, rx, rz):
+with open(__file__, "rb") as _f:   # another version of this file may draw differently: its states are not reused
+    _STATE_V = zlib.crc32(_f.read())
+
+
+def _sigs(buf):
+    """Per chunk: sector, timestamp (1 s) and data length; a chunk saved again changes at least one of them."""
+    out = []
+    for n in range(1024):
+        o = 4 * n
+        off = int.from_bytes(buf[o:o + 3], "big") * 4096
+        out.append(buf[o:o + 4] + buf[4096 + o:4100 + o] + (buf[off:off + 4] if off else b""))
+    return out
+
+
+def _load_state(path):
+    try:
+        with open(path, "rb") as f:
+            v, sigs, base, H = marshal.loads(zlib.decompress(f.read()))
+        if v == _STATE_V and len(sigs) == 1024 and len(base) == len(H) == SIZE * SIZE:
+            return sigs, base, H
+    except Exception:  # missing, damaged, written by another Python: a full render
+        pass
+    return None
+
+
+def _save_state(path, sigs, base, H):
+    tmp = path + ".tmp%d" % threading.get_ident()
+    try:
+        with open(tmp, "wb") as f:
+            f.write(zlib.compress(marshal.dumps((_STATE_V, sigs, base, H)), 1))
+        os.replace(tmp, path)
+    except OSError:   # disk full, cache emptied meanwhile: the tile is still written, the next render is a full one
+        with contextlib.suppress(OSError):
+            os.remove(tmp)
+
+
+def render_region(world_dir, dim, rx, rz, state=None):
+    """PNG of a region. state: a file keeping the colours of the last render with the chunk signatures (_sigs) they
+    came from; then only the chunks saved since are read again."""
     path = region_path(world_dir, dim, rx, rz)
-    if not os.path.isfile(path):
+    try:
+        with open(path, "rb") as f:
+            buf = f.read()
+    except OSError:
         return None
     nether = dim == "the_nether"
-    base = [None] * (SIZE * SIZE)
-    H = [_NOH] * (SIZE * SIZE)
-    try:
-        for n, ch in _read_chunks(path):
-            try:
-                _chunk_top(ch, base, H, n & 31, n >> 5, nether)
-            except Exception:
-                continue
-    except OSError:
-        pass
+    sigs = _sigs(buf) if state and len(buf) >= 8192 else None
+    old = _load_state(state) if sigs else None
+    if old:
+        prev, base, H = old
+        todo = [n for n in range(1024) if sigs[n] != prev[n]]
+        for n in todo:   # the old pixels go: the chunk may now be gone or unreadable
+            o = (n >> 5) * 16 * SIZE + (n & 31) * 16
+            for p in range(o, o + 16 * SIZE, SIZE):
+                base[p:p + 16] = [None] * 16
+                H[p:p + 16] = [_NOH] * 16
+    else:
+        base = [None] * (SIZE * SIZE)
+        H = [_NOH] * (SIZE * SIZE)
+        todo = None
+    for n, ch in _read_chunks(path, todo, buf):
+        try:
+            _chunk_top(ch, base, H, n & 31, n >> 5, nether)
+        except Exception:
+            continue
+    if sigs:
+        _save_state(state, sigs, base, H)
     img = bytearray(SIZE * SIZE * 4)
     sh = _SHADE
     for p in range(SIZE * SIZE):
@@ -471,13 +574,15 @@ def get_tile(world_dir, cache_dir, dim, rx, rz):
                 return out
         except OSError:
             pass
-        png = render_region(world_dir, dim, rx, rz)
+        # state only for a tile drawn before: a region that changes; the untouched ones would only take disk space
+        png = render_region(world_dir, dim, rx, rz, out[:-4] + ".state" if os.path.exists(out) else None)
         if png is None:
             return None
         os.makedirs(os.path.dirname(out), exist_ok=True)
         tmp = out + ".tmp%d" % threading.get_ident()
         with open(tmp, "wb") as f:
             f.write(png)
+        os.utime(tmp, (mt, mt))   # the region as it was read: if it is saved again while rendering, the tile is stale
         os.replace(tmp, out)
         return out
 

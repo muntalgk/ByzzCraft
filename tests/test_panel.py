@@ -234,6 +234,57 @@ try:
     panel.known_update()
     check("broken saved check: kept as it was", panel.UPDATE.get("newer") is False, panel.UPDATE)
 
+    # who is online comes from "list", not from the ping sample (Anonymous Player, hide-online-players, max 12)
+    check("list: vanilla/Paper", panel.list_names("There are 2 of a max of 10 players online: Zed, Alice") == ["Alice", "Zed"])
+    check("list: nobody", panel.list_names("There are 0 of a max of 10 players online: ") == [])
+    check("list: Spigot, colors", panel.list_names("§6There are §c1§6/§c20§6 players online:\n§fAlice") == ["Alice"])
+    check("list: other answer -> ping fallback", panel.list_names("Unknown command") is None)
+    check("list: EssentialsX groups", panel.list_names("There are 3 out of maximum 10 players online.\nDefault: A, C\nAdmin: B")
+          == ["A", "B", "C"])
+    # assets download: the map cache is emptied after the wait for a backup, so a tile drawn meanwhile (old colours) does not stay
+    mapdir = j(panel.CACHE, "map", "overworld")
+    real = (panel.AS.install, panel.backup_busy, panel.restart_soon, panel.job, panel.time.sleep)
+    busy, restarted = [True, True], []
+    def nap(_):   # a tile request during the wait
+        os.makedirs(mapdir, exist_ok=True)
+        open(j(mapdir, "r.0.0.png"), "w").close()
+    panel.AS.install = lambda *a, **k: None
+    panel.backup_busy = lambda: bool(busy) and busy.pop()
+    panel.time.sleep, panel.job = nap, lambda name, fn: fn()
+    panel.restart_soon = lambda: restarted.append(os.path.exists(j(mapdir, "r.0.0.png")))
+    try:
+        panel.download_assets()
+    finally:
+        panel.AS.install, panel.backup_busy, panel.restart_soon, panel.job, panel.time.sleep = real
+    check("assets: waited, then map cache emptied, then restart", restarted == [False] and not busy, (restarted, busy))
+
+    # Minecraft 26.3 with the player in a team with prefix and suffix: "list" gives the display name, "list uuids" the name
+    check("list uuids: real name", panel.list_names(
+        "There are 2 of a max of 5 players online: BotTest (6d677ae7-3bc4-396f-872a-777fca8f354d), Al_1 (0f1e2d3c4b5a69788796a5b4c3d2e1f0)")
+        == ["Al_1", "BotTest"])
+
+    def run_sampler(answers):   # one round of the sampler with a fake ping and fake RCON answers; the commands sent
+        real, calls = (panel.ping, panel.RCON.command), []
+        panel.ping = lambda port: (0, 10, [])   # hide-online-players: no names (some servers no count either)
+        panel.RCON.command = lambda text, timeout=5: calls.append(text) or answers.get(text, "Unknown or incomplete command")
+        panel.SAMPLE_SECONDS, sleep = 0, panel.time.sleep
+        def stop(_):
+            raise SystemExit
+        panel.time.sleep = stop
+        try:
+            with contextlib.suppress(SystemExit):
+                panel.sampler()
+        finally:
+            panel.ping, panel.RCON.command = real
+            panel.time.sleep = sleep
+        return calls
+    calls = run_sampler({"list uuids": "There are 1 of a max of 10 players online: Alice (6d677ae7-3bc4-396f-872a-777fca8f354d)"})
+    check("sampler: hidden players found by list uuids", panel.online_names() == {"Alice"}, panel.online_names())
+    check("sampler: count from list, so not 'empty'", panel.SRV.info[0] == 1 and panel.SRV.empty_since is None, panel.SRV.info)
+    check("sampler: list uuids asked once, no plain list", calls.count("list uuids") == 1 and "list" not in calls, calls)
+    calls = run_sampler({"list": "There are 1 out of maximum 10 players online.\nDefault: Bob"})
+    check("sampler: plugin list without uuids -> plain list", panel.online_names() == {"Bob"} and "list" in calls, calls)
+
     # "Start at login" on Windows writes the Startup script (here a temp path, never the real Startup folder)
     panel.STARTUP_CMD = j(root, "ByzzCraft.cmd")
     if os.name == "nt":
