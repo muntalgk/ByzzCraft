@@ -328,7 +328,21 @@ try:
     check("cut nbt: vitals", (d["health"], d["food"], d["xp_level"], d["xp_progress"], d["dim"], d["armor"]) == (17.5, 13, 31, 0.5, "the_nether", 2), d)
     check("cut nbt: items one by one", [i["id"] for i in d["inventory"]] == ["wheat_seeds", "diamond_sword"], d["inventory"])
     check("cut nbt: cut item by its fields, enchantments that fit", sword and sword[0]["dmg"] == 5 and len(sword[0]["ench"]) == 2, sword)
-    check("cut map keeps its last whole element", panel.nbt_read({"": '{"minecraft:mending": 1, "minecraft:looting": 3...'}.get, "", None)
+    # a .dat the server has just written (Paper player-auto-save.rate) is read instead of RCON; an old one is not
+    real = (panel.world_dir, panel.PL.read_nbt_file, panel.RCON.command_long)
+    w, uid, asked = j(root, "live-world"), "6d677ae7-3bc4-396f-872a-777fca8f354d", []
+    pdir = panel.PL.player_dir(w, "data")
+    os.makedirs(pdir, exist_ok=True)
+    open(j(pdir, uid + ".dat"), "wb").close()
+    panel.world_dir, panel.PL.read_nbt_file = lambda: w, lambda p: {"Health": 7.0}
+    panel.RCON.command_long = lambda text, *a, **k: asked.append(text) or "Alice has the following entity data: {Health: 3.0f}"
+    try:
+        check("fresh .dat: no RCON", panel.live_nbt("Alice", uid) == {"Health": 7.0} and not asked, asked)
+        os.utime(j(pdir, uid + ".dat"), (time.time() - 60, time.time() - 60))
+        check("old .dat: RCON", panel.live_nbt("Alice", uid) == {"Health": 3.0} and asked == ["data get entity Alice"], asked)
+    finally:
+        panel.world_dir, panel.PL.read_nbt_file, panel.RCON.command_long = real
+    check("cut map keeps its last whole element",panel.nbt_read({"": '{"minecraft:mending": 1, "minecraft:looting": 3...'}.get, "", None)
           == {"minecraft:mending": 1, "minecraft:looting": 3})
     check("close_cut",panel.close_cut('{a: "x, y", b: [1, 2], c: {d: 1, e: ...') == '{a: "x, y", b: [1, 2], c: {d: 1}}')
 

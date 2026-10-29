@@ -1345,7 +1345,16 @@ def nbt_read(get, path="", keys=NBT_KEYS[""]):
     return None
 
 
-def live_nbt(name):
+def live_nbt(name, uuid):
+    """The player's data now: the .dat if the server just wrote it (Paper with player-auto-save.rate: 20 writes it
+    every second, whole), otherwise over RCON."""
+    path = os.path.join(PL.player_dir(world_dir(), "data"), uuid + ".dat")
+    try:
+        if time.time() - os.path.getmtime(path) < 3:
+            return PL.read_nbt_file(path)
+    except (OSError, ValueError, KeyError, struct.error, EOFError):
+        pass
+
     def get(path):
         out = RCON.command_long(("data get entity %s %s" % (name, path)).rstrip())
         return out.split("entity data:", 1)[1].strip() if "entity data:" in out else None
@@ -1365,7 +1374,7 @@ def player_watcher():
                 if not uuid or not re.match(r"^\w{1,16}$", name):
                     continue
                 try:
-                    nbt = live_nbt(name)
+                    nbt = live_nbt(name, uuid)
                     if not isinstance(nbt, dict):
                         continue
                     data = PL.normalize(nbt)
