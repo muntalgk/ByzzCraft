@@ -23,7 +23,7 @@ from urllib.parse import parse_qs, urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CODE = os.path.join(HERE, "byzzcraft")   # the page, translations and icons live with the code
-VERSION = "1.2.3"
+VERSION = "1.2.4"
 REPO = "muntalgk/byzzcraft"
 sys.path.insert(0, HERE)
 from byzzcraft import players as PL  # noqa: E402

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.4
+
+- Players online come from the server's own player list: those who turned off "Allow Server Listings", every player
+  with `hide-online-players=true` and the ones past the first 12 were missing from the map and the live data, and
+  auto-stop could take the server for empty. A player in a team with a prefix is recognised too.
+- Map: worlds saved with `region-file-compression=lz4` are drawn (those chunks were left out, so the map emptied
+  where people play).
+- Map: a tile is redrawn reading only the chunks saved since the last time, about ten times faster for the regions
+  where people play. It keeps a file next to the tile, about 300 KB, only for regions that change.
+- Map: after the textures download, tiles drawn while the panel waited to restart no longer stay grey or stale; a tile
+  drawn while Minecraft was saving that region is drawn again.
+- Console: the first lines after a server restart are no longer lost when the previous log was very short.
+- The timeline writes its cache at most once a minute instead of on every log line.
+
 ## 1.2.3
 
 - Metrics: the charts with data (PC CPU and PC RAM, and the server ones while it runs) were left blank since 1.1.0:
