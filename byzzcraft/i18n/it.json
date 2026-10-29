@@ -1,4 +1,12 @@
 {
+ "Config files": "File di configurazione",
+ "Paper, Spigot and mods": "Paper, Spigot e mod",
+ "Invalid JSON at line %d: %s": "JSON non valido alla riga %d: %s",
+ "Tab in the indentation at line %d: YAML only allows spaces.": "Tabulazione nell'indentazione alla riga %d: YAML ammette solo spazi.",
+ "Invalid TOML: %s": "TOML non valido: %s",
+ "File too big (max 1 MB).": "File troppo grande (max 1 MB).",
+ "%s saved. The server applies it at the next restart.": "%s salvato. Il server lo applica al prossimo riavvio.",
+ "File not available": "File non disponibile",
  " Follow live": " Segui live",
  " at": " alle",
  " only between": " solo tra",

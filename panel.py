@@ -283,15 +283,90 @@ def server_props():
     return props
 
 
+def backup_file(base, data):
+    """Backup copy in backup-properties (shared with server.properties), the last 15 per file name."""
+    bdir = os.path.join(DATA, "backup-properties")
+    os.makedirs(bdir, exist_ok=True)
+    with open(os.path.join(bdir, "%s.%s" % (base, datetime.now().strftime("%Y%m%d-%H%M%S"))), "wb") as f:
+        f.write(data)
+    for old in sorted(x for x in os.listdir(bdir) if re.fullmatch(re.escape(base) + r"\.\d{8}-\d{6}", x))[:-15]:
+        os.remove(os.path.join(bdir, old))
+
+
+# ---------------------------------------------------------------- config files of the server type (Paper, Spigot, mods)
+CONF_FIXED = ("config/paper-global.yml", "config/paper-world-defaults.yml", "paper.yml", "spigot.yml", "bukkit.yml", "purpur.yml")
+CONF_EXT = (".json", ".json5", ".toml", ".properties", ".yml", ".yaml", ".cfg")
+CONF_MAX = 1048576
+
+
+def config_files():
+    """{name: path} of the existing editable files; the client only sends a name from here, never a path."""
+    sd, out = CFG["server_dir"], {}
+    names = list(CONF_FIXED)
+    cd = os.path.join(sd, "config")
+    try:
+        for e in sorted(os.listdir(cd)):
+            sub = os.path.join(cd, e)
+            for x in ([e] if os.path.isfile(sub) else ["%s/%s" % (e, y) for y in sorted(os.listdir(sub))] if os.path.isdir(sub) else []):
+                if x.lower().endswith(CONF_EXT) and "config/" + x not in CONF_FIXED:
+                    names.append("config/" + x)
+    except OSError:
+        pass
+    for n in names:
+        p = os.path.join(sd, *n.split("/"))
+        if os.path.isfile(p):
+            out[n] = p
+    return out
+
+
+def config_check(name, text):
+    """Error message (with the line) or None."""
+    low = name.lower()
+    if low.endswith(".json"):
+        try:
+            json.loads(text)
+        except ValueError as e:
+            return t("Invalid JSON at line %d: %s") % (getattr(e, "lineno", 1), getattr(e, "msg", e))
+    elif low.endswith((".yml", ".yaml")):
+        for i, line in enumerate(text.split("\n"), 1):
+            if re.match(r"[ ]*\t", line):
+                return t("Tab in the indentation at line %d: YAML only allows spaces.") % i
+    elif low.endswith(".toml"):
+        try:
+            import tomllib
+        except ImportError:   # Python < 3.11: saved unchecked
+            return None
+        try:
+            tomllib.loads(text)
+        except ValueError as e:
+            return t("Invalid TOML: %s") % e
+    return None
+
+
+def config_save(name, text, who):
+    """(ok, message). The previous content is backed up, the new one written atomically."""
+    path = config_files().get(name)
+    if not path:
+        return False, t("Not editable: %s") % name
+    if len(text.encode("utf-8")) > CONF_MAX:
+        return False, t("File too big (max 1 MB).")
+    err = config_check(name, text)
+    if err:
+        return False, err
+    with open(path, "rb") as f:
+        backup_file(name.replace("/", "_"), f.read())   # the whole name: config/a/x.json and config/b/x.json stay apart
+    tmp = path + ".panel-tmp"
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
+    os.replace(tmp, path)
+    log("%s edited %s" % (who, name))
+    return True, t("%s saved. The server applies it at the next restart.") % name
+
+
 def write_props(changes, who):
     path = props_path()
     lines = read_props_text().splitlines()
-    bdir = os.path.join(DATA, "backup-properties")
-    os.makedirs(bdir, exist_ok=True)
-    with open(os.path.join(bdir, "server.properties.%s" % datetime.now().strftime("%Y%m%d-%H%M%S")), "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
-    for old in sorted(os.listdir(bdir))[:-15]:
-        os.remove(os.path.join(bdir, old))
+    backup_file("server.properties", ("\n".join(lines) + "\n").encode("utf-8"))
     out, done, seen = [], [], set()
     for line in lines:
         if "=" in line and not line.lstrip().startswith("#"):
@@ -2166,8 +2241,21 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(200, {"events": evs[:qint(q, "limit", 200, 1, 500)]})
         if path == "/api/sessions":
             return self.json(200, {"sessions": TLINE.sessions(limit=qint(q, "limit", 30, 1, 200), running=SRV.state != "off")})
-        if path in ("/api/backups", "/api/backups/download", "/api/access", "/api/audit", "/api/users", "/api/health", "/api/syslog") and not s["admin"]:
+        if path in ("/api/backups", "/api/backups/download", "/api/access", "/api/audit", "/api/users", "/api/health", "/api/syslog", "/api/configs") and not s["admin"]:
             return self.json(403, {"error": "admins only"})
+        if path == "/api/configs":
+            files = config_files()
+            name = q.get("file", [""])[0]
+            if not name:
+                return self.json(200, {"files": [{"name": n, "size": os.path.getsize(p)} for n, p in files.items()]})
+            p = files.get(name)
+            try:
+                if not p or os.path.getsize(p) > CONF_MAX:
+                    raise OSError
+                with open(p, encoding="utf-8") as f:
+                    return self.json(200, {"name": name, "text": f.read()})
+            except (OSError, UnicodeDecodeError):
+                return self.json(404, {"error": t("File not available")})
         if path == "/api/access":
             p = server_props()
             return self.json(200, {**AC.snapshot(CFG["server_dir"]), "online": sorted(online_names()), "state": SRV.state,
@@ -2416,6 +2504,15 @@ class Handler(BaseHTTPRequestHandler):
             HUB.publish("status", SRV.snapshot())
             n = len(done)
             return self.json(200, {"ok": True, "message": (t("%d settings saved") % n) if n else t("No changes")})
+        if self.path == "/api/configs":
+            try:
+                ok, msg = config_save(str(data.get("file", "")), str(data.get("text", "")), s["user"])
+            except OSError as e:
+                ok, msg = False, str(e)
+            if ok and data.get("restart") and SRV.state == "on":
+                SRV.stop(s["user"], "new settings", restart=True)
+                HUB.publish("status", SRV.snapshot())
+            return self.json(200, {"ok": ok, "message": msg})
         self.json(404, {"ok": False, "message": t("not found")})
 
 

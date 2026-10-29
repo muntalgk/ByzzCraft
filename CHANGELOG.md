@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Config files: admins can edit the files of the server type in use (Paper, Spigot, Purpur, mod configs) from the
+  panel; JSON, YAML tabs and TOML are checked before saving and every save keeps a backup.
 - Dashboard: without an address set in the panel settings, players see this machine's Tailscale IP (or the home
   network one), with the port when it is not 25565.
 - Setup: choose the server to download into an empty folder, from cards with a short description: Paper

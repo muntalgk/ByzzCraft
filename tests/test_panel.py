@@ -216,6 +216,22 @@ try:
     check("auto address: home network without Tailscale", panel.auto_address() == panel.lan_ip() + ":25566" or panel.lan_ip() == "SERVER-IP")
     panel.tailnet_ip = real_ts
 
+    # config files editor: only names from the computed list
+    for n in ("paper.yml", "bukkit.yml"):
+        open(j(srv_dir, n), "w").close()
+    os.makedirs(j(srv_dir, "config", "sub"), exist_ok=True)
+    for n, c in (("x.json", "{}"), ("sub/y.toml", "a = 1\n"), ("n.bin", "x")):
+        open(j(srv_dir, "config", *n.split("/")), "w").write(c)
+    cf = panel.config_files()
+    check("config_files lists Paper, Bukkit and mod files", {"config/paper-global.yml", "paper.yml", "bukkit.yml", "config/x.json", "config/sub/y.toml"} <= set(cf) and "config/n.bin" not in cf and "spigot.yml" not in cf, sorted(cf))
+    for bad in ("../server.properties", os.path.abspath(props), "server.properties", "config/../server.properties", "config/n.bin"):
+        check("config_save refuses %s" % bad, not panel.config_save(bad, "x", "t")[0] and open(props, "rb").read().startswith(b"motd="))
+    check("config_save refuses invalid JSON", not panel.config_save("config/x.json", "{" + NL + "bad", "t")[0] and open(j(srv_dir, "config", "x.json")).read() == "{}")
+    check("config_save refuses a tab in YAML", "line 2" in panel.config_save("paper.yml", "a:" + NL + "\tb: 1", "t")[1])
+    bd = j(panel.DATA, "backup-properties")
+    ok, msg = panel.config_save("config/x.json", '{"a": 1}', "t")
+    check("config_save writes and backs up", ok and open(j(srv_dir, "config", "x.json")).read() == '{"a": 1}' and any(f.startswith("config_x.json.") and open(j(bd, f)).read() == "{}" for f in os.listdir(bd)), msg)
+
     # usercache: bad entries are skipped
     with open(j(srv_dir, "usercache.json"), "w") as f:
         json.dump([{"name": "x"}, {"uuid": "../../etc", "name": "y"}, {"uuid": "12345678-1234-1234-1234-123456789abc", "name": "ok"}], f)
