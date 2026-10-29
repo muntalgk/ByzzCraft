@@ -629,7 +629,7 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
     <section id="v-plugins" hidden>
       <div class="toolbar"><button class="btn primary" id="pl-browse">{{Browse Hangar}}</button><span class="lock">{{Plugins load when the server starts.}}</span></div>
       <p class="pl-note" id="pl-note" hidden>{{Restart the server to apply the changes.}} <button class="btn" id="pl-restart">{{Restart}}</button></p>
-      <div id="pl-list"></div>
+      <div id="plg-list"></div>
     </section>
 
     <!-- BACKUP -->
@@ -961,7 +961,7 @@ if(BOOT.admin)GET("/api/configs").then(async r=>{if(r)$("#tab-cf").hidden=!(awai
 /* plugins from Hangar (Paper and forks) */
 const PL={mc:"",inst:[],
   async load(){if(!BOOT.admin)return;const r=await GET("/api/plugins");if(!r)return;const j=await r.json();$("#tab-pl").hidden=!j.enabled;if(!j.enabled){if(CUR=="plugins")go("dash");return}
-    this.mc=j.mc;this.inst=j.installed;setSub();const l=$("#pl-list");l.textContent="";
+    this.mc=j.mc;this.inst=j.installed;setSub();const l=$("#plg-list");l.textContent="";
     if(!this.inst.length)l.innerHTML="<p class='lock'>"+esc(_t("No plugins installed."))+"</p>";
     this.inst.forEach(p=>{const d=document.createElement("div");d.className="card pl-row";
       d.innerHTML="<div class='pl-i'><b>"+esc(p.name)+"</b> <span class='lock'>"+esc(p.version)+"</span><small>"+esc(p.file)+" · "+nf(p.size/1048576,2)+" MB"+"</small></div><button class='btn danger'>"+esc(_t("Remove"))+"</button>";
