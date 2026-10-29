@@ -366,15 +366,18 @@ def ping(port):
         return None
 
 
+_UUID_TAIL = re.compile(r"\s*\([0-9a-fA-F-]{32,36}\)$")
+
+
 def list_names(out):
-    """Names from the "list" command ("There are 2 of a max of 10 players online: A, B"; Spigot puts them on the next
-    line, EssentialsX one line per group "Admin: B"), None if the answer has another shape. The ping sample cannot be
-    trusted for this: it shows at most 12 players, "Anonymous Player" for those who turned off server listings and
-    nobody with hide-online-players."""
+    """Names from "list uuids" ("There are 2 of a max of 10 players online: A (uuid), B (uuid)") or "list" (Spigot puts
+    them on the next line, EssentialsX one line per group "Admin: B"), None if the answer has another shape. The ping
+    sample cannot be trusted for this: it shows at most 12 players, "Anonymous Player" for those who turned off server
+    listings and nobody with hide-online-players."""
     head, sep, names = re.sub("§.", "", out).partition(":")
     if not sep or "online" not in head:
         return None
-    return sorted(n.split(":")[-1].strip() for n in re.split(r"[,\n]", names) if n.split(":")[-1].strip())
+    return sorted(n for n in (_UUID_TAIL.sub("", p.split(":")[-1]).strip() for p in re.split(r"[,\n]", names)) if n)
 
 
 class Rcon:
@@ -869,7 +872,10 @@ def sampler():
             info = ping(port)
             if info is not None:   # also at 0 online: some servers send no count with hide-online-players
                 try:
-                    names = list_names(RCON.command("list", timeout=2))
+                    # "uuids": the real names; plain "list" shows the display names, with team prefixes
+                    names = list_names(RCON.command("list uuids", timeout=2))
+                    if names is None:   # a plugin's own list (EssentialsX) may not know "uuids"
+                        names = list_names(RCON.command("list", timeout=2))
                     if names is not None:
                         info = (len(names), info[1], names)
                 except Exception:  # noqa: BLE001

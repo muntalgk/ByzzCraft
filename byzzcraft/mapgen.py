@@ -6,7 +6,7 @@ CLI:
     python -m byzzcraft.mapgen <world_dir> <dim> <rx> <rz> <out.png>
     python -m byzzcraft.mapgen <world_dir> <dim> --all <cache_dir>
 """
-import json, marshal, math, os, re, struct, sys, threading, time, zlib
+import contextlib, json, marshal, math, os, re, struct, sys, threading, time, zlib
 
 from .players import ASSETS, dim_dir, nbt_parse  # noqa: E402
 
@@ -447,30 +447,45 @@ def region_path(world_dir, dim, rx, rz):
     return os.path.join(dim_dir(world_dir, dim), "region", "r.%d.%d.mca" % (rx, rz))
 
 
-_STATE_V = 1   # bump when _chunk_top draws differently: the colours kept in the state files would be stale
+with open(__file__, "rb") as _f:   # another version of this file may draw differently: its states are not reused
+    _STATE_V = zlib.crc32(_f.read())
+
+
+def _sigs(buf):
+    """Per chunk: sector, timestamp (1 s) and data length; a chunk saved again changes at least one of them."""
+    out = []
+    for n in range(1024):
+        o = 4 * n
+        off = int.from_bytes(buf[o:o + 3], "big") * 4096
+        out.append(buf[o:o + 4] + buf[4096 + o:4100 + o] + (buf[off:off + 4] if off else b""))
+    return out
 
 
 def _load_state(path):
     try:
         with open(path, "rb") as f:
-            v, head, base, H = marshal.loads(zlib.decompress(f.read()))
-        if v == _STATE_V and len(head) == 8192 and len(base) == len(H) == SIZE * SIZE:
-            return head, base, H
+            v, sigs, base, H = marshal.loads(zlib.decompress(f.read()))
+        if v == _STATE_V and len(sigs) == 1024 and len(base) == len(H) == SIZE * SIZE:
+            return sigs, base, H
     except Exception:  # missing, damaged, written by another Python: a full render
         pass
     return None
 
 
-def _save_state(path, head, base, H):
+def _save_state(path, sigs, base, H):
     tmp = path + ".tmp%d" % threading.get_ident()
-    with open(tmp, "wb") as f:
-        f.write(zlib.compress(marshal.dumps((_STATE_V, head, base, H)), 1))
-    os.replace(tmp, path)
+    try:
+        with open(tmp, "wb") as f:
+            f.write(zlib.compress(marshal.dumps((_STATE_V, sigs, base, H)), 1))
+        os.replace(tmp, path)
+    except OSError:   # disk full, cache emptied meanwhile: the tile is still written, the next render is a full one
+        with contextlib.suppress(OSError):
+            os.remove(tmp)
 
 
 def render_region(world_dir, dim, rx, rz, state=None):
-    """PNG of a region. state: a file keeping the colours of the last render with the region header they came from;
-    then only the chunks saved since (other sector or timestamp in the header) are read again."""
+    """PNG of a region. state: a file keeping the colours of the last render with the chunk signatures (_sigs) they
+    came from; then only the chunks saved since are read again."""
     path = region_path(world_dir, dim, rx, rz)
     try:
         with open(path, "rb") as f:
@@ -478,12 +493,11 @@ def render_region(world_dir, dim, rx, rz, state=None):
     except OSError:
         return None
     nether = dim == "the_nether"
-    head = buf[:8192]
-    old = _load_state(state) if state and len(head) == 8192 else None
+    sigs = _sigs(buf) if state and len(buf) >= 8192 else None
+    old = _load_state(state) if sigs else None
     if old:
         prev, base, H = old
-        todo = [n for n in range(1024) if head[4 * n:4 * n + 4] != prev[4 * n:4 * n + 4]
-                or head[4096 + 4 * n:4100 + 4 * n] != prev[4096 + 4 * n:4100 + 4 * n]]
+        todo = [n for n in range(1024) if sigs[n] != prev[n]]
         for n in todo:   # the old pixels go: the chunk may now be gone or unreadable
             o = (n >> 5) * 16 * SIZE + (n & 31) * 16
             for p in range(o, o + 16 * SIZE, SIZE):
@@ -498,8 +512,8 @@ def render_region(world_dir, dim, rx, rz, state=None):
             _chunk_top(ch, base, H, n & 31, n >> 5, nether)
         except Exception:
             continue
-    if state and len(head) == 8192:
-        _save_state(state, head, base, H)
+    if sigs:
+        _save_state(state, sigs, base, H)
     img = bytearray(SIZE * SIZE * 4)
     sh = _SHADE
     for p in range(SIZE * SIZE):

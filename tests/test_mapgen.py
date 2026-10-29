@@ -49,10 +49,10 @@ try:
     rpath = M.region_path(world, "overworld", 0, 0)
     os.makedirs(os.path.dirname(rpath))
 
-    def write_region(chunks):   # {chunk number: (colour value, timestamp)}, uncompressed NBT {"c": value}
+    def write_region(chunks):   # {chunk number: (colour value, timestamp[, padding])}, uncompressed NBT {"c": value}
         head, ts, body = bytearray(4096), bytearray(4096), bytearray(4096 * 41)
-        for n, (k, t) in sorted(chunks.items()):
-            nb = b"\x0a\x00\x00\x03\x00\x01c" + struct.pack(">i", k) + b"\x00"
+        for n, (k, t, *pad) in sorted(chunks.items()):
+            nb = b"\x0a\x00\x00\x03\x00\x01c" + struct.pack(">i", k) + b"\x01\x00\x01p\x00" * (pad[0] if pad else 0) + b"\x00"
             sec = 2 + n   # fixed sectors: Minecraft moves only the chunks it writes
             head[4 * n:4 * n + 4] = struct.pack(">I", sec << 8 | 1); ts[4 * n:4 * n + 4] = struct.pack(">I", t)
             o = (sec - 2) * 4096
@@ -83,6 +83,15 @@ try:
         open(state, "wb").write(b"junk")
         del read[:]
         check("state: damaged file -> full render", M.render_region(world, "overworld", 0, 0, state) == full and len(read) == 3)
+        write_region({1: (60, 200, 3), 33: (30, 100), 40: (50, 200)})   # chunk 1 saved again in the same second
+        del read[:]
+        part = M.render_region(world, "overworld", 0, 0, state)
+        check("state: same sector and second, other length -> read", read == [(1, 0)] and part == M.render_region(world, "overworld", 0, 0), read)
+        os.remove(state)
+        os.makedirs(state)   # cannot be written: the PNG still comes, no .tmp left
+        png = M.render_region(world, "overworld", 0, 0, state)
+        check("state: not writable -> PNG anyway, no tmp left", png and not [f for f in os.listdir(root) if ".tmp" in f])
+        os.rmdir(state)
         # get_tile keeps a state only for a tile drawn before
         cache = os.path.join(root, "tiles")
         M.get_tile(world, cache, "overworld", 0, 0)
