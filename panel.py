@@ -1279,6 +1279,79 @@ def roster():
     return out
 
 
+# Paper cuts a long "data get" answer after ~30 text pieces ("recipeBook: {..."): then the fields normalize() uses are read
+# one by one, lists one element at a time. Keys by field name (list elements share their list's keys).
+ITEM_KEYS = ("id", "count", "Slot", "components")
+NBT_KEYS = {"": ("Health", "AbsorptionAmount", "foodLevel", "foodSaturationLevel", "XpLevel", "XpP", "XpTotal", "Score", "Pos",
+                 "Rotation", "Dimension", "playerGameType", "SelectedItemSlot", "Fire", "Air", "LastDeathLocation",
+                 "Inventory", "EnderItems", "equipment", "active_effects"),
+            "Inventory": ITEM_KEYS, "EnderItems": ITEM_KEYS, "equipment": ("head", "chest", "legs", "feet", "offhand"),
+            "head": ITEM_KEYS, "chest": ITEM_KEYS, "legs": ITEM_KEYS, "feet": ITEM_KEYS, "offhand": ITEM_KEYS,
+            "components": ("minecraft:custom_name", "minecraft:enchantments", "minecraft:stored_enchantments", "minecraft:damage",
+                           "minecraft:max_damage", "minecraft:potion_contents"),
+            "minecraft:potion_contents": ("potion", "custom_color"), "active_effects": ("id", "amplifier", "duration"),
+            "LastDeathLocation": ("pos", "dimension")}
+
+
+def close_cut(raw):
+    """What fits of a cut answer ('{a: 1, b: {c: 2, d: ...'): up to the last whole element, brackets closed."""
+    i, stack, quote, cut = 0, [], None, ("", [])
+    while i < len(raw):
+        c = raw[i]
+        if quote:
+            if c == "\\":
+                i += 1
+            elif c == quote:
+                quote = None
+        elif c in "\"'":
+            quote = c
+        elif c in "{[":
+            stack.append("}" if c == "{" else "]")
+        elif c in "}]" and stack:
+            stack.pop()
+        elif c == ",":
+            cut = (raw[:i], list(stack))
+        i += 1
+    return cut[0] + "".join(reversed(cut[1]))
+
+
+def nbt_read(get, path="", keys=NBT_KEYS[""]):
+    """The value at an NBT path of a player; get(path) is the server's answer, None if there is nothing there."""
+    raw = get(path)
+    if raw is None:
+        return None
+    try:
+        return PL.snbt(raw)
+    except (ValueError, IndexError):   # cut by the server
+        pass
+    if raw.startswith("["):
+        out = []
+        while len(out) < 256 and (v := nbt_read(get, "%s[%d]" % (path, len(out)), keys)) is not None:
+            out.append(v)
+        return out
+    if raw.startswith("{") and keys:
+        out = {}
+        for k in keys:
+            v = nbt_read(get, (path + "." if path else "") + (k if re.match(r"^\w+$", k) else '"%s"' % k), NBT_KEYS.get(k))
+            if v is not None:
+                out[k] = v
+        return out
+    # shortcut: keys we cannot name (an enchantment map) keep only what fits, e.g. the first ~4 enchantments
+    for fit in (close_cut(raw.removesuffix("...") + ","), close_cut(raw)):   # with the last element, if it is whole
+        try:
+            return PL.snbt(fit)
+        except (ValueError, IndexError):
+            pass
+    return None
+
+
+def live_nbt(name):
+    def get(path):
+        out = RCON.command_long(("data get entity %s %s" % (name, path)).rstrip())
+        return out.split("entity data:", 1)[1].strip() if "entity data:" in out else None
+    return nbt_read(get)
+
+
 def player_watcher():
     global ROSTER_SENT
     was_online = set()
@@ -1292,10 +1365,10 @@ def player_watcher():
                 if not uuid or not re.match(r"^\w{1,16}$", name):
                     continue
                 try:
-                    out = RCON.command_long("data get entity %s" % name)
-                    if "entity data:" not in out:
+                    nbt = live_nbt(name)
+                    if not isinstance(nbt, dict):
                         continue
-                    data = PL.normalize(PL.snbt(out.split("entity data:", 1)[1].strip()))
+                    data = PL.normalize(nbt)
                     LIVE[uuid] = {"t": time.time(), "data": data}
                     payload = {"uuid": uuid, "name": name, "online": True, "live": True, "saved": time.time(), **data}
                     key = json.dumps({k: v for k, v in data.items() if k not in ("pos", "yaw")}, sort_keys=True)  # the position travels in "positions"

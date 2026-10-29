@@ -311,6 +311,27 @@ try:
     calls = run_sampler({"list": "There are 1 out of maximum 10 players online.\nDefault: Bob"})
     check("sampler: plugin list without uuids -> plain list", panel.online_names() == {"Bob"} and "list" in calls, calls)
 
+    # Paper cuts long "data get" answers: the live data is read field by field (answers as Paper 26.3 gives them)
+    cut = {"": '{seenCredits: 0b, DeathTime: 0s, Bukkit.updateLevel: 2, foodTickTimer: 0, recipeBook: {...',
+           "Health": "17.5f", "foodLevel": "13", "XpLevel": "31", "XpP": "0.5f", "Pos": "[1.5d, 64.0d, -2.5d]",
+           "Dimension": '"minecraft:the_nether"', "EnderItems": "[]",
+           "equipment": '{head: {id: "minecraft:iron_helmet", count: 1}}',
+           "Inventory": '[{Slot: 0b, id: "minecraft:wheat_seeds", count: 1}, {Slot: 1b, id: "minecraft:diamond_sword", count: 1, ...',
+           "Inventory[0]": '{Slot: 0b, id: "minecraft:wheat_seeds", count: 1}',
+           "Inventory[1]": '{Slot: 1b, id: "minecraft:diamond_sword", count: 1, components: {"minecraft:damage": 5, "minec...',
+           "Inventory[1].id": '"minecraft:diamond_sword"', "Inventory[1].count": "1", "Inventory[1].Slot": "1b",
+           "Inventory[1].components": '{"minecraft:damage": 5, "minecraft:enchantments": {"minecraft:sharpness": 5, "minecraft:unb...',
+           'Inventory[1].components."minecraft:damage"': "5",
+           'Inventory[1].components."minecraft:enchantments"': '{"minecraft:sharpness": 5, "minecraft:unbreaking": 3, "minecraft:lo...'}
+    d = panel.PL.normalize(panel.nbt_read(cut.get))
+    sword = [i for i in d["inventory"] if i["id"] == "diamond_sword"]
+    check("cut nbt: vitals", (d["health"], d["food"], d["xp_level"], d["xp_progress"], d["dim"], d["armor"]) == (17.5, 13, 31, 0.5, "the_nether", 2), d)
+    check("cut nbt: items one by one", [i["id"] for i in d["inventory"]] == ["wheat_seeds", "diamond_sword"], d["inventory"])
+    check("cut nbt: cut item by its fields, enchantments that fit", sword and sword[0]["dmg"] == 5 and len(sword[0]["ench"]) == 2, sword)
+    check("cut map keeps its last whole element", panel.nbt_read({"": '{"minecraft:mending": 1, "minecraft:looting": 3...'}.get, "", None)
+          == {"minecraft:mending": 1, "minecraft:looting": 3})
+    check("close_cut",panel.close_cut('{a: "x, y", b: [1, 2], c: {d: 1, e: ...') == '{a: "x, y", b: [1, 2], c: {d: 1}}')
+
     # "Start at login" on Windows writes the Startup script (here a temp path, never the real Startup folder)
     panel.STARTUP_CMD = j(root, "ByzzCraft.cmd")
     if os.name == "nt":
