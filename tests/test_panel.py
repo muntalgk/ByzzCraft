@@ -342,6 +342,21 @@ try:
         check("old .dat: RCON", panel.live_nbt("Alice", uid) == {"Health": 3.0} and asked == ["data get entity Alice"], asked)
     finally:
         panel.world_dir, panel.PL.read_nbt_file, panel.RCON.command_long = real
+    # the server saves (.dat -> .dat_old, new .dat) while the panel is reading: on Windows open() made the rename fail
+    dat = j(pdir, uid + ".dat")
+    with open(dat, "wb") as f:
+        f.write(b"old")
+    with panel.PL.open_shared(dat) as f:
+        try:
+            os.replace(dat, dat + "_old"); renamed = True
+        except OSError:
+            renamed = False
+        check("open .dat: the server can still rename it", renamed and f.read() == b"old")
+    try:
+        panel.PL.open_shared(dat).close(); missing = None
+    except OSError as e:
+        missing = e
+    check("open_shared: a missing file is FileNotFoundError", isinstance(missing, FileNotFoundError), repr(missing))
     check("cut map keeps its last whole element",panel.nbt_read({"": '{"minecraft:mending": 1, "minecraft:looting": 3...'}.get, "", None)
           == {"minecraft:mending": 1, "minecraft:looting": 3})
     check("close_cut",panel.close_cut('{a: "x, y", b: [1, 2], c: {d: 1, e: ...') == '{a: "x, y", b: [1, 2], c: {d: 1}}')
