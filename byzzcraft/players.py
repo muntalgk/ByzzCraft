@@ -42,8 +42,27 @@ def nbt_parse(buf):
     t = rd(">B"); rstr(); return payload(t)
 
 
+def open_shared(path):
+    """open(path, "rb") that does not block the server's rename of the file. On Windows open() leaves out FILE_SHARE_DELETE:
+    while the panel reads a .dat, a save (Paper rewrites every online player's .dat each second) fails and is lost."""
+    if os.name != "nt":
+        return open(path, "rb")
+    import ctypes, msvcrt
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateFileW.argtypes = (wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD,
+                                wintypes.DWORD, wintypes.HANDLE)
+    k32.CreateFileW.restype = wintypes.HANDLE
+    # GENERIC_READ, FILE_SHARE_READ | WRITE | DELETE, OPEN_EXISTING
+    h = k32.CreateFileW(os.path.abspath(path), 0x80000000, 7, None, 3, 0, None)
+    if h in (None, wintypes.HANDLE(-1).value):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return os.fdopen(msvcrt.open_osfhandle(h, os.O_RDONLY | os.O_BINARY), "rb")
+
+
 def read_nbt_file(path):
-    raw = open(path, "rb").read()
+    with open_shared(path) as f:
+        raw = f.read()
     return nbt_parse(gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw)
 
 
