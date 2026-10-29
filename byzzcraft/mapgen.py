@@ -6,7 +6,7 @@ CLI:
     python -m byzzcraft.mapgen <world_dir> <dim> <rx> <rz> <out.png>
     python -m byzzcraft.mapgen <world_dir> <dim> --all <cache_dir>
 """
-import json, math, os, re, struct, sys, threading, time, zlib
+import json, marshal, math, os, re, struct, sys, threading, time, zlib
 
 from .players import ASSETS, dim_dir, nbt_parse  # noqa: E402
 
@@ -258,13 +258,14 @@ def lz4_java(data):
     return bytes(out)
 
 
-def _read_chunks(path):
-    """Generator of NBT chunks (dict) from a .mca; tolerates unreadable chunks."""
-    with open(path, "rb") as f:
-        buf = f.read()
+def _read_chunks(path, only=None, buf=None):
+    """Generator of NBT chunks (dict) from a .mca (or its bytes); only: the chunk numbers to read. Tolerates unreadable chunks."""
+    if buf is None:
+        with open(path, "rb") as f:
+            buf = f.read()
     if len(buf) < 8192:
         return
-    for n in range(1024):
+    for n in range(1024) if only is None else only:
         o = 4 * n
         off = (buf[o] << 16) | (buf[o + 1] << 8) | buf[o + 2]
         if off == 0 or buf[o + 3] == 0:
@@ -446,21 +447,59 @@ def region_path(world_dir, dim, rx, rz):
     return os.path.join(dim_dir(world_dir, dim), "region", "r.%d.%d.mca" % (rx, rz))
 
 
-def render_region(world_dir, dim, rx, rz):
+_STATE_V = 1   # bump when _chunk_top draws differently: the colours kept in the state files would be stale
+
+
+def _load_state(path):
+    try:
+        with open(path, "rb") as f:
+            v, head, base, H = marshal.loads(zlib.decompress(f.read()))
+        if v == _STATE_V and len(head) == 8192 and len(base) == len(H) == SIZE * SIZE:
+            return head, base, H
+    except Exception:  # missing, damaged, written by another Python: a full render
+        pass
+    return None
+
+
+def _save_state(path, head, base, H):
+    tmp = path + ".tmp%d" % threading.get_ident()
+    with open(tmp, "wb") as f:
+        f.write(zlib.compress(marshal.dumps((_STATE_V, head, base, H)), 1))
+    os.replace(tmp, path)
+
+
+def render_region(world_dir, dim, rx, rz, state=None):
+    """PNG of a region. state: a file keeping the colours of the last render with the region header they came from;
+    then only the chunks saved since (other sector or timestamp in the header) are read again."""
     path = region_path(world_dir, dim, rx, rz)
-    if not os.path.isfile(path):
+    try:
+        with open(path, "rb") as f:
+            buf = f.read()
+    except OSError:
         return None
     nether = dim == "the_nether"
-    base = [None] * (SIZE * SIZE)
-    H = [_NOH] * (SIZE * SIZE)
-    try:
-        for n, ch in _read_chunks(path):
-            try:
-                _chunk_top(ch, base, H, n & 31, n >> 5, nether)
-            except Exception:
-                continue
-    except OSError:
-        pass
+    head = buf[:8192]
+    old = _load_state(state) if state and len(head) == 8192 else None
+    if old:
+        prev, base, H = old
+        todo = [n for n in range(1024) if head[4 * n:4 * n + 4] != prev[4 * n:4 * n + 4]
+                or head[4096 + 4 * n:4100 + 4 * n] != prev[4096 + 4 * n:4100 + 4 * n]]
+        for n in todo:   # the old pixels go: the chunk may now be gone or unreadable
+            o = (n >> 5) * 16 * SIZE + (n & 31) * 16
+            for p in range(o, o + 16 * SIZE, SIZE):
+                base[p:p + 16] = [None] * 16
+                H[p:p + 16] = [_NOH] * 16
+    else:
+        base = [None] * (SIZE * SIZE)
+        H = [_NOH] * (SIZE * SIZE)
+        todo = None
+    for n, ch in _read_chunks(path, todo, buf):
+        try:
+            _chunk_top(ch, base, H, n & 31, n >> 5, nether)
+        except Exception:
+            continue
+    if state and len(head) == 8192:
+        _save_state(state, head, base, H)
     img = bytearray(SIZE * SIZE * 4)
     sh = _SHADE
     for p in range(SIZE * SIZE):
@@ -521,7 +560,8 @@ def get_tile(world_dir, cache_dir, dim, rx, rz):
                 return out
         except OSError:
             pass
-        png = render_region(world_dir, dim, rx, rz)
+        # state only for a tile drawn before: a region that changes; the untouched ones would only take disk space
+        png = render_region(world_dir, dim, rx, rz, out[:-4] + ".state" if os.path.exists(out) else None)
         if png is None:
             return None
         os.makedirs(os.path.dirname(out), exist_ok=True)

@@ -1,4 +1,4 @@
-import os, shutil, struct, sys, tempfile
+import os, shutil, struct, sys, tempfile, time
 root = tempfile.mkdtemp(prefix="mapgen_test_")
 os.environ["BYZZ_DATA"] = os.path.join(root, "data")  # before importing mapgen
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # panel folder
@@ -43,6 +43,56 @@ try:
         f.write(bytes(3 * 4096 - f.tell()))
     chunks = list(M._read_chunks(mca))
     check("region: lz4 chunk read", len(chunks) == 1 and chunks[0][0] == 0 and chunks[0][1].get("a") == 7, chunks)
+
+    # incremental render: with the state file only the chunks saved again are read, and the PNG is the same as a full one
+    world = os.path.join(root, "world")
+    rpath = M.region_path(world, "overworld", 0, 0)
+    os.makedirs(os.path.dirname(rpath))
+
+    def write_region(chunks):   # {chunk number: (colour value, timestamp)}, uncompressed NBT {"c": value}
+        head, ts, body = bytearray(4096), bytearray(4096), bytearray(4096 * 41)
+        for n, (k, t) in sorted(chunks.items()):
+            nb = b"\x0a\x00\x00\x03\x00\x01c" + struct.pack(">i", k) + b"\x00"
+            sec = 2 + n   # fixed sectors: Minecraft moves only the chunks it writes
+            head[4 * n:4 * n + 4] = struct.pack(">I", sec << 8 | 1); ts[4 * n:4 * n + 4] = struct.pack(">I", t)
+            o = (sec - 2) * 4096
+            body[o:o + 5 + len(nb)] = struct.pack(">iB", len(nb) + 1, 3) + nb
+        with open(rpath, "wb") as f:
+            f.write(bytes(head) + bytes(ts) + body)
+
+    read, real_top = [], M._chunk_top
+    def fake_top(ch, base, H, cx, cz, nether):   # paints the chunk with its value; the left half higher, for shading
+        read.append((cx, cz))
+        for z in range(16):
+            for x in range(16):
+                p = (cz * 16 + z) * M.SIZE + cx * 16 + x
+                base[p], H[p] = (ch["c"], ch["c"], ch["c"]), ch["c"] + (5 if x < 8 else 0)
+    M._chunk_top = fake_top
+    try:
+        state = os.path.join(root, "r.0.0.state")
+        write_region({0: (10, 100), 1: (20, 100), 33: (30, 100)})
+        first = M.render_region(world, "overworld", 0, 0, state)
+        check("state: first render is a full one", sorted(read) == [(0, 0), (1, 0), (1, 1)] and os.path.exists(state), read)
+        write_region({1: (25, 200), 33: (30, 100), 40: (50, 200)})   # chunk 0 deleted, 1 saved again, 40 new
+        del read[:]
+        part = M.render_region(world, "overworld", 0, 0, state)
+        check("state: only the changed chunks read", sorted(read) == [(1, 0), (8, 1)], read)
+        del read[:]
+        full = M.render_region(world, "overworld", 0, 0)
+        check("state: same PNG as a full render (deleted chunk cleared)", part == full and part != first)
+        open(state, "wb").write(b"junk")
+        del read[:]
+        check("state: damaged file -> full render", M.render_region(world, "overworld", 0, 0, state) == full and len(read) == 3)
+        # get_tile keeps a state only for a tile drawn before
+        cache = os.path.join(root, "tiles")
+        M.get_tile(world, cache, "overworld", 0, 0)
+        st = os.path.join(cache, "overworld", "r.0.0.state")
+        check("get_tile: first tile without state", not os.path.exists(st))
+        os.utime(rpath, (time.time() + 10, time.time() + 10))
+        M.get_tile(world, cache, "overworld", 0, 0)
+        check("get_tile: redrawn tile keeps a state", os.path.exists(st))
+    finally:
+        M._chunk_top = real_top
 finally:
     shutil.rmtree(root, ignore_errors=True)
 
