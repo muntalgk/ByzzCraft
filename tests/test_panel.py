@@ -302,7 +302,9 @@ try:
     check("cut nbt: vitals", (d["health"], d["food"], d["xp_level"], d["xp_progress"], d["dim"], d["armor"]) == (17.5, 13, 31, 0.5, "the_nether", 2), d)
     check("cut nbt: items one by one", [i["id"] for i in d["inventory"]] == ["wheat_seeds", "diamond_sword"], d["inventory"])
     check("cut nbt: cut item by its fields, enchantments that fit", sword and sword[0]["dmg"] == 5 and len(sword[0]["ench"]) == 2, sword)
-    check("close_cut", panel.close_cut('{a: "x, y", b: [1, 2], c: {d: 1, e: ...') == '{a: "x, y", b: [1, 2], c: {d: 1}}')
+    check("cut map keeps its last whole element", panel.nbt_read({"": '{"minecraft:mending": 1, "minecraft:looting": 3...'}.get, "", None)
+          == {"minecraft:mending": 1, "minecraft:looting": 3})
+    check("close_cut",panel.close_cut('{a: "x, y", b: [1, 2], c: {d: 1, e: ...') == '{a: "x, y", b: [1, 2], c: {d: 1}}')
 
     # "Start at login" on Windows writes the Startup script (here a temp path, never the real Startup folder)
     panel.STARTUP_CMD = j(root, "ByzzCraft.cmd")

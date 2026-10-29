@@ -1260,10 +1260,13 @@ def nbt_read(get, path="", keys=NBT_KEYS[""]):
             if v is not None:
                 out[k] = v
         return out
-    try:   # shortcut: keys we cannot name (an enchantment map) keep only what fits, e.g. the first ~4 enchantments
-        return PL.snbt(close_cut(raw))
-    except (ValueError, IndexError):
-        return None
+    # shortcut: keys we cannot name (an enchantment map) keep only what fits, e.g. the first ~4 enchantments
+    for fit in (close_cut(raw.removesuffix("...") + ","), close_cut(raw)):   # with the last element, if it is whole
+        try:
+            return PL.snbt(fit)
+        except (ValueError, IndexError):
+            pass
+    return None
 
 
 def live_nbt(name):
