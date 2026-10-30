@@ -6,6 +6,7 @@ import zlib
 import os
 import re
 import threading
+import time
 import zipfile
 from urllib.parse import quote, urlencode, urlsplit
 
@@ -20,6 +21,8 @@ JAR = re.compile(r"[\w.+-]+\.jar")
 SLUG = re.compile(r"[\w.-]{1,64}")
 PROJECTS = os.path.join(paths.CACHE, "hangar-projects.json")   # slug -> {icon on the CDN ("" = none), page}: plugins.json only knows the slug
 _projects_lock, _projects_tried = threading.Lock(), set()
+CHECK_EVERY = 6 * 3600
+_newest, _newest_lock = {}, threading.Lock()   # slug -> (when, mc, newest version on Hangar or None): kept in memory, asked at most every CHECK_EVERY
 ERR = (OSError, ValueError, KeyError, TypeError, AttributeError, http.client.HTTPException)   # network, bad JSON or an unexpected shape: a message, never a 500
 
 
@@ -131,6 +134,23 @@ def fetch_projects(slugs):
         return new
 
 
+def check_updates(slugs, mc):
+    """Asks Hangar for the newest version of the plugins installed from it, unless asked in the last CHECK_EVERY; True if any was asked."""
+    with _newest_lock:
+        asked = False
+        for slug in slugs:
+            k = _newest.get(slug)
+            if k and k[1] == mc and time.time() - k[0] < CHECK_EVERY:
+                continue
+            try:
+                v = latest(slug, mc)["version"]
+            except ERR:
+                v = None
+            _newest[slug] = (time.time(), mc, v)
+            asked = True
+        return asked
+
+
 def installed(server_dir):
     """The jars in plugins/ with their Hangar icon and page; icon None = not asked to Hangar yet (fetch_projects)."""
     pd, tr, hp, out = os.path.join(server_dir, "plugins"), _track(), projects(), []
@@ -144,8 +164,9 @@ def installed(server_dir):
             name, ver = _meta(p)
             k = tr.get(n) or {}
             h = hp.get(k["slug"], {}) if k.get("slug") else {"icon": ""}   # not from Hangar (copied by hand): nothing to ask
+            nv = _newest.get(k.get("slug"), (0, "", None))[2]
             out.append({"file": n, "name": name or n[:-4], "version": k.get("version") or ver or "", "slug": k.get("slug", ""), "size": os.path.getsize(p),
-                        "icon": h.get("icon"), "url": h.get("url", "")})
+                        "icon": h.get("icon"), "url": h.get("url", ""), "update": nv if nv and nv != k.get("version") else ""})
     return out
 
 
@@ -189,6 +210,7 @@ def install(server_dir, slug, mc):
         os.replace(tmp, os.path.join(pd, v["file"]))
         tr[v["file"]] = {"slug": slug, "version": v["version"]}
         _save(tr)
+        _newest[slug] = (time.time(), mc, v["version"])
         ver = v["version"] + ("" if v["channel"] == "Release" else " (%s)" % v["channel"])
         return {"ok": True, "file": v["file"], "version": ver, "deps": [d for d in v["deps"] if d.lower() not in have],
                 "message": t("%s installed. Restart the server to load it.") % ("%s %s" % (slug, ver))}

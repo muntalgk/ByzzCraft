@@ -90,6 +90,18 @@ try:
     check("update replaces", r["ok"] and sorted(os.listdir(pd)) == ["Foo-2.0.jar"], (r, os.listdir(pd)))
     check("old jar in trash", any(n.endswith("Foo-1.0.jar") for n in os.listdir(os.path.join(sd, "trash"))))
     check("tracking follows", list(json.load(open(os.path.join(paths.DATA, "plugins.json")))) == ["Foo-2.0.jar"])
+    # new versions: "Update" only when Hangar has a newer one, asked at most every CHECK_EVERY
+    check("just installed: up to date", P.installed(sd)[0]["update"] == "" and not P.check_updates(["Foo"], "26.3"))
+    ROUTES["/projects/Foo/versions"] = version("3.0", "Foo-3.0.jar", d2)
+    P._newest.clear()
+    check("newer on Hangar", P.check_updates(["Foo"], "26.3") and P.installed(sd)[0]["update"] == "3.0", P._newest)
+    n = len(GOT)
+    check("asked once per CHECK_EVERY", not P.check_updates(["Foo"], "26.3") and len(GOT) == n)
+    check("asked again for another Minecraft", P.check_updates(["Foo"], "26.4") and len(GOT) == n + 1)
+    ROUTES["/projects/Foo/versions"] = OSError("offline")
+    P._newest.clear()
+    check("Hangar down: no update shown", P.check_updates(["Foo"], "26.3") and P.installed(sd)[0]["update"] == "")
+    ROUTES["/projects/Foo/versions"] = version("2.0", "Foo-2.0.jar", d2)
     # the same plugin copied by hand under another name: replaced too, Paper refuses two jars with one name
     with open(os.path.join(pd, "foo-manual.jar"), "wb") as f:
         f.write(jar("Foo", "0.9"))
