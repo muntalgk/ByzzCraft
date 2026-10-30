@@ -17,7 +17,6 @@ if sys.version_info < (3, 10):   # before the other modules: they need 3.10 and 
 import getpass, hashlib, hmac, html, ipaddress, json, logging, logging.handlers, os, queue, re, secrets, shlex, shutil, signal, socket, struct, subprocess, threading, time, webbrowser
 from collections import deque
 from datetime import datetime
-from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
@@ -298,6 +297,7 @@ def backup_file(base, data):
 CONF_FIXED = ("config/paper-global.yml", "config/paper-world-defaults.yml", "paper.yml", "spigot.yml", "bukkit.yml", "purpur.yml")
 CONF_EXT = (".json", ".json5", ".toml", ".properties", ".yml", ".yaml", ".cfg")
 CONF_MAX = 1048576
+CONF_BODY = 2 * CONF_MAX + 4096   # the request that saves one: in JSON every newline or quote counts double
 
 
 def server_kind():
@@ -800,7 +800,9 @@ class ServerControl:
         now = time.time()
         self.crashes = [c for c in self.crashes if now - c < 600] + [now]
         if CFG.get("auto_restart", True) and len(self.crashes) <= 3:
-            self.start("panel (after a crash)")
+            ok, _ = self.start("panel (after a crash)")
+            if not ok and (backup_busy() or OP_PENDING.is_set()):
+                self.restart_pending = True   # retried when the backup is done
         else:
             self.start_error = msg + (" " + t("Not restarted: it crashed 3 times in 10 minutes.") if CFG.get("auto_restart", True) else "")
 
@@ -953,11 +955,18 @@ def sampler():
     last_tick = 0; mspt = p95 = None
     last_sys = system_times()
     auto_stop_retry = 0
+    saves_checked = False
     while True:
         t0 = time.time()
         try:
             port = SRV.port()
             info = ping(port)
+            if info is not None and not saves_checked and not backup_busy():
+                try:   # a panel that died during a backup left the server with saves off, and nobody else turns them on
+                    RCON.command("save-on")
+                    saves_checked = True
+                except Exception:  # noqa: BLE001
+                    pass   # RCON not ready: retried at the next sample
             if info is not None:   # also at 0 online: some servers send no count with hide-online-players
                 try:
                     # "uuids": the real names; plain "list" shows the display names, with team prefixes
@@ -1120,11 +1129,14 @@ def backup_scheduler():
     """Scheduled backups and cleanup of old ones (the rules are in cache/backups-state.json)."""
     time.sleep(30)
     while True:
-        st = SRV.state
-        if st in ("on", "off") and not (st == "off" and pid_alive(SRV.last_pid)) and not OP_PENDING.is_set():
-            info = SRV.info
-            BACKUPS.world_dir = world_dir()
-            BACKUPS.tick(time.time(), st == "on", info[0] if (st == "on" and info) else 0, backup_rcon)
+        try:
+            st = SRV.state
+            if st in ("on", "off") and not (st == "off" and pid_alive(SRV.last_pid)) and not OP_PENDING.is_set():
+                info = SRV.info
+                BACKUPS.world_dir = world_dir()
+                BACKUPS.tick(time.time(), st == "on", info[0] if (st == "on" and info) else 0, backup_rcon)
+        except Exception as e:  # noqa: BLE001  (a disk error now must not end the backups for good)
+            loop_error("backup scheduler", e)
         time.sleep(60)
 
 
@@ -1268,7 +1280,7 @@ def hardcore_world():
     try:
         d = PL.read_nbt_file(os.path.join(world_dir(), "level.dat"))["Data"]
         return bool((d.get("difficulty_settings") or {}).get("hardcore", d.get("hardcore", 0)))
-    except (OSError, KeyError, ValueError, struct.error):
+    except (OSError, KeyError, ValueError):
         return False
 
 
@@ -1281,7 +1293,7 @@ def player_data(uuid, name):
     try:
         d = PL.normalize(PL.read_nbt_file(path))
         return {"live": False, "saved": os.path.getmtime(path), **d}
-    except (OSError, ValueError, KeyError, struct.error, EOFError):
+    except (OSError, ValueError, KeyError):
         return None
 
 
@@ -1396,7 +1408,7 @@ def live_nbt(name, uuid):
     try:
         if time.time() - os.path.getmtime(path) < 3:
             return PL.read_nbt_file(path)
-    except (OSError, ValueError, KeyError, struct.error, EOFError):
+    except (OSError, ValueError, KeyError):
         pass
 
     def get(path):
@@ -2213,8 +2225,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send(303, b"", headers=h)
 
     def session(self):
-        c = SimpleCookie(self.headers.get("Cookie", ""))
-        tok = c["sess"].value if "sess" in c else None
+        tok = self.sess_token()
         key = tok_key(tok) if tok else None
         s = SESSIONS.get(key) if key else None
         if s and s["exp"] > time.time():
@@ -2231,12 +2242,21 @@ class Handler(BaseHTTPRequestHandler):
             save_sessions()
         return None, None
 
-    def body(self):
+    def sess_token(self):
+        """The sess cookie. Not SimpleCookie: it gives up on the whole header at the first cookie it cannot parse, and
+        cookies ignore the port, so another app on this host (a JSON value) would log everybody out."""
+        for part in self.headers.get("Cookie", "").split(";"):
+            k, _, v = part.partition("=")
+            if k.strip() == "sess":
+                return v.strip()
+        return None
+
+    def body(self, limit=65536):
         try:
             n = int(self.headers.get("Content-Length", 0) or 0)
         except ValueError:
             n = 0
-        n = max(0, min(n, 65536))   # never negative: read(-1) would read until the connection closes
+        n = max(0, min(n, limit))   # never negative: read(-1) would read until the connection closes
         return self.rfile.read(n).decode("utf-8", "replace") if n else ""
 
     def form(self):   # an HTML form post: one value per field
@@ -2284,7 +2304,7 @@ class Handler(BaseHTTPRequestHandler):
             _, s = self.session()
             if not s:
                 return self.send(200, login_page())
-            tok = SimpleCookie(self.headers.get("Cookie", ""))["sess"].value   # the cookie starts again from 30 days too
+            tok = self.sess_token()   # the cookie starts again from 30 days too
             self.nonce = secrets.token_urlsafe(16)
             return self.send(200, app_page(s, self.nonce), headers={"Set-Cookie": self.cookie(tok, SESSION_SECONDS)})
         if path == "/manifest.webmanifest":
@@ -2334,7 +2354,7 @@ class Handler(BaseHTTPRequestHandler):
                 sp = d.get("spawn") or ({"pos": [d["SpawnX"], d["SpawnY"], d["SpawnZ"]]} if "SpawnX" in d else {})   # up to 1.21
                 if sp.get("pos") and PL.strip_ns(sp.get("dimension", "overworld")) == dim:
                     spawn = list(sp["pos"])
-            except (OSError, KeyError, ValueError, struct.error, EOFError):
+            except (OSError, KeyError, ValueError):
                 pass
             return self.json(200, {"dim": dim, "regions": [[rx, rz, int(mt)] for rx, rz, mt in mapgen.list_regions(world_dir(), dim)],
                                    "spawn": spawn, "markers": [m for m in load_markers() if m.get("dim") == dim]})
@@ -2512,7 +2532,7 @@ class Handler(BaseHTTPRequestHandler):
         if not hmac.compare_digest(self.headers.get("X-CSRF", ""), s["csrf"]):
             return self.json(403, {"ok": False, "message": t("Invalid request.")})
         try:
-            data = json.loads(self.body() or "{}")
+            data = json.loads(self.body(CONF_BODY if self.path == "/api/configs" else 65536) or "{}")
         except ValueError:
             data = {}
         if not isinstance(data, dict):

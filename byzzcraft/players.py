@@ -1,5 +1,5 @@
 """Player data for the panel: NBT from the files, SNBT from RCON, statistics, icons and skins."""
-import base64, gzip, json, os, re, shutil, struct, threading, time, urllib.request
+import base64, gzip, json, os, re, shutil, struct, threading, time, urllib.request, zlib
 
 from .paths import ASSETS, CACHE  # noqa: E402
 UA = "byzzcraft (+https://github.com/muntalgk/byzzcraft)"
@@ -61,9 +61,13 @@ def open_shared(path):
 
 
 def read_nbt_file(path):
+    """ValueError if the file is damaged, whatever the damage."""
     with open_shared(path) as f:
         raw = f.read()
-    return nbt_parse(gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw)
+    try:
+        return nbt_parse(gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw)
+    except (zlib.error, EOFError, struct.error) as e:
+        raise ValueError("%s: %s" % (os.path.basename(path), e))
 
 
 # ---------------------------------------------------------------- SNBT (output of /data get)
