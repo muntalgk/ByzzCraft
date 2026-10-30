@@ -989,8 +989,10 @@ const PL={mc:"",inst:[],
     this.mc=j.mc;this.inst=j.installed;setSub();const l=$("#plg-list");l.textContent="";
     if(!this.inst.length)l.innerHTML="<div class='card' style='color:var(--mute)'>"+esc(_t("No plugins installed."))+"</div>";
     this.inst.forEach(p=>{const d=document.createElement("div");d.className="acr";
-      d.innerHTML=(p.icon?"<img class='ini' alt='' loading='lazy' referrerpolicy='no-referrer' src='"+esc(p.icon)+"'>":"<div class='ini'>"+esc(p.name[0].toUpperCase())+"</div>")+"<div class='tx'><b>"+(p.url?"<a href='"+esc(p.url)+"' target='_blank' rel='noopener'>"+esc(p.name)+"</a>":esc(p.name))+"</b><small>"+esc(p.version)+" · "+esc(p.file)+" · "+nf(p.size/1048576,2)+" MB</small></div><div class='acts'><button class='sb red'>"+esc(_t("Remove"))+"</button></div>";
-      d.querySelector("button").onclick=()=>this.remove(p);l.append(d)})},
+      d.innerHTML=(p.icon?"<img class='ini' alt='' loading='lazy' referrerpolicy='no-referrer' src='"+esc(p.icon)+"'>":"<div class='ini'>"+esc(p.name[0].toUpperCase())+"</div>")+"<div class='tx'><b>"+(p.url?"<a href='"+esc(p.url)+"' target='_blank' rel='noopener'>"+esc(p.name)+"</a>":esc(p.name))+"</b><small>"+esc(p.version)+" · "+esc(p.file)+" · "+nf(p.size/1048576,2)+" MB</small></div><div class='acts'>"+(p.update?"<button class='sb on' data-up>"+esc(_t("Update to %s",p.update))+"</button>":"")+"<button class='sb red'>"+esc(_t("Remove"))+"</button></div>";
+      d.querySelector(".red").onclick=()=>this.remove(p);const u=d.querySelector("[data-up]");if(u)u.onclick=()=>this.install(p.slug,u,u.textContent);l.append(d)})},
+  async install(slug,b,label){b.disabled=true;b.textContent=_t("Installing...");const k=await api("/api/plugins/install",{slug});toast(k.message,k.ok?"good":"bad");
+    if(k.ok){b.textContent=_t("Installed, restart to load");this.note();(k.deps||[]).length&&toast(_t("Also needs: %s",k.deps.join(", ")),"bad");this.load()}else{b.disabled=false;b.textContent=label}},
   note(){$("#pl-note").hidden=S.status.state!="on"},
   async remove(p){if(!await ask(_t("Remove"),_t("Remove %s? The file goes to the trash.",p.file),_t("Remove")))return;const j=await api("/api/plugins/remove",{file:p.file});toast(j.message,j.ok?"good":"bad");if(j.ok)this.note();this.load()},
   browse(){const bg=document.createElement("div");bg.className="modal-bg";let off=0,tm,seq=0;
@@ -1004,12 +1006,12 @@ const PL={mc:"",inst:[],
     const run=async more=>{const my=++seq;if(!more){off=0;res.textContent=""}const old=res.querySelector("[data-more]");if(old)old.remove();
       const r=await GET("/api/plugins/search?q="+encodeURIComponent(inp.value.trim())+"&offset="+off);if(my!=seq)return;const j=r?await r.json():{ok:false,message:_t("Panel unreachable")};
       if(!j.ok){toast(j.message,"bad");return}if(!j.results.length&&!more)res.innerHTML="<p class='lock'>"+esc(_t("No results."))+"</p>";
-      j.results.forEach(x=>{const inst=this.inst.some(p=>p.slug==x.slug),c=document.createElement("div");c.className="acr";
+      j.results.forEach(x=>{const p=this.inst.find(p=>p.slug==x.slug),go=!p||p.update,c=document.createElement("div");c.className="acr";   // installed and up to date (or not known yet): nothing to press
+        const lab=!p?_t("Install"):p.update?_t("Update to %s",p.update):_t("Installed");
         c.innerHTML=(x.avatar?"<img class='ini' alt='' loading='lazy' referrerpolicy='no-referrer' src='"+esc(x.avatar)+"'>":"<div class='ini'>"+esc(x.name[0].toUpperCase())+"</div>")
           +"<div class='tx'><b><a href='"+esc(x.url)+"' target='_blank' rel='noopener'>"+esc(x.name)+"</a></b><small>"+esc(_t("by %s",x.owner))+" · "+esc(_t("%s downloads",x.downloads.toLocaleString(LOC)))+"</small><p>"+esc(x.description)+"</p></div>"
-          +"<div class='acts'><button class='btn "+(inst?"":"primary")+"'>"+esc(inst?_t("Update"):_t("Install"))+"</button></div>";
-        const b=c.querySelector("button");b.onclick=async()=>{b.disabled=true;b.textContent=_t("Installing...");const k=await api("/api/plugins/install",{slug:x.slug});
-          toast(k.message,k.ok?"good":"bad");if(k.ok){b.textContent=_t("Installed, restart to load");this.note();(k.deps||[]).length&&toast(_t("Also needs: %s",k.deps.join(", ")),"bad");this.load()}else{b.disabled=false;b.textContent=inst?_t("Update"):_t("Install")}};
+          +"<div class='acts'><button class='btn"+(go?" primary":"")+"'"+(go?"":" disabled")+">"+esc(lab)+"</button></div>";
+        const b=c.querySelector("button");b.onclick=()=>this.install(x.slug,b,lab);
         res.append(c)});
       off+=j.results.length;if(j.more){const b=document.createElement("button");b.className="btn";b.dataset.more=1;b.textContent=_t("Load more");b.onclick=()=>run(true);res.append(b)}};
     inp.oninput=()=>{clearTimeout(tm);tm=setTimeout(()=>run(false),350)};run(false);setTimeout(()=>inp.focus(),30)}};

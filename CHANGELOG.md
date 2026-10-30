@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.1
+
+- Plugins: "Update" shows only when Hangar has a newer version (asked in the background, at most every 6 hours), with
+  the version it brings: "Update to 7.4.6" next to the installed plugin and in the Hangar search. A plugin already up
+  to date is "Installed" in the search; before, every installed plugin offered "Update" and pressing it downloaded
+  the same version again.
+
 ## 1.3.0
 
 - Plugins: on Paper servers (and Purpur, Folia, Pufferfish) admins can search Hangar and install, update or remove

@@ -729,6 +729,8 @@
  "%s downloads": "%s download",
  "Install": "Installa",
  "Installing...": "Installazione...",
+ "Installed": "Installato",
+ "Update to %s": "Aggiorna a %s",
  "Installed, restart to load": "Installato, riavvia per caricarlo",
  "Also needs: %s": "Servono anche: %s",
  "Hangar is not reachable: %s": "Hangar non è raggiungibile: %s",

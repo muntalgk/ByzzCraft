@@ -23,7 +23,7 @@ from urllib.parse import parse_qs, urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CODE = os.path.join(HERE, "byzzcraft")   # the page, translations and icons live with the code
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 REPO = "muntalgk/byzzcraft"
 sys.path.insert(0, HERE)
 from byzzcraft import players as PL  # noqa: E402
@@ -2388,9 +2388,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/plugins":
             mc = plugins_mc()
             inst = PLG.installed(CFG["server_dir"]) if mc is not None else []
-            missing = [p["slug"] for p in inst if p["icon"] is None]
-            if missing:   # in the background: Hangar may be slow or down, the list must not wait for it
-                threading.Thread(target=lambda: PLG.fetch_projects(missing) and HUB.publish("plugins", {}, admin_only=True), daemon=True).start()
+            missing, slugs = [p["slug"] for p in inst if p["icon"] is None], [p["slug"] for p in inst if p["slug"]]
+            if slugs:   # icons, pages and new versions in the background: Hangar may be slow or down, the list must not wait for it
+                threading.Thread(target=lambda: (PLG.fetch_projects(missing) | PLG.check_updates(slugs, mc)) and HUB.publish("plugins", {}, admin_only=True),
+                                 daemon=True).start()
             return self.json(200, {"enabled": mc is not None, "mc": mc or "", "installed": inst})
         if path == "/api/plugins/search":
             if plugins_mc() is None:
