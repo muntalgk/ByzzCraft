@@ -8,6 +8,8 @@
   panel; JSON, YAML tabs and TOML are checked before saving and every save keeps a backup. Only the type in use is
   listed (told by the jar name, else by the files it makes): Paper shows its own files plus `bukkit.yml` and
   `spigot.yml`, which it reads too; Spigot only those two; Fabric/Forge only `config/`; vanilla none.
+- Config files: the editor colours YAML, JSON, TOML and .properties/.cfg (keys, strings, numbers, comments, sections).
+- Plugins: installed plugins show their Hangar icon (asked to Hangar once, then kept in the cache).
 - Map: tap a death point (☠️) to remove it from the map. It comes back at the player's next death; the world's
   player files are not touched.
 - Dashboard: without an address set in the panel settings, players see this machine's Tailscale IP (or the home

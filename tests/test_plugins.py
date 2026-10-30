@@ -68,6 +68,19 @@ try:
     inst = P.installed(sd)
     check("installed list", len(inst) == 1 and inst[0]["slug"] == "Foo" and inst[0]["version"] == "1.0" and inst[0]["name"] == "Foo", inst)
 
+    # icons of installed plugins: asked to Hangar once per slug, kept in the cache, only from the CDN
+    check("icon not asked yet", inst[0]["icon"] is None, inst)
+    ROUTES["/projects/Foo?"] = OSError("offline")
+    check("icon: Hangar down, nothing kept", not P.fetch_icons(["Foo"]) and P.installed(sd)[0]["icon"] is None)
+    P._icons_tried.clear()
+    ROUTES["/projects/Foo?"] = {"avatarUrl": "https://hangarcdn.papermc.io/avatars/project/6.webp?v=1"}
+    n = len(GOT)
+    check("icon fetched and kept", P.fetch_icons(["Foo"]) and P.installed(sd)[0]["icon"].endswith("/6.webp?v=1"), P.icons())
+    check("icon asked once", not P.fetch_icons(["Foo"]) and len(GOT) == n + 1)
+    ROUTES["/projects/Bad?"] = {"avatarUrl": "https://evil.example/a.png"}
+    check("icon only from the CDN", P.fetch_icons(["Bad"]) and P.icons()["Bad"] == "")
+    check("icon: bad slug never asked", not P.fetch_icons(["../x"]) and "../x" not in P.icons())
+
     # update: the old jar of the same slug goes away
     d2 = jar("Foo", "2.0")
     ROUTES["/projects/Foo/versions"] = version("2.0", "Foo-2.0.jar", d2)

@@ -362,6 +362,14 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
 .modal ul{margin:0 0 12px;padding-left:18px;color:var(--text2);font-size:13.5px}
 .modal input{width:100%;background:var(--surface);border:1px solid var(--line2);border-radius:10px;padding:10px 12px;color:var(--text);font:600 15px var(--mono);letter-spacing:.06em}
 .modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+/* config editor: the coloured <pre> sits under a transparent textarea with the same box and font, scrolled with it */
+.code{position:relative}
+.code textarea,.code pre{display:block;width:100%;box-sizing:border-box;margin:0;padding:9px 12px;font:13px/1.5 var(--mono);white-space:pre;tab-size:2;letter-spacing:0;border-radius:10px}
+.code textarea{min-height:55vh;resize:vertical;position:relative;z-index:1;overflow:auto}
+.code pre{position:absolute;inset:0;overflow:hidden;pointer-events:none;border:1px solid transparent;background:var(--card);color:var(--text)}.code code{display:block;font:inherit}
+.code:not(.on) pre{display:none}.code.on textarea{color:transparent;background:transparent;caret-color:var(--text)}
+.code textarea::selection{background:#3d6db380}
+.tk{color:#a9c8f5}.ts{color:#8be29a}.tn{color:#f0c75e}.tb{color:#c9a7ff}.th{color:#ff9b94}.tc{color:var(--mute)}
 .pl-note{display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:var(--warn);font-size:13px;margin:0 0 12px}.pl-note[hidden]{display:none}
 .modal.pl-m{max-width:720px;max-height:calc(100vh - 32px);display:flex;flex-direction:column}.modal.pl-m h3{display:flex;justify-content:space-between;align-items:center}
 .modal.pl-m .search{width:100%;box-sizing:border-box;font-weight:400;letter-spacing:0;font-family:inherit}
@@ -622,7 +630,7 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
     <!-- CONFIG FILES -->
     <section id="v-configs" hidden>
       <div class="toolbar"><select class="search" id="cf-file" aria-label="{{Config files}}"></select><span class="lock">{{Changes apply at the next server restart. Every save backs up the file.}}</span></div>
-      <textarea class="search" id="cf-text" spellcheck="false" autocomplete="off" style="display:block;width:100%;box-sizing:border-box;min-height:55vh;font:13px var(--mono);white-space:pre;tab-size:2;resize:vertical"></textarea>
+      <div class="code" id="cf-code"><pre aria-hidden="true"><code id="cf-hl"></code></pre><textarea class="search" id="cf-text" spellcheck="false" autocomplete="off" aria-label="{{Config files}}"></textarea></div>
       <div class="actions" style="margin-top:12px"><button class="btn" id="cf-save">{{Save}}</button><button class="btn primary" id="cf-save-r">{{Save and restart}}</button></div>
     </section>
 
@@ -871,6 +879,7 @@ function connect(){if(es)es.close();es=new EventSource("/api/events");
   es.addEventListener("notice",e=>{const d=JSON.parse(e.data);toast(d.message,d.ok?"good":"bad");HL.load()});
   es.addEventListener("health",()=>HL.load());
   es.addEventListener("backup_done",e=>{const d=JSON.parse(e.data);toast(d.message,d.ok?"good":"bad");BK.load()});
+  es.addEventListener("plugins",()=>{if(CUR=="plugins")PL.load()});
   es.addEventListener("markers",e=>{const d=JSON.parse(e.data);MAPF.reloadIf(d.dim);MAPM.reloadIf(d.dim)});
   es.addEventListener("status",e=>{S.status=JSON.parse(e.data);renderStatus()});
   es.addEventListener("metrics",e=>{S.metrics.push(JSON.parse(e.data));if(S.metrics.length>400)S.metrics.shift();renderMetrics()});
@@ -951,10 +960,25 @@ function propRow(p,m){const v=p.key in S.edits?S.edits[p.key]:p.value;const dis=
 function savebar(){const n=Object.keys(S.edits).length;$("#savebar").classList.toggle("show",n>0);$("#p-count").textContent=(n==1?_t("%s unsaved change",n):_t("%s unsaved changes",n))}
 $("#p-filter").oninput=renderProps;$("#p-undo").onclick=()=>{S.edits={};renderProps()};
 /* config files of the server type (Paper, Spigot, mods) */
+/* syntax colours by extension: [regex, class of each group]; the first group that matched names the token */
+const SYN_JSON=[/("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')(?=\s*:)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')|(\/\/.*|\/\*[\s\S]*?\*\/)|\b(true|false|null)\b|(-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)|([A-Za-z_$][\w$]*)(?=\s*:)/g,"kscbnk"],
+  SYN_PROPS=[/(^[ \t]*[#!].*)|(?<=^[ \t]*)([^\s=:#!][^=:\n]*?)(?=[ \t]*[=:])|\b(true|false)\b|((?<![\w.:/-])-?\d+(?:\.\d+)?(?![\w.:/-]))/gm,"ckbn"],
+  SYN={json:SYN_JSON,json5:SYN_JSON,properties:SYN_PROPS,cfg:SYN_PROPS,
+    yml:[/(^[ \t]*#.*|(?<=[ \t])#.*)|(?<=^[ \t]*(?:- +)?)([^\s#:'"\-][^#:\n]*?|"[^"\n]*"|'[^'\n]*')(?=:(?:[ \t]|$))|("(?:[^"\\\n]|\\.)*"|'[^'\n]*')|\b(true|false|yes|no|on|off|null)\b|(~)|((?<![\w.:/-])-?\d+(?:\.\d+)?(?![\w.:/-]))|(^[ \t]*-(?=[ \t]|$)|^---$)/gm,"cksbbnh"],
+    toml:[/(#.*)|(^[ \t]*\[\[?[^\]\n]*\]\]?)|(?<=^[ \t]*)([\w.-]+|"[^"\n]*")(?=[ \t]*=)|("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\\n]|\\.)*"|'[^'\n]*')|\b(true|false)\b|([+-]?\b\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?\b)/gm,"chksbn"]};
+SYN.yaml=SYN.yml;
+function synHl(name,text){const r=SYN[name.split(".").pop().toLowerCase()];
+  if(!r||text.length>300000)return null;   // shortcut: a huge file stays plain, colouring it at every key would lag
+  let out="",i=0;for(const m of text.matchAll(r[0])){const g=m.findIndex((x,j)=>j&&x!==undefined);
+    out+=esc(text.slice(i,m.index))+"<span class=t"+r[1][g-1]+">"+esc(m[0])+"</span>";i=m.index+m[0].length}
+  return out+esc(text.slice(i))}
+function cfScroll(){const t=$("#cf-text");$("#cf-hl").style.transform="translate("+-t.scrollLeft+"px,"+-t.scrollTop+"px)"}   // moved, not scrolled: a <pre> without scrollbars cannot scroll as far as the textarea
+function cfPaint(){const h=synHl($("#cf-file").value,$("#cf-text").value);$("#cf-code").classList.toggle("on",h!=null);$("#cf-hl").innerHTML=h||"";cfScroll()}
+$("#cf-text").addEventListener("input",cfPaint);$("#cf-text").addEventListener("scroll",cfScroll);
 const CF={async load(){if(!BOOT.admin)return;const r=await GET("/api/configs");if(!r)return;const fs=(await r.json()).files,sel=$("#cf-file"),cur=sel.value;
     $("#tab-cf").hidden=!fs.length;sel.textContent="";fs.forEach(f=>{const o=document.createElement("option");o.value=f.name;o.textContent=f.name;sel.appendChild(o)});
-    if(!fs.length){$("#cf-text").value="";return}sel.value=fs.some(f=>f.name==cur)?cur:fs[0].name;this.open()},
-  async open(){const r=await GET("/api/configs?file="+encodeURIComponent($("#cf-file").value));$("#cf-text").value=r?(await r.json()).text:""},
+    if(!fs.length){$("#cf-text").value="";cfPaint();return}sel.value=fs.some(f=>f.name==cur)?cur:fs[0].name;this.open()},
+  async open(){const r=await GET("/api/configs?file="+encodeURIComponent($("#cf-file").value));$("#cf-text").value=r?(await r.json()).text:"";cfPaint()},
   async save(restart){const j=await api("/api/configs",{file:$("#cf-file").value,text:$("#cf-text").value,restart});toast(j.message,j.ok?"good":"bad");if(j.ok&&restart&&S.status.state=="on")go("dash")}};
 $("#cf-file").onchange=()=>CF.open();$("#cf-save").onclick=()=>CF.save(false);
 $("#cf-save-r").onclick=async()=>{if(S.status.state!="on"||await ask(_t("Save and restart"),_t("Save and restart the server now?"),_t("Save and restart"),{primary:true}))CF.save(S.status.state=="on")};
@@ -965,7 +989,7 @@ const PL={mc:"",inst:[],
     this.mc=j.mc;this.inst=j.installed;setSub();const l=$("#plg-list");l.textContent="";
     if(!this.inst.length)l.innerHTML="<div class='card' style='color:var(--mute)'>"+esc(_t("No plugins installed."))+"</div>";
     this.inst.forEach(p=>{const d=document.createElement("div");d.className="acr";
-      d.innerHTML="<div class='ini'>"+esc(p.name[0].toUpperCase())+"</div><div class='tx'><b>"+esc(p.name)+"</b><small>"+esc(p.version)+" · "+esc(p.file)+" · "+nf(p.size/1048576,2)+" MB</small></div><div class='acts'><button class='sb red'>"+esc(_t("Remove"))+"</button></div>";
+      d.innerHTML=(p.icon?"<img class='ini' alt='' loading='lazy' referrerpolicy='no-referrer' src='"+esc(p.icon)+"'>":"<div class='ini'>"+esc(p.name[0].toUpperCase())+"</div>")+"<div class='tx'><b>"+esc(p.name)+"</b><small>"+esc(p.version)+" · "+esc(p.file)+" · "+nf(p.size/1048576,2)+" MB</small></div><div class='acts'><button class='sb red'>"+esc(_t("Remove"))+"</button></div>";
       d.querySelector("button").onclick=()=>this.remove(p);l.append(d)})},
   note(){$("#pl-note").hidden=S.status.state!="on"},
   async remove(p){if(!await ask(_t("Remove"),_t("Remove %s? The file goes to the trash.",p.file),_t("Remove")))return;const j=await api("/api/plugins/remove",{file:p.file});toast(j.message,j.ok?"good":"bad");if(j.ok)this.note();this.load()},
