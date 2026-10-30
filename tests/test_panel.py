@@ -216,21 +216,34 @@ try:
     check("auto address: home network without Tailscale", panel.auto_address() == panel.lan_ip() + ":25566" or panel.lan_ip() == "SERVER-IP")
     panel.tailnet_ip = real_ts
 
-    # config files editor: only names from the computed list
+    # config files editor: only the files of the server type, only names from the computed list
     for n in ("paper.yml", "bukkit.yml"):
         open(j(srv_dir, n), "w").close()
     os.makedirs(j(srv_dir, "config", "sub"), exist_ok=True)
     for n, c in (("x.json", "{}"), ("sub/y.toml", "a = 1\n"), ("n.bin", "x")):
         open(j(srv_dir, "config", *n.split("/")), "w").write(c)
+    cf = panel.config_files()   # no jar, config/paper-global.yml (above): Paper
+    check("config_files on Paper: Paper and Bukkit files, no mod leftovers", set(cf) == {"config/paper-global.yml", "paper.yml", "bukkit.yml"}, sorted(cf))
+    real_jar = panel.server_jar
+    panel.server_jar = lambda: "spigot-1.21.4.jar"
+    check("config_files on Spigot: Bukkit and Spigot files only", set(panel.config_files()) == {"bukkit.yml"}, sorted(panel.config_files()))
+    panel.server_jar = lambda: "fabric-server-launch.jar"
     cf = panel.config_files()
-    check("config_files lists Paper, Bukkit and mod files", {"config/paper-global.yml", "paper.yml", "bukkit.yml", "config/x.json", "config/sub/y.toml"} <= set(cf) and "config/n.bin" not in cf and "spigot.yml" not in cf, sorted(cf))
+    check("config_files on Fabric: mod files only", set(cf) == {"config/x.json", "config/sub/y.toml"}, sorted(cf))
+    check("plugins only on Paper", panel.plugins_mc() is None)
     for bad in ("../server.properties", os.path.abspath(props), "server.properties", "config/../server.properties", "config/n.bin"):
         check("config_save refuses %s" % bad, not panel.config_save(bad, "x", "t")[0] and open(props, "rb").read().startswith(b"motd="))
     check("config_save refuses invalid JSON", not panel.config_save("config/x.json", "{" + NL + "bad", "t")[0] and open(j(srv_dir, "config", "x.json")).read() == "{}")
+    check("config_save refuses a file of another server type", not panel.config_save("paper.yml", "a: 1", "t")[0])
+    panel.server_jar = real_jar
     check("config_save refuses a tab in YAML", "line 2" in panel.config_save("paper.yml", "a:" + NL + "\tb: 1", "t")[1])
+    panel.server_jar = lambda: "fabric-server-launch.jar"
     bd = j(panel.DATA, "backup-properties")
     ok, msg = panel.config_save("config/x.json", '{"a": 1}', "t")
     check("config_save writes and backs up", ok and open(j(srv_dir, "config", "x.json")).read() == '{"a": 1}' and any(f.startswith("config_x.json.") and open(j(bd, f)).read() == "{}" for f in os.listdir(bd)), msg)
+    panel.server_jar = lambda: "server.jar"   # a renamed jar: told by the files it leaves
+    check("server_kind from the files", panel.server_kind() == "paper")
+    panel.server_jar = real_jar
 
     # usercache: bad entries are skipped
     with open(j(srv_dir, "usercache.json"), "w") as f:
@@ -329,6 +342,22 @@ try:
     check("cut nbt: items one by one", [i["id"] for i in d["inventory"]] == ["wheat_seeds", "diamond_sword"], d["inventory"])
     check("cut nbt: cut item by its fields, enchantments that fit", sword and sword[0]["dmg"] == 5 and len(sword[0]["ench"]) == 2, sword)
     # a .dat the server has just written (Paper player-auto-save.rate) is read instead of RCON; an old one is not
+    # death point removed from the map: hidden while it is the same point, back at the next death; the .dat is not touched
+    U = "12345678-1234-1234-1234-123456789abc"
+    death = {"last_death": [10, 64, -20], "last_death_dim": "overworld", "health": 20.0, "dead": False, "saved": 1, "pos": [0, 64, 0], "dim": "overworld"}
+    real_pd = (panel.known_players, panel.player_data)
+    panel.known_players, panel.player_data = lambda: {U: "ok"}, lambda u, n: dict(death) if u == U else None
+    try:
+        check("roster shows the death point", panel.roster()[0]["last_death"] == [10, 64, -20])
+        check("hide_death refuses an unknown player", panel.hide_death("00000000-0000-0000-0000-000000000000") is None)
+        check("hide_death hides it", panel.hide_death(U) == "ok" and panel.roster()[0]["last_death"] is None and panel.roster()[0]["last_death_dim"] is None)
+        death["last_death"] = [11, 64, -20]
+        check("a new death shows again", panel.roster()[0]["last_death"] == [11, 64, -20])
+        panel.player_data = lambda u, n: dict(death, last_death=None)
+        check("hide_death without a death point", panel.hide_death(U) is None)
+    finally:
+        panel.known_players, panel.player_data = real_pd
+
     real = (panel.world_dir, panel.PL.read_nbt_file, panel.RCON.command_long)
     w, uid, asked = j(root, "live-world"), "6d677ae7-3bc4-396f-872a-777fca8f354d", []
     pdir = panel.PL.player_dir(w, "data")

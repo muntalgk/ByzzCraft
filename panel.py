@@ -300,13 +300,25 @@ CONF_EXT = (".json", ".json5", ".toml", ".properties", ".yml", ".yaml", ".cfg")
 CONF_MAX = 1048576
 
 
+def server_kind():
+    """paper (and forks), spigot, mods (Fabric, Quilt, Forge) or vanilla: from the jar name, else from the files it makes."""
+    sd, jar = CFG["server_dir"], (server_jar() or "").lower()
+    for kind, prefixes in (("paper", ("paper", "purpur", "folia", "pufferfish")), ("spigot", ("spigot",)), ("mods", ("fabric", "quilt"))):
+        if jar.startswith(prefixes):
+            return kind
+    has = lambda *p: os.path.exists(os.path.join(sd, *p))   # noqa: E731
+    return ("paper" if has("config", "paper-global.yml") or has("paper.yml") else "spigot" if has("spigot.yml")
+            else "mods" if has("mods") else "vanilla")
+
+
 def config_files():
-    """{name: path} of the existing editable files; the client only sends a name from here, never a path."""
-    sd, out = CFG["server_dir"], {}
-    names = list(CONF_FIXED)
+    """{name: path} of the existing editable files of the server type; the client only sends a name from here, never a path.
+    Paper reads bukkit.yml and spigot.yml too; config/ holds mod settings only on a modded server (on Paper just its own)."""
+    sd, out, kind = CFG["server_dir"], {}, server_kind()
+    names = list(CONF_FIXED) if kind == "paper" else ["spigot.yml", "bukkit.yml"] if kind == "spigot" else []
     cd = os.path.join(sd, "config")
     try:
-        for e in sorted(os.listdir(cd)):
+        for e in sorted(os.listdir(cd)) if kind == "mods" else []:
             sub = os.path.join(cd, e)
             for x in ([e] if os.path.isfile(sub) else ["%s/%s" % (e, y) for y in sorted(os.listdir(sub))] if os.path.isdir(sub) else []):
                 if x.lower().endswith(CONF_EXT) and "config/" + x not in CONF_FIXED:
@@ -1000,6 +1012,7 @@ def sampler():
 TLINE = TL.Timeline(CFG["server_dir"], CACHE, CFG["log_file"])
 MAP_SEM = threading.BoundedSemaphore(2)     # at most 2 tiles rendered at once: do not steal CPU from the server
 MARKERS_FILE = os.path.join(DATA, "markers.json")
+HIDDEN_DEATHS_FILE = os.path.join(DATA, "hidden-deaths.json")   # {uuid: death point removed from the map}; the .dat stays as it is
 WORLD_BUSY = threading.Event()              # restore running: no reads of the world (map)
 OP_PENDING = threading.Event()              # backup/restore asked from the web, thread not started yet: no starts
 SHUTTING_DOWN = threading.Event()           # the container is stopping: no starts, not even after a "crash"
@@ -1267,15 +1280,41 @@ def player_data(uuid, name):
         return None
 
 
+def death_point(d):
+    """[[x, y, z], dim] of the player's last death, None if none."""
+    return [list(d["last_death"]), d.get("last_death_dim") or "overworld"] if d and d.get("last_death") else None
+
+
+def load_hidden_deaths():
+    try:
+        return json.load(open(HIDDEN_DEATHS_FILE, encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def hide_death(uuid):
+    """Hides the player's current death point from the map: the player's name, None if there is none."""
+    name = known_players().get(uuid)
+    death = death_point(player_data(uuid, name)) if name else None
+    if not death:
+        return None
+    with LOCK:
+        hidden = load_hidden_deaths(); hidden[uuid] = death; write_json(HIDDEN_DEATHS_FILE, hidden, indent=1)
+    return name
+
+
 def roster():
-    on = online_names()
+    on, hidden = online_names(), load_hidden_deaths()
     out = []
     for uuid, name in sorted(known_players().items(), key=lambda kv: kv[1].lower()):
         d = player_data(uuid, name)
+        death = death_point(d)
+        if death and hidden.get(uuid) == death:   # hidden from the map until the player dies somewhere else
+            death = None
         out.append({"uuid": uuid, "name": name, "online": name in on, "health": d["health"] if d else None,
                     "dead": d["dead"] if d else False, "saved": d["saved"] if d else None,
                     "pos": d["pos"] if d else None, "dim": d["dim"] if d else None,
-                    "last_death": d.get("last_death") if d else None, "last_death_dim": d.get("last_death_dim") if d else None})
+                    "last_death": death and death[0], "last_death_dim": death and death[1]})
     return out
 
 
@@ -1915,9 +1954,8 @@ def server_jar():
 
 def plugins_mc():
     """Minecraft version when the server is Paper or a fork (Hangar plugins make sense), else None."""
-    sd, jar = CFG["server_dir"], server_jar()
-    if (jar or "").lower().startswith(("paper", "purpur", "folia", "pufferfish")) or os.path.isfile(os.path.join(sd, "config", "paper-global.yml")):
-        return AS.jar_info(sd, jar)[0] or ""
+    if server_kind() == "paper":
+        return AS.jar_info(CFG["server_dir"], server_jar())[0] or ""
     return None
 
 
@@ -2517,6 +2555,13 @@ class Handler(BaseHTTPRequestHandler):
             log("%s removed the marker '%s'" % (s["user"], gone.get("name")))
             HUB.publish("markers", {"dim": gone.get("dim")})
             return self.json(200, {"ok": True, "message": t("Marker removed.")})
+        if self.path == "/api/deaths/hide":
+            name = hide_death(str(data.get("uuid", "")))
+            if not name:
+                return self.json(200, {"ok": False, "message": t("Death point not found.")})
+            log("%s removed the death point of %s from the map" % (s["user"], name))
+            HUB.publish("roster", roster())
+            return self.json(200, {"ok": True, "message": t("Death point removed.")})
         if self.path == "/api/start":
             ok, msg = SRV.start(s["user"])
             return self.json(200, {"ok": ok, "message": msg})

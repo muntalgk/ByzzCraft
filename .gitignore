@@ -4,6 +4,7 @@ panel-config.json
 panel-users.json
 panel.log*
 markers.json
+hidden-deaths.json
 cache/
 backup-properties/
 trash/

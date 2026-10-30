@@ -740,5 +740,8 @@
  "%s installed. Restart the server to load it.": "%s installato. Riavvia il server per caricarlo.",
  "Plugin not found.": "Plugin non trovato.",
  "%s removed. Restart the server to unload it.": "%s rimosso. Riavvia il server per scaricarlo.",
- "Plugins need a Paper server.": "I plugin servono un server Paper."
+ "Plugins need a Paper server.": "I plugin servono un server Paper.",
+ "Death point not found.": "Punto di morte non trovato.",
+ "Death point removed.": "Punto di morte tolto dalla mappa.",
+ "removed the death point of %s": "ha tolto dalla mappa il punto di morte di %s"
 }

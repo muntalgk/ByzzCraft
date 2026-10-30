@@ -38,6 +38,7 @@ CASES = [
     ("alice ran: time set day", "console", "alice", "ran a command"),
     ("admin added the marker 'Base' (100, -200)", "map", "admin", "added the marker «Base»"),
     ("admin removed the marker 'Base'", "map", "admin", "removed the marker"),
+    ("alice removed the death point of Steve from the map", "map", "alice", "removed the death point of Steve"),
     ("admin moved backup world_2026-10-20_10-00-00.zip to the trash", "backup", "admin", "moved a backup"),
     ("admin started a restore of auto_2026-10-21_04-00-00.zip", "backup", "admin", "started a world restore"),
     ("admin changed the backup schedule", "backup", "admin", "changed the backup schedule"),
