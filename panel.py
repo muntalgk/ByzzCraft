@@ -1023,6 +1023,12 @@ BACKUPS = BK.Backups(CFG["server_dir"], os.path.join(CACHE, "backups-state.json"
 WORLD = {}
 
 
+def world_running(online, day, prev):
+    """False = paused: nobody on and the clock has not moved since the last reading (prev, None = first one). Measured, because
+    the server decides: pause-when-empty-seconds can be off (Paper) or wait N seconds after the last player leaves."""
+    return online or prev is None or day != prev
+
+
 def world_watcher():
     """Time of day, moon phase and weather, over RCON and only with the server on. 26.x: the hours are the
     minecraft:day timeline ("is at N ticks"), the moon the minecraft:moon timeline. Up to 1.21: "time query daytime"
@@ -1039,10 +1045,9 @@ def world_watcher():
                     day, moon = num(RCON.command("time query daytime")), num(out) * 24000
                 rain = "passed" in RCON.command('execute if predicate {type:"minecraft:weather_check",raining:true}')
                 thunder = rain and "passed" in RCON.command('execute if predicate {type:"minecraft:weather_check",thundering:true}')
-                info = SRV.info
-                # with nobody on the world is paused (pause-when-empty-seconds): time does not move
-                WORLD = {"day": day % 24000, "moon": (moon // 24000) % 8, "rain": rain, "thunder": thunder,
-                         "t": int(time.time() * 1000), "running": bool(info and info[0] > 0)}
+                info, day = SRV.info, day % 24000
+                WORLD = {"day": day, "moon": (moon // 24000) % 8, "rain": rain, "thunder": thunder,
+                         "t": int(time.time() * 1000), "running": world_running(bool(info and info[0] > 0), day, WORLD.get("day"))}
                 HUB.publish("world", WORLD)
             elif WORLD:
                 WORLD = {}

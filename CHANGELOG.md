@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Dashboard: "world paused until someone plays" shows only when the world's clock has really stopped. Before it came
+  with every empty server, even with `pause-when-empty-seconds=-1` (the world keeps going) and during the seconds
+  before the pause, while the bar kept moving.
+
 ## 1.3.1
 
 - Plugins: "Update" shows only when Hangar has a newer version (asked in the background, at most every 6 hours), with
