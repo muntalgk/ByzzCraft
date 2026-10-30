@@ -2387,7 +2387,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(404, {"error": t("File not available")})
         if path == "/api/plugins":
             mc = plugins_mc()
-            return self.json(200, {"enabled": mc is not None, "mc": mc or "", "installed": PLG.installed(CFG["server_dir"]) if mc is not None else []})
+            inst = PLG.installed(CFG["server_dir"]) if mc is not None else []
+            missing = [p["slug"] for p in inst if p["icon"] is None]
+            if missing:   # in the background: Hangar may be slow or down, the list must not wait for it
+                threading.Thread(target=lambda: PLG.fetch_icons(missing) and HUB.publish("plugins", {}, admin_only=True), daemon=True).start()
+            return self.json(200, {"enabled": mc is not None, "mc": mc or "", "installed": inst})
         if path == "/api/plugins/search":
             if plugins_mc() is None:
                 return self.json(200, {"ok": False, "message": t("Plugins need a Paper server.")})
