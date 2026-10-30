@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.2
 
 - Dashboard: "world paused until someone plays" shows only when the world's clock has really stopped. Before it came
   with every empty server, even with `pause-when-empty-seconds=-1` (the world keeps going) and during the seconds
