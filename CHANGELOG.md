@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.0
 
 - Plugins: on Paper servers (and Purpur, Folia, Pufferfish) admins can search Hangar and install, update or remove
   plugins from the panel; downloads are hash-checked and removed jars go to the trash.
