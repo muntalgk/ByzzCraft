@@ -49,6 +49,7 @@ _RULES = [
     (_WHO + r" ran: (?P<c>.*)$", "console", "info", lambda g: (t("ran a command"), {"cmd": g["c"]})),
     (_WHO + r" (?P<v>added|removed) the marker '(?P<n>.*)'(?: \((?P<xz>[-\d, ]+)\))?$", "map", "info",
      lambda g: (t("%s the marker «%%s»" % g["v"]) % g["n"], g["xz"] or "")),
+    (_WHO + r" removed the death point of (?P<n>\S+) from the map$", "map", "info", lambda g: (t("removed the death point of %s") % g["n"], "")),
     (_WHO + r" moved backup (?P<n>.+) to the trash$", "backup", "info", lambda g: (t("moved a backup to the trash"), g["n"])),
     (_WHO + r" started a restore of (?P<n>.+)$", "backup", "warn", lambda g: (t("started a world restore"), g["n"])),
     (_WHO + r" changed the backup schedule$", "backup", "info", lambda g: (t("changed the backup schedule"), "")),

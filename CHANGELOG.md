@@ -5,7 +5,11 @@
 - Plugins: on Paper servers (and Purpur, Folia, Pufferfish) admins can search Hangar and install, update or remove
   plugins from the panel; downloads are hash-checked and removed jars go to the trash.
 - Config files: admins can edit the files of the server type in use (Paper, Spigot, Purpur, mod configs) from the
-  panel; JSON, YAML tabs and TOML are checked before saving and every save keeps a backup.
+  panel; JSON, YAML tabs and TOML are checked before saving and every save keeps a backup. Only the type in use is
+  listed (told by the jar name, else by the files it makes): Paper shows its own files plus `bukkit.yml` and
+  `spigot.yml`, which it reads too; Spigot only those two; Fabric/Forge only `config/`; vanilla none.
+- Map: tap a death point (☠️) to remove it from the map. It comes back at the player's next death; the world's
+  player files are not touched.
 - Dashboard: without an address set in the panel settings, players see this machine's Tailscale IP (or the home
   network one), with the port when it is not 25565.
 - Setup: choose the server to download into an empty folder, from cards with a short description: Paper

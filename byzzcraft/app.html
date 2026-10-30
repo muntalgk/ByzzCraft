@@ -262,6 +262,7 @@ details.ender summary{cursor:pointer;color:var(--text2);font-size:14px;margin-bo
 .wm-pin{width:22px;height:22px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--info);border:2px solid #fff;box-shadow:0 2px 6px #000c;cursor:pointer}
 .wm-pin.home{background:var(--good)}.wm-pin.portal{background:#9a5cff}.wm-pin.danger{background:var(--crit)}.wm-pin.star{background:var(--warn)}
 .wm-sym{font-size:18px;line-height:1;filter:drop-shadow(0 1px 2px #000);cursor:default}
+.wm-death .wm-sym{cursor:pointer;padding:8px;margin:-8px}   /* a finger-sized target on the phone */
 .wm-ui{position:absolute;display:flex;gap:6px;z-index:6}
 .wm-ui button,.wm-ui select{background:#14171cee;border:1px solid var(--line2);color:var(--text);border-radius:8px;padding:6px 10px;font:inherit;font-size:13px;cursor:pointer}
 .wm-ui button:hover{border-color:#4a505c}
@@ -361,14 +362,13 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
 .modal ul{margin:0 0 12px;padding-left:18px;color:var(--text2);font-size:13.5px}
 .modal input{width:100%;background:var(--surface);border:1px solid var(--line2);border-radius:10px;padding:10px 12px;color:var(--text);font:600 15px var(--mono);letter-spacing:.06em}
 .modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
-.pl-row{display:flex;gap:12px;align-items:center;padding:12px 14px;margin-bottom:8px;flex-wrap:wrap}.pl-row .pl-i{flex:1;min-width:160px}.pl-row small{display:block;color:var(--mute);font-size:12px}
-.pl-row .btn{padding:7px 12px}.pl-note{color:var(--warn);font-size:13px;margin:0 0 12px}
+.pl-note{display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:var(--warn);font-size:13px;margin:0 0 12px}.pl-note[hidden]{display:none}
 .modal.pl-m{max-width:720px;max-height:calc(100vh - 32px);display:flex;flex-direction:column}.modal.pl-m h3{display:flex;justify-content:space-between;align-items:center}
 .modal.pl-m .search{width:100%;box-sizing:border-box;font-weight:400;letter-spacing:0;font-family:inherit}
-.pl-res{overflow:auto;margin-top:12px;display:grid;gap:8px}.pl-card{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px}
-.pl-card img,.pl-card .pl-av{width:48px;height:48px;border-radius:10px;flex:none;background:var(--card2)}.pl-card .pl-i{flex:1;min-width:0}
-.pl-card b a{color:var(--text);text-decoration:none}.pl-card b a:hover{text-decoration:underline}.pl-card p{margin:2px 0 4px;font-size:13px;color:var(--text2);overflow-wrap:anywhere}.pl-card small{color:var(--mute);font-size:12px}
-@media(max-width:600px){.modal-bg:has(.pl-m){padding:0}.modal.pl-m{max-width:none;height:100%;max-height:none;border-radius:0}.pl-card{flex-wrap:wrap}}
+.pl-res{overflow:auto;margin-top:12px;display:flex;flex-direction:column;gap:6px}.pl-res>.btn{align-self:center}.pl-res .acr{align-items:flex-start}
+.pl-res .tx a{color:var(--text);text-decoration:none}.pl-res .tx a:hover{text-decoration:underline}.pl-res .tx p{margin:4px 0 0;font-size:13px;color:var(--text2);overflow-wrap:anywhere}
+.pl-res .acts .btn{padding:7px 14px;font-size:13px}
+@media(max-width:600px){.modal-bg:has(.pl-m){padding:0}.modal.pl-m{max-width:none;height:100%;max-height:none;border-radius:0}}
 @media (max-width:1100px){.bk-top{grid-template-columns:1fr 1fr}.bk-now{grid-column:1/-1}.bk-wrap{grid-template-columns:minmax(0,1fr)}}
 /* backup row on phones: the kind as a colored edge (the badge says it too), title, details, then the actions spread evenly */
 @media (max-width:520px){.bk-top{grid-template-columns:1fr}
@@ -420,6 +420,7 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
 .sb.red{color:#ff9b94;border-color:#5a2a28;background:transparent}.sb.red:hover{background:#2a1514}.sb.ask{color:#ffb4ae;background:#3a1715;border-color:#6b2a26}
 .sb:disabled{opacity:.4;cursor:default}
 @media (max-width:620px){.acr{flex-wrap:wrap}.acr .acts{width:100%;justify-content:flex-start}}
+@media (max-width:620px){#plg-list .acr{flex-wrap:nowrap}#plg-list .acr .acts{width:auto}}   /* one button: it fits beside the name */
 /* ---------- activity log ---------- */
 .rg-tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 .rg-tools .search{flex:1;min-width:180px}
@@ -622,14 +623,14 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
     <section id="v-configs" hidden>
       <div class="toolbar"><select class="search" id="cf-file" aria-label="{{Config files}}"></select><span class="lock">{{Changes apply at the next server restart. Every save backs up the file.}}</span></div>
       <textarea class="search" id="cf-text" spellcheck="false" autocomplete="off" style="display:block;width:100%;box-sizing:border-box;min-height:55vh;font:13px var(--mono);white-space:pre;tab-size:2;resize:vertical"></textarea>
-      <div class="row" style="margin-top:12px;flex-wrap:wrap"><button class="btn" id="cf-save">{{Save}}</button><button class="btn primary" id="cf-save-r">{{Save and restart}}</button></div>
+      <div class="actions" style="margin-top:12px"><button class="btn" id="cf-save">{{Save}}</button><button class="btn primary" id="cf-save-r">{{Save and restart}}</button></div>
     </section>
 
     <!-- PLUGINS -->
     <section id="v-plugins" hidden>
       <div class="toolbar"><button class="btn primary" id="pl-browse">{{Browse Hangar}}</button><span class="lock">{{Plugins load when the server starts.}}</span></div>
-      <p class="pl-note" id="pl-note" hidden>{{Restart the server to apply the changes.}} <button class="btn" id="pl-restart">{{Restart}}</button></p>
-      <div id="plg-list"></div>
+      <p class="pl-note" id="pl-note" hidden>{{Restart the server to apply the changes.}} <button class="sb" id="pl-restart">{{Restart}}</button></p>
+      <div class="ac-list" id="plg-list"></div>
     </section>
 
     <!-- BACKUP -->
@@ -962,9 +963,9 @@ if(BOOT.admin)GET("/api/configs").then(async r=>{if(r)$("#tab-cf").hidden=!(awai
 const PL={mc:"",inst:[],
   async load(){if(!BOOT.admin)return;const r=await GET("/api/plugins");if(!r)return;const j=await r.json();$("#tab-pl").hidden=!j.enabled;if(!j.enabled){if(CUR=="plugins")go("dash");return}
     this.mc=j.mc;this.inst=j.installed;setSub();const l=$("#plg-list");l.textContent="";
-    if(!this.inst.length)l.innerHTML="<p class='lock'>"+esc(_t("No plugins installed."))+"</p>";
-    this.inst.forEach(p=>{const d=document.createElement("div");d.className="card pl-row";
-      d.innerHTML="<div class='pl-i'><b>"+esc(p.name)+"</b> <span class='lock'>"+esc(p.version)+"</span><small>"+esc(p.file)+" · "+nf(p.size/1048576,2)+" MB"+"</small></div><button class='btn danger'>"+esc(_t("Remove"))+"</button>";
+    if(!this.inst.length)l.innerHTML="<div class='card' style='color:var(--mute)'>"+esc(_t("No plugins installed."))+"</div>";
+    this.inst.forEach(p=>{const d=document.createElement("div");d.className="acr";
+      d.innerHTML="<div class='ini'>"+esc(p.name[0].toUpperCase())+"</div><div class='tx'><b>"+esc(p.name)+"</b><small>"+esc(p.version)+" · "+esc(p.file)+" · "+nf(p.size/1048576,2)+" MB</small></div><div class='acts'><button class='sb red'>"+esc(_t("Remove"))+"</button></div>";
       d.querySelector("button").onclick=()=>this.remove(p);l.append(d)})},
   note(){$("#pl-note").hidden=S.status.state!="on"},
   async remove(p){if(!await ask(_t("Remove"),_t("Remove %s? The file goes to the trash.",p.file),_t("Remove")))return;const j=await api("/api/plugins/remove",{file:p.file});toast(j.message,j.ok?"good":"bad");if(j.ok)this.note();this.load()},
@@ -979,10 +980,10 @@ const PL={mc:"",inst:[],
     const run=async more=>{const my=++seq;if(!more){off=0;res.textContent=""}const old=res.querySelector("[data-more]");if(old)old.remove();
       const r=await GET("/api/plugins/search?q="+encodeURIComponent(inp.value.trim())+"&offset="+off);if(my!=seq)return;const j=r?await r.json():{ok:false,message:_t("Panel unreachable")};
       if(!j.ok){toast(j.message,"bad");return}if(!j.results.length&&!more)res.innerHTML="<p class='lock'>"+esc(_t("No results."))+"</p>";
-      j.results.forEach(x=>{const inst=this.inst.some(p=>p.slug==x.slug),c=document.createElement("div");c.className="pl-card";
-        c.innerHTML=(x.avatar?"<img alt='' loading='lazy' referrerpolicy='no-referrer' src='"+esc(x.avatar)+"'>":"<div class='pl-av'></div>")
-          +"<div class='pl-i'><b><a href='"+esc(x.url)+"' target='_blank' rel='noopener'>"+esc(x.name)+"</a></b> <small>"+esc(_t("by %s",x.owner))+"</small><p>"+esc(x.description)+"</p><small>"+esc(_t("%s downloads",x.downloads.toLocaleString(LOC)))+"</small></div>"
-          +"<button class='btn "+(inst?"":"primary")+"'>"+esc(inst?_t("Update"):_t("Install"))+"</button>";
+      j.results.forEach(x=>{const inst=this.inst.some(p=>p.slug==x.slug),c=document.createElement("div");c.className="acr";
+        c.innerHTML=(x.avatar?"<img class='ini' alt='' loading='lazy' referrerpolicy='no-referrer' src='"+esc(x.avatar)+"'>":"<div class='ini'>"+esc(x.name[0].toUpperCase())+"</div>")
+          +"<div class='tx'><b><a href='"+esc(x.url)+"' target='_blank' rel='noopener'>"+esc(x.name)+"</a></b><small>"+esc(_t("by %s",x.owner))+" · "+esc(_t("%s downloads",x.downloads.toLocaleString(LOC)))+"</small><p>"+esc(x.description)+"</p></div>"
+          +"<div class='acts'><button class='btn "+(inst?"":"primary")+"'>"+esc(inst?_t("Update"):_t("Install"))+"</button></div>";
         const b=c.querySelector("button");b.onclick=async()=>{b.disabled=true;b.textContent=_t("Installing...");const k=await api("/api/plugins/install",{slug:x.slug});
           toast(k.message,k.ok?"good":"bad");if(k.ok){b.textContent=_t("Installed, restart to load");this.note();(k.deps||[]).length&&toast(_t("Also needs: %s",k.deps.join(", ")),"bad");this.load()}else{b.disabled=false;b.textContent=inst?_t("Update"):_t("Install")}};
         res.append(c)});
@@ -1180,10 +1181,12 @@ class WorldMap{
   worldAt(cx,cy){const r=this.el.getBoundingClientRect();return [(cx-r.left-this.tx)/this.s,(cy-r.top-this.ty)/this.s]}
   drawMarkers(){if(!this.loaded)return;let h="";
     if(this.spawn)h+="<div class=wm-mk style='left:"+this.spawn[0]+"px;top:"+this.spawn[2]+"px'><div class=wm-sym title='"+_t("Spawn point")+"'>✦</div>"+(this.mini?"":"<div class=wm-lbl>Spawn</div>")+"</div>";
-    (P.roster||[]).forEach(p=>{if(p.last_death&&(p.last_death_dim||"overworld")==this.dim)h+="<div class=wm-mk style='left:"+p.last_death[0]+"px;top:"+p.last_death[2]+"px'><div class=wm-sym title='"+esc(_t("Last death of %s",p.name))+"'>☠️</div>"+(this.mini?"":"<div class=wm-lbl>"+esc(_t("Death of %s",p.name))+"</div>")+"</div>"});
+    (P.roster||[]).forEach(p=>{if(p.last_death&&(p.last_death_dim||"overworld")==this.dim)h+="<div class='wm-mk"+(this.mini?"":" wm-death")+"' data-death='"+p.uuid+"' style='left:"+p.last_death[0]+"px;top:"+p.last_death[2]+"px'><div class=wm-sym title='"+esc(_t("Last death of %s",p.name))+"'>☠️</div>"+(this.mini?"":"<div class=wm-lbl>"+esc(_t("Death of %s",p.name))+"</div>")+"</div>"});
     this.markers.forEach(m=>{h+="<div class=wm-mk data-id='"+m.id+"' style='left:"+m.x+"px;top:"+m.z+"px'><div class='wm-pin "+esc(m.icon)+"' title='"+esc(m.name)+"'></div><div class=wm-lbl>"+esc(m.name)+"</div></div>"});
     this.marks.innerHTML=h;
-    if(!this.mini)this.marks.querySelectorAll("[data-id]").forEach(d=>d.addEventListener("click",e=>{e.stopPropagation();const m=this.markers.find(x=>x.id==d.dataset.id);if(m)this.markerPop(m,e)}))}
+    if(this.mini)return;
+    this.marks.querySelectorAll("[data-id]").forEach(d=>d.addEventListener("click",e=>{e.stopPropagation();const m=this.markers.find(x=>x.id==d.dataset.id);if(m)this.markerPop(m,e)}));
+    this.marks.querySelectorAll("[data-death]").forEach(d=>d.addEventListener("click",e=>{e.stopPropagation();const p=(P.roster||[]).find(x=>x.uuid==d.dataset.death);if(p&&p.last_death)this.deathPop(p,e)}))}
   setPlayers(list){if(!this.loaded)return;const here=list.filter(p=>p.dim==this.dim),seen=new Set();
     here.forEach(p=>{seen.add(p.uuid);let d=this.pl.get(p.uuid);
       if(!d){d=document.createElement("div");d.className="wm-mk wm-pl";d.innerHTML="<div class=arr></div><span class=fc style='display:block;"+faceStyle(p.uuid,26)+"'></span><div class=wm-lbl>"+esc(p.name)+"</div>";
@@ -1204,6 +1207,9 @@ class WorldMap{
   markerPop(m,e){const p=this.popAt(e.clientX,e.clientY,"<b>"+esc(m.name)+"</b><span style='color:var(--text2);font-family:var(--mono)'>"+m.x+"  "+m.z+"</span><br><small style='color:var(--mute)'>"+esc(_t("added by %s",m.by))+"</small><div class=row><button data-a=del>"+_t("Remove")+"</button><button data-a=x>"+_t("Close")+"</button></div>");
     p.querySelector("[data-a=x]").onclick=()=>this.closePop();
     p.querySelector("[data-a=del]").onclick=async()=>{if(!await ask(_t("Delete"),_t("Remove the marker \"%s\"?",m.name),_t("Delete")))return;const j=await api("/api/markers/delete",{id:m.id});toast(j.message,j.ok?"good":"bad");this.closePop()}}
+  deathPop(p,e){const q=this.popAt(e.clientX,e.clientY,"<b>"+esc(_t("Death of %s",p.name))+"</b><span style='color:var(--text2);font-family:var(--mono)'>"+p.last_death.join("  ")+"</span><div class=row><button data-a=del>"+_t("Remove")+"</button><button data-a=x>"+_t("Close")+"</button></div>");
+    q.querySelector("[data-a=x]").onclick=()=>this.closePop();
+    q.querySelector("[data-a=del]").onclick=async()=>{const j=await api("/api/deaths/hide",{uuid:p.uuid});toast(j.message,j.ok?"good":"bad");if(j.ok)this.closePop()}}
   addAt(pt){const [x,z]=this.worldAt(pt.x,pt.y);const X=Math.floor(x),Z=Math.floor(z);
     const p=this.popAt(pt.x,pt.y,"<b>"+_t("New marker")+"</b><span style='font-family:var(--mono);color:var(--text2)'>"+X+"  "+Z+"</span><input class=search style='width:100%;margin-top:8px;min-width:0' maxlength=40 placeholder='"+_t("Name, e.g. Base")+"'><select class=search style='width:100%;margin-top:6px;min-width:0'>"+ICONS.map(([k,v])=>"<option value="+k+">"+v+"</option>").join("")+"</select><div class=row><button data-a=ok>"+_t("Save")+"</button><button data-a=x>"+_t("Cancel")+"</button></div>");
     const inp=p.querySelector("input");inp.focus();p.querySelector("[data-a=x]").onclick=()=>this.closePop();
