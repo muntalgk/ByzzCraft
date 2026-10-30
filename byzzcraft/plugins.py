@@ -18,8 +18,8 @@ CDN = "hangarcdn.papermc.io"
 MAX_BYTES = 100 * 1048576
 JAR = re.compile(r"[\w.+-]+\.jar")
 SLUG = re.compile(r"[\w.-]{1,64}")
-ICONS = os.path.join(paths.CACHE, "plugin-icons.json")   # slug -> icon on Hangar's CDN ("" = none): plugins.json only knows the slug
-_icons_lock, _icons_tried = threading.Lock(), set()
+PROJECTS = os.path.join(paths.CACHE, "hangar-projects.json")   # slug -> {icon on the CDN ("" = none), page}: plugins.json only knows the slug
+_projects_lock, _projects_tried = threading.Lock(), set()
 ERR = (OSError, ValueError, KeyError, TypeError, AttributeError, http.client.HTTPException)   # network, bad JSON or an unexpected shape: a message, never a 500
 
 
@@ -101,36 +101,39 @@ def _save(d):
     paths.write_json(os.path.join(paths.DATA, "plugins.json"), d)
 
 
-def icons():
+def projects():
     try:
-        with open(ICONS, encoding="utf-8") as f:
+        with open(PROJECTS, encoding="utf-8") as f:
             d = json.load(f)
         return d if isinstance(d, dict) else {}
     except (OSError, ValueError):
         return {}
 
 
-def fetch_icons(slugs):
-    """Asks Hangar for the icons not known yet, once per process for each slug (Hangar may be down); True if any was added."""
-    with _icons_lock:
-        d, new = icons(), False
+def fetch_projects(slugs):
+    """Asks Hangar for the icon and page not known yet, once per process for each slug (Hangar may be down); True if any was added.
+    The page needs the owner too: hangar.papermc.io/<slug> alone is a 404."""
+    with _projects_lock:
+        d, new = projects(), False
         for slug in slugs:
-            if slug in d or slug in _icons_tried or not SLUG.fullmatch(slug):
+            if slug in d or slug in _projects_tried or not SLUG.fullmatch(slug):
                 continue
-            _icons_tried.add(slug)
+            _projects_tried.add(slug)
             try:
-                d[slug] = _cdn(_json("projects/%s" % quote(slug)).get("avatarUrl"))
+                r = _json("projects/%s" % quote(slug))
+                ns = r["namespace"]
+                d[slug] = {"icon": _cdn(r.get("avatarUrl")), "url": "%s/%s/%s" % (HANGAR, quote(ns["owner"]), quote(ns["slug"]))}
                 new = True
             except ERR:
                 pass
         if new:
-            paths.write_json(ICONS, d)
+            paths.write_json(PROJECTS, d)
         return new
 
 
 def installed(server_dir):
-    """The jars in plugins/; icon None = not asked to Hangar yet (fetch_icons)."""
-    pd, tr, ic, out = os.path.join(server_dir, "plugins"), _track(), icons(), []
+    """The jars in plugins/ with their Hangar icon and page; icon None = not asked to Hangar yet (fetch_projects)."""
+    pd, tr, hp, out = os.path.join(server_dir, "plugins"), _track(), projects(), []
     try:
         names = sorted(os.listdir(pd), key=str.lower)
     except OSError:
@@ -140,8 +143,9 @@ def installed(server_dir):
         if JAR.fullmatch(n) and os.path.isfile(p):
             name, ver = _meta(p)
             k = tr.get(n) or {}
+            h = hp.get(k["slug"], {}) if k.get("slug") else {"icon": ""}   # not from Hangar (copied by hand): nothing to ask
             out.append({"file": n, "name": name or n[:-4], "version": k.get("version") or ver or "", "slug": k.get("slug", ""), "size": os.path.getsize(p),
-                        "icon": ic.get(k["slug"]) if k.get("slug") else ""})
+                        "icon": h.get("icon"), "url": h.get("url", "")})
     return out
 
 

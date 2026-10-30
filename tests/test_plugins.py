@@ -68,18 +68,19 @@ try:
     inst = P.installed(sd)
     check("installed list", len(inst) == 1 and inst[0]["slug"] == "Foo" and inst[0]["version"] == "1.0" and inst[0]["name"] == "Foo", inst)
 
-    # icons of installed plugins: asked to Hangar once per slug, kept in the cache, only from the CDN
-    check("icon not asked yet", inst[0]["icon"] is None, inst)
+    # icon and page of installed plugins: asked to Hangar once per slug, kept in the cache, icons only from the CDN
+    check("icon not asked yet", inst[0]["icon"] is None and inst[0]["url"] == "", inst)
     ROUTES["/projects/Foo?"] = OSError("offline")
-    check("icon: Hangar down, nothing kept", not P.fetch_icons(["Foo"]) and P.installed(sd)[0]["icon"] is None)
-    P._icons_tried.clear()
-    ROUTES["/projects/Foo?"] = {"avatarUrl": "https://hangarcdn.papermc.io/avatars/project/6.webp?v=1"}
+    check("icon: Hangar down, nothing kept", not P.fetch_projects(["Foo"]) and P.installed(sd)[0]["icon"] is None)
+    P._projects_tried.clear()
+    ROUTES["/projects/Foo?"] = {"avatarUrl": "https://hangarcdn.papermc.io/avatars/project/6.webp?v=1", "namespace": {"owner": "O", "slug": "Foo"}}
     n = len(GOT)
-    check("icon fetched and kept", P.fetch_icons(["Foo"]) and P.installed(sd)[0]["icon"].endswith("/6.webp?v=1"), P.icons())
-    check("icon asked once", not P.fetch_icons(["Foo"]) and len(GOT) == n + 1)
-    ROUTES["/projects/Bad?"] = {"avatarUrl": "https://evil.example/a.png"}
-    check("icon only from the CDN", P.fetch_icons(["Bad"]) and P.icons()["Bad"] == "")
-    check("icon: bad slug never asked", not P.fetch_icons(["../x"]) and "../x" not in P.icons())
+    i0 = P.fetch_projects(["Foo"]) and P.installed(sd)[0]
+    check("icon and page fetched and kept", i0 and i0["icon"].endswith("/6.webp?v=1") and i0["url"] == "https://hangar.papermc.io/O/Foo", P.projects())
+    check("project asked once", not P.fetch_projects(["Foo"]) and len(GOT) == n + 1)
+    ROUTES["/projects/Bad?"] = {"avatarUrl": "https://evil.example/a.png", "namespace": {"owner": "P", "slug": "Bad"}}
+    check("icon only from the CDN", P.fetch_projects(["Bad"]) and P.projects()["Bad"]["icon"] == "")
+    check("bad slug never asked", not P.fetch_projects(["../x"]) and "../x" not in P.projects())
 
     # update: the old jar of the same slug goes away
     d2 = jar("Foo", "2.0")

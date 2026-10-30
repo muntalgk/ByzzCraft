@@ -374,7 +374,7 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
 .modal.pl-m{max-width:720px;max-height:calc(100vh - 32px);display:flex;flex-direction:column}.modal.pl-m h3{display:flex;justify-content:space-between;align-items:center}
 .modal.pl-m .search{width:100%;box-sizing:border-box;font-weight:400;letter-spacing:0;font-family:inherit}
 .pl-res{overflow:auto;margin-top:12px;display:flex;flex-direction:column;gap:6px}.pl-res>.btn{align-self:center}.pl-res .acr{align-items:flex-start}
-.pl-res .tx a{color:var(--text);text-decoration:none}.pl-res .tx a:hover{text-decoration:underline}.pl-res .tx p{margin:4px 0 0;font-size:13px;color:var(--text2);overflow-wrap:anywhere}
+.pl-res .tx a,#plg-list .tx a{color:var(--text);text-decoration:none}.pl-res .tx a:hover,#plg-list .tx a:hover{text-decoration:underline}.pl-res .tx p{margin:4px 0 0;font-size:13px;color:var(--text2);overflow-wrap:anywhere}
 .pl-res .acts .btn{padding:7px 14px;font-size:13px}
 @media(max-width:600px){.modal-bg:has(.pl-m){padding:0}.modal.pl-m{max-width:none;height:100%;max-height:none;border-radius:0}}
 @media (max-width:1100px){.bk-top{grid-template-columns:1fr 1fr}.bk-now{grid-column:1/-1}.bk-wrap{grid-template-columns:minmax(0,1fr)}}
@@ -989,7 +989,7 @@ const PL={mc:"",inst:[],
     this.mc=j.mc;this.inst=j.installed;setSub();const l=$("#plg-list");l.textContent="";
     if(!this.inst.length)l.innerHTML="<div class='card' style='color:var(--mute)'>"+esc(_t("No plugins installed."))+"</div>";
     this.inst.forEach(p=>{const d=document.createElement("div");d.className="acr";
-      d.innerHTML=(p.icon?"<img class='ini' alt='' loading='lazy' referrerpolicy='no-referrer' src='"+esc(p.icon)+"'>":"<div class='ini'>"+esc(p.name[0].toUpperCase())+"</div>")+"<div class='tx'><b>"+esc(p.name)+"</b><small>"+esc(p.version)+" · "+esc(p.file)+" · "+nf(p.size/1048576,2)+" MB</small></div><div class='acts'><button class='sb red'>"+esc(_t("Remove"))+"</button></div>";
+      d.innerHTML=(p.icon?"<img class='ini' alt='' loading='lazy' referrerpolicy='no-referrer' src='"+esc(p.icon)+"'>":"<div class='ini'>"+esc(p.name[0].toUpperCase())+"</div>")+"<div class='tx'><b>"+(p.url?"<a href='"+esc(p.url)+"' target='_blank' rel='noopener'>"+esc(p.name)+"</a>":esc(p.name))+"</b><small>"+esc(p.version)+" · "+esc(p.file)+" · "+nf(p.size/1048576,2)+" MB</small></div><div class='acts'><button class='sb red'>"+esc(_t("Remove"))+"</button></div>";
       d.querySelector("button").onclick=()=>this.remove(p);l.append(d)})},
   note(){$("#pl-note").hidden=S.status.state!="on"},
   async remove(p){if(!await ask(_t("Remove"),_t("Remove %s? The file goes to the trash.",p.file),_t("Remove")))return;const j=await api("/api/plugins/remove",{file:p.file});toast(j.message,j.ok?"good":"bad");if(j.ok)this.note();this.load()},
