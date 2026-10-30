@@ -390,6 +390,12 @@ try:
           == {"minecraft:mending": 1, "minecraft:looting": 3})
     check("close_cut",panel.close_cut('{a: "x, y", b: [1, 2], c: {d: 1, e: ...') == '{a: "x, y", b: [1, 2], c: {d: 1}}')
 
+    # the world counts as paused only if its clock stopped: an empty server may keep going (pause-when-empty-seconds=-1)
+    check("world: empty, clock moving = running", panel.world_running(False, 300, 0))
+    check("world: empty, clock stopped = paused", not panel.world_running(False, 300, 300))
+    check("world: first reading = running", panel.world_running(False, 300, None))
+    check("world: players on = running", panel.world_running(True, 300, 300))
+
     # "Start at login" on Windows writes the Startup script (here a temp path, never the real Startup folder)
     panel.STARTUP_CMD = j(root, "ByzzCraft.cmd")
     if os.name == "nt":
