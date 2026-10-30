@@ -5,6 +5,13 @@
 - Dashboard: "world paused until someone plays" shows only when the world's clock has really stopped. Before it came
   with every empty server, even with `pause-when-empty-seconds=-1` (the world keeps going) and during the seconds
   before the pause, while the bar kept moving.
+- Backups: one disk error no longer ends the scheduled backups until the next restart of the panel.
+- A crash during a backup: the server restarts when the backup ends. Before it stayed off, with no message.
+- A damaged player file no longer breaks the Players and Access pages: only that player shows no data.
+- If the panel dies during a backup, world saving is turned on again as soon as it finds the server running. Before
+  the server stayed with saves off, and a crash then lost everything since the backup.
+- Config files from 64 KB to 1 MB can be saved. Before they opened, but saving failed with "Not editable".
+- Login: a cookie from another app on the same address no longer makes the panel ask to log in again and again.
 
 ## 1.3.1
 

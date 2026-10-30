@@ -1,4 +1,4 @@
-import contextlib, io, json, os, shutil, sys, tempfile, time
+import contextlib, gzip, io, json, os, shutil, sys, tempfile, time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # panel folder
 
 OK = FAIL = 0
@@ -395,6 +395,86 @@ try:
     check("world: empty, clock stopped = paused", not panel.world_running(False, 300, 300))
     check("world: first reading = running", panel.world_running(False, 300, None))
     check("world: players on = running", panel.world_running(True, 300, 300))
+
+    # a crash during a backup: the automatic restart waits for the backup instead of being lost
+    panel.CFG["auto_restart"] = True   # the settings tests above turn it off
+    c = panel.ServerControl()
+    c.state, c.on_since = "on", time.time()
+    panel.BACKUPS._begin("backup", "test")
+    c.update(None)
+    check("crash during a backup: restart pending", c.state == "off" and c.restart_pending, (c.state, c.restart_pending))
+    panel.BACKUPS._end()
+    started = []
+    c.start = lambda who: (started.append(who), (True, ""))[1]
+    c.update(None)
+    check("crash during a backup: restarted when it ends", started == ["panel (restart)"] and not c.restart_pending, started)
+
+    class Stop(BaseException):   # the only way out of the endless worker loops
+        pass
+
+    def rounds(fn, n):
+        """Runs a worker loop until its n-th time.sleep."""
+        real, sleeps = time.sleep, []
+
+        def fake(s):
+            sleeps.append(s)
+            if len(sleeps) >= n:
+                raise Stop
+        time.sleep = fake
+        try:
+            fn()
+        except Stop:
+            pass
+        finally:
+            time.sleep = real
+        return sleeps
+
+    # one disk error must not end the scheduled backups: nothing would start that thread again
+    def disk_error():
+        raise OSError(5, "Input/output error")
+    real = panel.world_dir
+    panel.world_dir = disk_error
+    try:
+        check("backup scheduler survives an error", rounds(panel.backup_scheduler, 3) == [30, 60, 60])
+    finally:
+        panel.world_dir = real
+
+    # a panel that died during a backup left saves off: the first time it sees the server it turns them on, once
+    cmds = []
+
+    def rcon(cmd, timeout=5):
+        cmds.append(cmd)
+        if cmd == "save-on" and cmds.count(cmd) == 1:
+            raise OSError("RCON not ready")
+        return ""
+    real = panel.ping, panel.RCON.command
+    panel.ping, panel.RCON.command = lambda port: (0, 20, []), rcon
+    try:
+        rounds(panel.sampler, 3)
+        check("save-on: retried until it works, then never again", cmds.count("save-on") == 2, cmds)
+        cmds.clear()
+        panel.BACKUPS._begin("backup", "test")
+        rounds(panel.sampler, 2)
+        panel.BACKUPS._end()
+        check("save-on: not during a backup", "save-on" not in cmds, cmds)
+    finally:
+        panel.ping, panel.RCON.command = real
+        panel.SRV.state = "off"
+
+    # a damaged player file: that player has no data, the others are still listed
+    pd = j(srv_dir, "world", "playerdata")
+    os.makedirs(pd)
+    bad = j(pd, "00000000-0000-4000-8000-000000000009.dat")
+    for name, raw in (("deflate", b"\x1f\x8b\x08\x00" + bytes(6) + b"\xff" * 40), ("cut", gzip.compress(b"x" * 100)[:12])):
+        with open(bad, "wb") as f:
+            f.write(raw)
+        try:
+            panel.PL.read_nbt_file(bad)
+            check("damaged .dat (%s): ValueError" % name, False)
+        except ValueError:
+            check("damaged .dat (%s): ValueError" % name, True)
+        check("damaged .dat (%s): roster still works" % name, [p["health"] for p in panel.roster()] == [None])
+    shutil.rmtree(j(srv_dir, "world"))
 
     # "Start at login" on Windows writes the Startup script (here a temp path, never the real Startup folder)
     panel.STARTUP_CMD = j(root, "ByzzCraft.cmd")

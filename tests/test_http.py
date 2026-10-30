@@ -141,6 +141,19 @@ try:
         while (chunk := so.recv(65536)):
             got += chunk
     check("no keep-alive: one answer per connection", got.count(b" 200 OK") == 1, got[:80])
+    # cookies ignore the port: one from another app on this host must not hide ours
+    for hdr in ('pref={"a":1}; ' + cookie["Cookie"], cookie["Cookie"] + '; pref={"a":1}'):
+        check("foreign cookie: still logged in", req("GET", "/api/users", headers={"Cookie": hdr})[0] == 200, hdr[:20])
+    check("no sess cookie: no session", req("GET", "/api/users", headers={"Cookie": 'pref={"a":1}'})[0] == 401)
+    # a config file over the 64 KB of the other requests, up to the 1 MB the editor promises
+    os.makedirs(os.path.join(srv, "config"))
+    big = os.path.join(srv, "config", "paper-global.yml")   # this file also makes it a Paper server, which has editable configs
+    open(big, "w", newline="").write("a: 1\n")
+    api = dict(cookie, **{"X-CSRF": csrf})
+    for size in (150_000, 1_000_000):
+        text = "\n" * size    # the worst case: in JSON each one is two characters
+        st, out, _ = req("POST", "/api/configs", json.dumps({"file": "config/paper-global.yml", "text": text}), api)
+        check("config of %d bytes saved" % size, st == 200 and json.loads(out)["ok"] and os.path.getsize(big) == size, out[:120])
     # last: it also locks the address 127.0.0.1
     codes = [login("nessuno", "x")[0] for _ in range(6)]
     check("lock after 5 attempts", codes == [401] * 4 + [429] * 2, codes)   # the first wrong one is admin's, above
