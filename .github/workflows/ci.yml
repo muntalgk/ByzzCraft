@@ -92,7 +92,7 @@ jobs:
           Expand-Archive ByzzCraft-windows.zip -DestinationPath zipcheck
           cmd /c "zipcheck\ByzzCraft\ByzzCraft.bat users < NUL"
           if ($LASTEXITCODE) { exit 1 }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ByzzCraft-windows
           path: ByzzCraft-windows.zip
