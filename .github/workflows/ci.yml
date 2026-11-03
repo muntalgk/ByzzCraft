@@ -32,7 +32,7 @@ jobs:
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v3
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/byzzcraft
           # two channels: :latest and :1.2 / :1.2.3 are releases (tags), :edge is main between releases
