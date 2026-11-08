@@ -210,8 +210,8 @@ main{padding:22px 28px 60px;min-width:0}
   background:linear-gradient(115deg,transparent 30%,#c48cff99 45%,#8a5cff66 55%,transparent 70%);background-size:300% 300%;animation:glint 3s linear infinite;mix-blend-mode:screen}
 /* a potion's liquid: the grey overlay multiplied by its color, as in the game */
 /* same box as the icon (also on the phone), so the liquid lines up with the bottle */
-.slot .liq{position:absolute;inset:0;margin:auto;width:32px;height:32px;pointer-events:none;image-rendering:pixelated;background:url('/icon/potion_overlay.png?v=6') center/contain no-repeat;background-blend-mode:multiply;
-  -webkit-mask-image:url('/icon/potion_overlay.png?v=6');mask-image:url('/icon/potion_overlay.png?v=6');-webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
+.slot .liq{position:absolute;inset:0;margin:auto;width:32px;height:32px;pointer-events:none;image-rendering:pixelated;background:url('/icon/potion_overlay.png?v=7') center/contain no-repeat;background-blend-mode:multiply;
+  -webkit-mask-image:url('/icon/potion_overlay.png?v=7');mask-image:url('/icon/potion_overlay.png?v=7');-webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
 @keyframes glint{from{background-position:120% 0}to{background-position:-120% 0}}
 .slot .fb{font:700 10px var(--mono);color:var(--text2);text-align:center;line-height:1.1;padding:2px;pointer-events:none}
 .mctip{position:fixed;z-index:20;pointer-events:none;background:#100010f2;border:2px solid #25015b;outline:1px solid #100010;border-radius:4px;padding:6px 9px;font-size:13px;max-width:280px;box-shadow:0 8px 24px #000a}
@@ -1130,12 +1130,12 @@ function hudRow(kind,val,max,extra){const n=10;let h="";const hc=P.hardcore&&kin
   if(kind=="heart"&&extra>0)for(let i=0;i<Math.ceil(extra/2);i++)h+="<img src='/hud/heart_absorbing_"+hc+(extra-i*2>=2?"full":"half")+".png'>";
   return "<div class='hud "+kind+"'>"+h+"</div>"}
 const SLOT_PH={head:"empty_armor_slot_helmet",chest:"empty_armor_slot_chestplate",legs:"empty_armor_slot_leggings",feet:"empty_armor_slot_boots",offhand:"empty_armor_slot_shield"};
-function slotHTML(it,ph,sel){if(!it)return "<div class='slot"+(sel?" sel":"")+"'>"+(ph?"<img class=ph src='/icon/"+ph+".png?v=6'>":"")+"</div>";
+function slotHTML(it,ph,sel){if(!it)return "<div class='slot"+(sel?" sel":"")+"'>"+(ph?"<img class=ph src='/icon/"+ph+".png?v=7'>":"")+"</div>";
   const tip=encodeURIComponent(JSON.stringify({n:it.name,e:it.ench,g:it.glint,d:it.dmg,m:it.max,id:it.id,c:it.count}));
   const dur=it.max&&it.dmg>0?"<div class=dur><b style='width:"+(100*(1-it.dmg/it.max))+"%;background:hsl("+Math.round(120*(1-it.dmg/it.max))+",90%,45%)'></b></div>":"";
-  const glint=it.glint?"<div class=glint style=\"-webkit-mask-image:url('/icon/"+esc(it.id)+".png?v=6');mask-image:url('/icon/"+esc(it.id)+".png?v=6')\"></div>":"";
+  const glint=it.glint?"<div class=glint style=\"-webkit-mask-image:url('/icon/"+esc(it.id)+".png?v=7');mask-image:url('/icon/"+esc(it.id)+".png?v=7')\"></div>":"";
   const liq=it.tint?"<div class=liq style='background-color:"+esc(it.tint)+"'></div>":"";
-  return "<div class='slot"+(sel?" sel":"")+"' data-tip='"+tip+"'>"+liq+"<img src='/icon/"+esc(it.id)+".png?v=6' alt='"+esc(it.name.slice(0,10))+"'>"+glint+dur+(it.count>1?"<span class=cnt>"+it.count+"</span>":"")+"</div>"}
+  return "<div class='slot"+(sel?" sel":"")+"' data-tip='"+tip+"'>"+liq+"<img src='/icon/"+esc(it.id)+".png?v=7' alt='"+esc(it.name.slice(0,10))+"'>"+glint+dur+(it.count>1?"<span class=cnt>"+it.count+"</span>":"")+"</div>"}
 /* a failed icon gets one more try (a phone can drop image loads), then its name */
 function icoErr(i){if(!i.dataset.r){i.dataset.r=1;setTimeout(()=>i.src+="&r=1",800)}else i.outerHTML="<div class=fb>"+esc(i.alt)+"</div>"}
 /* not an onerror attribute: the CSP allows only the page's own scripts (error does not bubble: capture) */
@@ -1146,7 +1146,7 @@ function setHTML(el,h){if(el._h!==h){el._h=h;el.innerHTML=h}}
 function invGrid(items,slots,sel){const by={};items.forEach(i=>by[i.slot]=i);return slots.map(s=>s==="gap"?"<div class=gap></div>":slotHTML(by[s],null,s===sel)).join("")}
 function range(a,b){const r=[];for(let i=a;i<=b;i++)r.push(i);return r}
 function dur2(sec){const d=Math.floor(sec/86400),h=Math.floor(sec%86400/3600),m=Math.floor(sec%3600/60);return d?_t("%s d %s h",d,h):h?h+" h "+m+" min":m+" min"}
-function topList(title,rows){return "<div><h4>"+title+"</h4><ol>"+(rows.length?rows.map(r=>"<li><img src='/icon/"+esc(r[2])+".png?v=6'>"+esc(r[0])+"<span>"+r[1].toLocaleString(LOC)+"</span></li>").join(""):"<li style='color:var(--mute)'>"+_t("none")+"</li>")+"</ol></div>"}
+function topList(title,rows){return "<div><h4>"+title+"</h4><ol>"+(rows.length?rows.map(r=>"<li><img src='/icon/"+esc(r[2])+".png?v=7'>"+esc(r[0])+"<span>"+r[1].toLocaleString(LOC)+"</span></li>").join(""):"<li style='color:var(--mute)'>"+_t("none")+"</li>")+"</ol></div>"}
 function renderPlayer(first){const d=P.cur;if(!d)return;const box=$("#pl-detail");
   if(first||!$("#scene")){box.innerHTML="<div class='card'><div class=pl-head><div><h2 id=pl-name></h2><div class=pl-meta id=pl-meta></div></div><div class=pos id=pl-pos></div></div>"+
     "<div class=pl-top><div class=viewer id=viewer><div class=shadow></div><div class=scene id=scene></div><div class=hint>"+_t("drag to rotate")+"</div></div><div class=vitals id=pl-vitals></div></div></div>"+
