@@ -429,7 +429,8 @@ def icon_path(iid):
         ns, n = iid.split(":", 1)
         if ns != "minecraft":
             p = os.path.join(ASSETS, "mods", ns, n.replace("/", "__") + ".png")
-            if re.match(r"^[a-z0-9_-][a-z0-9_.-]*$", ns) and re.match(r"^[a-z0-9_-][a-z0-9_.-]*(/[a-z0-9_-][a-z0-9_.-]*)*$", n) and os.path.isfile(p):
+            from .assets import _NS_OK, _ID_OK   # the same rule that wrote the files; here, not on top: assets is heavy to import
+            if _NS_OK.match(ns) and _ID_OK.match(n) and os.path.isfile(p):
                 _ICON_CACHE[iid] = p
                 return p
             return None

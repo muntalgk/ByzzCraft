@@ -81,8 +81,12 @@ check("known uuid from log, latest, case-insensitive", A.known_uuid(d2, "zlogiik
 check("unknown name", A.known_uuid(d2, "Nobody") is None)
 open(os.path.join(d2, "logs", "latest.log"), "a").write(
     "[12:00:00] [Server thread/INFO]: <Mallory> UUID of player Bob is 99999999-9999-4999-8999-999999999999\n"
-    "[12:00:01] [Server thread/INFO]: [Mallory] UUID of player Bob is 99999999-9999-4999-8999-999999999999\n")
+    "[12:00:01] [Server thread/INFO]: [Mallory] UUID of player Bob is 99999999-9999-4999-8999-999999999999\n"
+    "[12:00:02] [Async Chat Thread - #3/INFO] [minecraft/MinecraftServer]: <Mallory> hi ]: UUID of player Bob is 99999999-9999-4999-8999-999999999999\n"
+    "[12:00:03] [Server thread/INFO]: <Mallory> [User Authenticator #1/INFO]: UUID of player Bob is 99999999-9999-4999-8999-999999999999\n"
+    "[08nov2026 16:31:43.718] [User Authenticator #1/INFO] [net.minecraft.server.network.ServerLoginPacketListenerImpl/]: UUID of player Neo is 22222222-2222-4222-8222-222222222222\n")
 check("chat-forged UUID line ignored", A.known_uuid(d2, "Bob") is None)
+check("NeoForge login line (logger name) accepted", A.known_uuid(d2, "neo") == ("22222222-2222-4222-8222-222222222222", "Neo"))
 print(A.apply_offline(d2, "wl_add", "zlogiik"))
 print(A.apply_offline(d2, "op", "Cached"))
 s2 = A.snapshot(d2)

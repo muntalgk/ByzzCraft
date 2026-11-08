@@ -75,7 +75,8 @@ def lookup(name):
     return str(_uuid.UUID(d["id"])), d["name"]
 
 
-LOG_UUID_RE = re.compile(r"\]: UUID of player (\w{1,16}) is ([0-9a-fA-F-]{36})[ \t\r]*$", re.M)   # anchored: a chat line has "<Name>" after "]: "
+# only the login thread's own line, from the start of the line: chat can put "]: UUID of player" inside a message
+LOG_UUID_RE = re.compile(r"^\[[^\]\n]*\] \[User Authenticator #\d+/INFO\](?: \[[^\]\n]*\])?: UUID of player (\w{1,16}) is ([0-9a-fA-F-]{36})[ \t\r]*$", re.M)
 
 
 def known_uuid(server_dir, name, known=None):

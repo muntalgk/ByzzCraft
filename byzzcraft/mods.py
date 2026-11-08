@@ -232,8 +232,11 @@ def _pick(v):
 
 
 def _install(server_dir, v, old=None):
-    """Downloads and checks the version's file, then (and only then) trashes the jar it replaces and writes it. Returns the file name."""
+    """Downloads and checks the version's file, then (and only then) trashes the jar it replaces and writes it. Returns the file name.
+    A disabled old jar stays disabled: the new one is written as .jar.disabled."""
     name, url, s512, s1 = _pick(v)
+    if old and old.endswith(".disabled"):
+        name += ".disabled"
     data = _download(url, s512, s1)
     md = os.path.join(server_dir, "mods")
     tmp = os.path.join(md, name + ".panel-tmp")
@@ -263,7 +266,8 @@ def install(server_dir, slug, ld, mc):
     if not mc:
         return {"ok": False, "message": t("Cannot tell the Minecraft version of this server.")}
     inst = installed(server_dir)   # enabled or .disabled: a second copy of the same mod would crash the server at start
-    if any(m["id"].lower() == slug.lower() for m in inst):
+    norm = lambda x: re.sub(r"[-_ ]", "", x.lower())   # noqa: E731  (mod id cloth_config = Modrinth slug cloth-config)
+    if any(norm(m["id"]) == norm(slug) for m in inst if m["id"]):
         return {"ok": False, "message": t("%s is already installed.") % slug}
     try:
         vs = _api("project/%s/version" % quote(slug), loaders=json.dumps([ld]), game_versions=json.dumps([mc]))
@@ -281,8 +285,10 @@ def install(server_dir, slug, ld, mc):
                 if p["slug"].lower() not in have and p["title"].lower() not in have:
                     deps.append(p["title"])
         name = _install(server_dir, v)
-        return {"ok": True, "file": name, "version": v["version_number"], "deps": deps,
-                "message": t("%s installed. Restart the server to load it.") % ("%s %s" % (slug, v["version_number"]))}
+        msg = t("%s installed. Restart the server to load it.") % ("%s %s" % (slug, v["version_number"]))
+        if v.get("version_type", "release") != "release":   # updates offer releases only: say so now
+            msg += " " + t("It is a test version (%s): no automatic updates until the mod has a release.") % v.get("version_type")
+        return {"ok": True, "file": name, "version": v["version_number"], "deps": deps, "message": msg}
     except FsError:
         return _busy()
     except ERR as e:

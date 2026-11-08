@@ -696,26 +696,23 @@ class _Mods:
             self.cache[ref] = d if isinstance(d, dict) else {}
         return self.cache[ref]
 
-    def textures(self, model, depth=0):
-        ns, _, p = model.rpartition(":")
-        m = self.json("assets/%s/models/%s.json" % (ns or "minecraft", p))
-        t = self.textures(m["parent"], depth + 1) if isinstance(m.get("parent"), str) and depth < 8 else {}
-        t.update({k: v for k, v in (m.get("textures") if isinstance(m.get("textures"), dict) else {}).items() if isinstance(v, str)})
-        return t
-
-    def face(self, model, faces=FACES):
-        """PNG of the first usable face of a model."""
-        t = self.textures(model)
+    def face_ref(self, model, faces=FACES):
+        """Texture reference of the first usable face of a model (parent chain, "#ref" chains, 26.x sprites), None if none."""
+        t = resolve_model(self.model, model)["textures"] if model else {}
         for f in faces:
             v = t.get(f)
             for _ in range(8):   # "#ref" chains
-                if not (v and v.startswith("#")):
+                if not (isinstance(v, str) and v.startswith("#")):
                     break
                 v = t.get(v[1:])
-            d = self.png(v) if v and not v.startswith("#") else None
-            if d:
-                return d
+            if isinstance(v, str) and v and not v.startswith("#") and self.png(v):
+                return v
         return None
+
+    def face(self, model, faces=FACES):
+        """PNG of the first usable face of a model."""
+        v = self.face_ref(model, faces)
+        return self.png(v) if v else None
 
 
 def _first_frame(d):
@@ -730,9 +727,14 @@ def _first_frame(d):
     return d
 
 
-def extract_mods(server_dir, dest, lang="en"):
+class Cancelled(Exception):
+    """The build was asked to stop (a mod is being changed: on Windows the open jars could not be renamed)."""
+
+
+def extract_mods(server_dir, dest, lang="en", stop=None):
     """Builds dest/ (icons <ns>/<id>.png, lang.json, texcolors.json) from the enabled jars in mods/, swapped in whole.
-    0 when the mods are the same as in the last build, 1 when rebuilt, 2 when rebuilt and the block colors differ from the previous build."""
+    0 when the mods are the same as in the last build, 1 when rebuilt, 2 when rebuilt and the block colors differ from the previous build.
+    stop: an Event; once set, the jars are closed and Cancelled is raised, nothing is swapped in."""
     key = mods_key(server_dir, lang)
     if key is None:
         return 0
@@ -748,9 +750,15 @@ def extract_mods(server_dir, dest, lang="en"):
     shutil.rmtree(tmp, ignore_errors=True)
     os.makedirs(tmp)
     names, colors, ids = {}, {}, {}
-    load, renders = texloader(M.png), {}
+    load, renders, tex_colors = texloader(M.png), {}, {}
+    real_tmp = os.path.realpath(tmp) + os.sep
+
+    def check():
+        if stop is not None and stop.is_set():
+            raise Cancelled()
     try:
         for path in M.idx:
+            check()
             a = path.split("/", 3)
             if len(a) < 4 or not _NS_OK.match(a[1]):
                 continue
@@ -761,13 +769,17 @@ def extract_mods(server_dir, dest, lang="en"):
                 ids.setdefault((ns, rest[5:rest.rindex(".")]), 1)
             elif a[2] == "blockstates" and rest.endswith(".json"):
                 try:
-                    d = M.face(_first_model(M.json(path)) or "", ("top", "all", "end", "side", "particle", "texture", "front"))
-                    c = tex_color(d) if d else None
+                    v = M.face_ref(_first_model(M.json(path)) or "", ("top", "all", "end", "side", "particle", "texture", "front"))
+                    if v not in tex_colors:   # many blocks share a texture: decode it once
+                        d = M.png(v) if v else None
+                        tex_colors[v] = tex_color(d) if d else None
+                    c = tex_colors[v]
                     if c:
                         colors[ns + ":" + rest[:-5]] = c
                 except Exception:
                     pass
         for ns, iid in ids:
+            check()
             if not _ID_OK.match(iid):
                 continue
             try:
@@ -786,7 +798,7 @@ def extract_mods(server_dir, dest, lang="en"):
                     d = d and _first_frame(d)
                 if d:
                     out = os.path.join(tmp, ns, iid.replace("/", "__") + ".png")
-                    if not os.path.realpath(out).startswith(os.path.realpath(tmp) + os.sep):
+                    if not os.path.realpath(out).startswith(real_tmp):
                         continue
                     os.makedirs(os.path.dirname(out), exist_ok=True)
                     with open(out, "wb") as f:
@@ -798,6 +810,9 @@ def extract_mods(server_dir, dest, lang="en"):
                 b = os.path.basename(path)
                 if "/lang/" in path and b.endswith(".json") and (b == "en_us.json" if code else lang != "en" and b.startswith(lang + "_")):
                     names.update({k: v for k, v in M.json(path).items() if isinstance(v, str) and k.startswith(LANG_PREFIX)})
+    except Cancelled:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
     finally:
         for z in M.zips:
             z.close()

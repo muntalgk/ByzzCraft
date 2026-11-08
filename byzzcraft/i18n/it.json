@@ -161,6 +161,7 @@
  "Download of %s failed: %s": "Download di %s non riuscito: %s",
  "Download the zip": "Scarica lo zip",
  "Downloading %s...": "Download di %s in corso...",
+ "It is a test version (%s): no automatic updates until the mod has a release.": "È una versione di prova (%s): niente aggiornamenti automatici finché la mod non ha una release.",
  "Preparing the icons and names of the mods...": "Preparazione di icone e nomi delle mod in corso...",
  "Icons of the mods not prepared: %s": "Icone delle mod non preparate: %s",
  "Downloads can take a minute.": "I download possono richiedere un minuto.",

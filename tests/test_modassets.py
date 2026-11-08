@@ -68,6 +68,29 @@ try:
     check("other language: rebuilt, same colors", A.extract_mods(sd, dest, "en") == 1 and json.load(open(os.path.join(dest, "lang.json")))["item.alpha.tool"] == "Tool")
     check("no leftovers", not os.path.exists(dest + ".tmp") and not os.path.exists(dest + ".old"))
 
+    # a change to mods/ stops the build: jars closed (Windows can rename them), nothing swapped in
+    import threading
+    jar("c.jar", {"assets/gamma/textures/item/x.png": solid((1, 1, 1))})
+    stop = threading.Event(); stop.set()
+    try:
+        A.extract_mods(sd, dest, "en", stop)
+        check("stopped build raises Cancelled", False)
+    except A.Cancelled:
+        check("stopped build raises Cancelled", True)
+    os.rename(os.path.join(md, "c.jar"), os.path.join(md, "c.jar.disabled"))   # fails on Windows if a jar stayed open
+    check("stopped build: jars closed, old build kept, no tmp", not os.path.exists(dest + ".tmp") and json.load(open(os.path.join(dest, "lang.json")))["item.alpha.tool"] == "Tool"
+          and not os.path.exists(os.path.join(dest, "gamma")))
+    os.remove(os.path.join(md, "c.jar.disabled"))
+
+    # 26.x sprite textures reach the flat icon and the map color
+    jar("d.jar", {"assets/delta/models/block/stone.json": J({"parent": "minecraft:block/cube_all", "textures": {"all": {"sprite": "delta:block/stone"}}}),
+                  "assets/delta/textures/block/stone.png": solid((50, 60, 70)),
+                  "assets/delta/blockstates/stone.json": J({"variants": {"": {"model": "delta:block/stone"}}})})
+    A.extract_mods(sd, dest, "en")
+    C = json.load(open(os.path.join(dest, "texcolors.json")))
+    check("sprite texture gives the block color", C.get("delta:stone", [0])[:3] == [50, 60, 70], C.get("delta:stone"))
+    os.remove(os.path.join(md, "d.jar"))
+
     # hostile jars: zip-slip names, huge entries, huge PNG headers, older layout
     big = png(2, 2, [[(5, 5, 5)] * 2] * 2)
     jar("evil.jar", {"assets/../items/x.json": J({"model": "evil:item/x"}), "assets/../textures/item/x.png": solid((6, 6, 6)),

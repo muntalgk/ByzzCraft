@@ -2040,7 +2040,10 @@ def mods_info():
     return {"loader": ld, "lv": lv, "mc": AS.jar_info(sd, jar)[0] or ""}
 
 
-MODS_BUILD = threading.Lock()   # one icon/name/color build at a time
+MODS_BUILD = threading.Lock()   # one icon/name/color build thread at a time
+MODS_AGAIN = threading.Event()   # the mods changed: (re)build when the running build ends
+MODS_FILES = threading.Lock()   # held while the build keeps the jars open (Windows: they cannot be renamed meanwhile)
+MODS_STOP = threading.Event()   # a change to mods/ asks the running build to close the jars now
 
 
 def build_mods_assets():
@@ -2048,22 +2051,36 @@ def build_mods_assets():
     if server_kind() != "mods":
         return
 
+    MODS_AGAIN.set()
+    if not MODS_BUILD.acquire(blocking=False):
+        return   # the running build sees MODS_AGAIN and builds once more: many changes in a row cost one build
+
     def run():
-        with MODS_BUILD:
-            JOBS["mods_assets"] = "running"   # shown in the Dashboard checks: a full build takes about a minute
-            HUB.publish("health", {})
-            try:
-                r = AS.extract_mods(CFG["server_dir"], os.path.join(MOJANG, "mods"), i18n.LANG)
-                if r:
-                    PL.mods_reset()
-                    if mapgen.reload_mod_colors() or r == 2:   # r == 2: colors differ from the last build, also across a restart
-                        shutil.rmtree(os.path.join(CACHE, "map"), ignore_errors=True)   # tiles drawn with the neutral color
-                    L.info("mods: icons, names and colors rebuilt")
-                JOBS.pop("mods_assets", None)
-            except Exception as e:  # noqa: BLE001
-                JOBS["mods_assets"] = str(e)
-                L.exception("mods assets build failed")
-            HUB.publish("health", {})
+        try:
+            while MODS_AGAIN.is_set():
+                MODS_AGAIN.clear()
+                JOBS["mods_assets"] = "running"   # shown in the Dashboard checks: a full build takes about a minute
+                HUB.publish("health", {})
+                try:
+                    with MODS_FILES:
+                        MODS_STOP.clear()
+                        r = AS.extract_mods(CFG["server_dir"], os.path.join(MOJANG, "mods"), i18n.LANG, MODS_STOP)
+                    if r:
+                        PL.mods_reset()
+                        if mapgen.reload_mod_colors() or r == 2:   # r == 2: colors differ from the last build, also across a restart
+                            shutil.rmtree(os.path.join(CACHE, "map"), ignore_errors=True)   # tiles drawn with the neutral color
+                        L.info("mods: icons, names and colors rebuilt")
+                    JOBS.pop("mods_assets", None)
+                except AS.Cancelled:
+                    JOBS.pop("mods_assets", None)   # a mod is being changed: that change asks for a new build
+                except Exception as e:  # noqa: BLE001
+                    JOBS["mods_assets"] = str(e)
+                    L.exception("mods assets build failed")
+                HUB.publish("health", {})
+        finally:
+            MODS_BUILD.release()
+        if MODS_AGAIN.is_set():   # asked between the last check and the release
+            build_mods_assets()
     threading.Thread(target=run, name="mods_assets", daemon=True).start()
 
 
@@ -2443,7 +2460,9 @@ class Handler(BaseHTTPRequestHandler):
         m = re.match(r"^/icon/((?:[a-z0-9_.-]{1,64}:)?[a-z0-9_./-]{1,128})\.png$", path)   # vanilla: name; mods: namespace:name
         if m and ".." not in m.group(1) and not m.group(1).startswith("/"):
             p = PL.icon_path(m.group(1))
-            return self.send(200, AS.icon_png(m.group(1), p), "image/png", img_cache) if p else self.send(404, b"", "image/png")
+            mod = ":" in m.group(1)   # a mod update can change the icon under the same name: kept for minutes, not a day
+            return (self.send(200, AS.icon_png(m.group(1), p), "image/png", {"Cache-Control": "private, max-age=600"} if mod else img_cache) if p
+                    else self.send(404, b"", "image/png"))
         m = re.match(r"^/hud/([a-z0-9_]{1,64})\.png$", path)
         if m:
             p = os.path.join(MOJANG, "hud", m.group(1) + ".png")
@@ -2843,8 +2862,13 @@ class Handler(BaseHTTPRequestHandler):
             if not mi:
                 return self.json(200, {"ok": False, "message": t("Mods need a modded server.")})
             op, f = self.path.rsplit("/", 1)[1], str(data.get("file", ""))
-            r = (MD.install(sd, str(data.get("slug", "")), mi["loader"], mi["mc"]) if op == "install" else MD.update(sd, f, mi["loader"], mi["mc"]) if op == "update"
-                 else MD.toggle(sd, f) if op == "toggle" else MD.remove(sd, f))
+            while not MODS_FILES.acquire(timeout=0.2):
+                MODS_STOP.set()   # again each time: a build may have just started and cleared it
+            try:
+                r = (MD.install(sd, str(data.get("slug", "")), mi["loader"], mi["mc"]) if op == "install" else MD.update(sd, f, mi["loader"], mi["mc"]) if op == "update"
+                     else MD.toggle(sd, f) if op == "toggle" else MD.remove(sd, f))
+            finally:
+                MODS_FILES.release()
             if r["ok"]:
                 log("%s %s mod %s" % (s["user"], op, r.get("file") or f or data.get("slug")))
                 build_mods_assets()
