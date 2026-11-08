@@ -506,6 +506,7 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
     <button class="tab nb" data-v="players"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.8c1.6.8 2.7 2.5 3 5.2"/></svg>{{Players}}<span class="cnt" id="cnt-pl"></span></button>
     <button class="tab" data-v="timeline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg>Timeline</button>
     <button class="tab" data-v="metrics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 15 4-5 3 3 5-7"/></svg>{{Metrics}}</button>
+    <button class="tab" data-v="mods" id="tab-md" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3 4 7v10l8 4 8-4V7zM4 7l8 4 8-4M12 11v10"/></svg>{{Mods}}</button>
     <p class="nav-sec adm">{{Administration}}</p>
     <button class="tab nb adm" data-v="console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-5-6-5M12 19h8"/></svg>Console</button>
     <button class="tab adm" data-v="props" data-s="Config"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>{{Settings}}</button>
@@ -641,6 +642,13 @@ input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}input[type=checkbox
       <div class="ac-list" id="plg-list"></div>
     </section>
 
+    <!-- MODS -->
+    <section id="v-mods" hidden>
+      <div class="toolbar"><a class="btn primary" id="md-pack" href="/api/mods/pack" download>{{Download the mods for players}}</a><button class="btn adm-only" id="md-browse">{{Browse Modrinth}}</button><span class="lock">{{Mods load when the server starts.}}</span></div>
+      <p class="pl-note adm-only" id="md-note" hidden>{{Restart the server to apply the changes.}} <button class="sb" id="md-restart">{{Restart}}</button></p>
+      <div class="ac-list" id="mod-list"></div>
+    </section>
+
     <!-- BACKUP -->
     <section id="v-backups" hidden>
       <div class="bk-top">
@@ -742,14 +750,14 @@ if(!BOOT.admin){$$(".adm,.adm-only").forEach(e=>e.hidden=true);$(".tab[data-v=ti
 function renderMe(){const f=$("#me-face");const me=BOOT.mc&&(P.roster||[]).find(p=>p.name.toLowerCase()==BOOT.mc.toLowerCase());
   if(me){if(f.dataset.u!=me.uuid){f.dataset.u=me.uuid;f.className="me-face fc";f.style.cssText=faceStyle(me.uuid,32);f.textContent=""}}
   else if(!f.dataset.u)f.textContent=(BOOT.mc||BOOT.user).charAt(0).toUpperCase()}
-const TITLES={dash:"Dashboard",map:_t("Map"),players:_t("Players"),timeline:"Timeline",metrics:_t("Metrics"),console:"Console",props:_t("Server settings"),configs:_t("Config files"),plugins:_t("Plugins"),backups:"Backup",access:_t("Access"),audit:_t("Panel log"),account:_t("Account")};
+const TITLES={dash:"Dashboard",map:_t("Map"),players:_t("Players"),timeline:"Timeline",metrics:_t("Metrics"),console:"Console",props:_t("Server settings"),configs:_t("Config files"),plugins:_t("Plugins"),mods:_t("Mods"),backups:"Backup",access:_t("Access"),audit:_t("Panel log"),account:_t("Account")};
 const SUBS={dash:()=>_t("Server and world"),map:()=>matchMedia("(pointer:coarse)").matches?_t("Drag and pinch"):_t("Right-click to add a marker"),
   players:()=>{const r=P.roster||[],n=r.filter(p=>p.online).length;return _t("%s players",r.length)+" · "+(n?_t("%s online",n):_t("nobody online"))},
-  timeline:()=>_t("Sessions and events"),metrics:()=>_t("Last 10 minutes"),console:()=>_t("Log and commands"),props:()=>"server.properties",configs:()=>_t("Paper, Spigot and mods"),plugins:()=>PL.mc?_t("Hangar · Minecraft %s",PL.mc):"Hangar",access:()=>_t("Whitelist, OP and bans"),audit:()=>_t("Who did what"),account:()=>BOOT.admin?_t("Password and users"):_t("Your password"),
+  timeline:()=>_t("Sessions and events"),metrics:()=>_t("Last 10 minutes"),console:()=>_t("Log and commands"),props:()=>"server.properties",configs:()=>_t("Paper, Spigot and mods"),plugins:()=>PL.mc?_t("Hangar · Minecraft %s",PL.mc):"Hangar",mods:()=>MO.info.mc?_t("%s · Minecraft %s",MO.info.loader||"?",MO.info.mc):"Modrinth",access:()=>_t("Whitelist, OP and bans"),audit:()=>_t("Who did what"),account:()=>BOOT.admin?_t("Password and users"):_t("Your password"),
   backups:()=>BK.items?_t("%s backups",BK.items.length)+" · "+gb(BK.items.reduce((a,e)=>a+e.size,0))+" · "+_t("%s free",gb(BK.disk.free)):_t("World backups")};
 let CUR="dash";function setSub(){$("#v-sub").textContent=SUBS[CUR]?SUBS[CUR]():""}
 function go(v){if(!TITLES[v])v="dash";CUR=v;document.body.dataset.v=v;$$(".tab").forEach(t=>{t.classList.toggle("on",t.dataset.v==v);});$("#more").classList.toggle("on",!!$(".tab.on:not(.nb)"));navMore(0);Object.keys(TITLES).forEach(x=>$("#v-"+x).hidden=x!=v);
-  $("#v-title").textContent=TITLES[v];setSub();if(v=="props"){loadProps();PS.load()}if(v=="configs")CF.load();if(v=="plugins")PL.load();if(v=="console"){renderConsole();setTimeout(()=>$("#cmd").focus(),50)}if(v=="metrics")charts.forEach(c=>c.draw());
+  $("#v-title").textContent=TITLES[v];setSub();if(v=="props"){loadProps();PS.load()}if(v=="configs")CF.load();if(v=="plugins")PL.load();if(v=="mods")MO.load();if(v=="console"){renderConsole();setTimeout(()=>$("#cmd").focus(),50)}if(v=="metrics")charts.forEach(c=>c.draw());
   if(v=="players")loadPlayers();if(v=="map")MAPF.show();if(v=="timeline")TLV.open();if(v=="dash")MAPM.show();if(v=="backups")BK.load();if(v=="access")ACV.load();if(v=="audit")RGV.load();if(v=="account")ACC.load();location.hash=v;scrollTo(0,0)}
 $$(".tab").forEach(t=>t.onclick=()=>go(t.dataset.v));
 function navMore(o){$("nav").classList.toggle("open",o);$("#nav-bd").hidden=!o}
@@ -879,7 +887,7 @@ function connect(){if(es)es.close();es=new EventSource("/api/events");
   es.addEventListener("notice",e=>{const d=JSON.parse(e.data);toast(d.message,d.ok?"good":"bad");HL.load()});
   es.addEventListener("health",()=>HL.load());
   es.addEventListener("backup_done",e=>{const d=JSON.parse(e.data);toast(d.message,d.ok?"good":"bad");BK.load()});
-  es.addEventListener("plugins",()=>{if(CUR=="plugins")PL.load()});
+  es.addEventListener("plugins",()=>{if(CUR=="plugins")PL.load()});es.addEventListener("mods",()=>{if(CUR=="mods")MO.load()});
   es.addEventListener("markers",e=>{const d=JSON.parse(e.data);MAPF.reloadIf(d.dim);MAPM.reloadIf(d.dim)});
   es.addEventListener("status",e=>{S.status=JSON.parse(e.data);renderStatus()});
   es.addEventListener("metrics",e=>{S.metrics.push(JSON.parse(e.data));if(S.metrics.length>400)S.metrics.shift();renderMetrics()});
@@ -1018,14 +1026,51 @@ const PL={mc:"",inst:[],
 $("#pl-browse").onclick=()=>PL.browse();
 $("#pl-restart").onclick=async()=>{await act("/api/restart",S.status.online?_t("Players are online: they will be disconnected. Restart?"):_t("Restart the server?"),_t("Restart"),true);$("#pl-note").hidden=true};
 if(BOOT.admin)PL.load();
+/* mods (NeoForge, Forge, Fabric, Quilt) from Modrinth, and the pack players need */
+const MO={info:{},inst:[],
+  async load(){const r=await GET("/api/mods");if(!r)return;const j=await r.json();$("#tab-md").hidden=!j.enabled;if(!j.enabled){if(CUR=="mods")go("dash");return}
+    this.info=j.info;this.inst=j.installed;setSub();const l=$("#mod-list");l.textContent="";
+    if(!this.inst.length)l.innerHTML="<div class='card' style='color:var(--mute)'>"+esc(_t("No mods installed."))+"</div>";
+    this.inst.forEach(m=>{const d=document.createElement("div");d.className="acr";if(!m.enabled)d.style.opacity=".6";
+      d.innerHTML="<div class='ini'>"+esc((m.name[0]||"?").toUpperCase())+"</div><div class='tx'><b>"+esc(m.name)+"</b><small>"+esc(m.version)+" · "+esc(m.file)+" · "+nf(m.size/1048576,2)+" MB"
+        +(m.server_only?" · "+esc(_t("server only: not in the players' pack")):"")+"</small></div><div class='acts adm-only'>"+(m.update?"<button class='sb on' data-up>"+esc(_t("Update to %s",m.update))+"</button>":"")
+        +"<button class='sb' data-tg>"+esc(m.enabled?_t("Disable"):_t("Enable"))+"</button><button class='sb red'>"+esc(_t("Remove"))+"</button></div>";
+      if(!BOOT.admin){l.append(d);return}
+      d.querySelector(".red").onclick=()=>this.remove(m);d.querySelector("[data-tg]").onclick=()=>this.call("/api/mods/toggle",{file:m.file});
+      const u=d.querySelector("[data-up]");if(u)u.onclick=()=>this.call("/api/mods/update",{file:m.file},u);l.append(d)})},
+  async call(url,body,b){if(b){b.disabled=true;b.textContent=_t("Installing...")}const k=await api(url,body);toast(k.message,k.ok?"good":"bad");
+    if(k.ok){this.note();(k.deps||[]).length&&toast(_t("Also needs: %s",k.deps.join(", ")),"bad")}this.load();return k},
+  note(){$("#md-note").hidden=S.status.state!="on"},
+  async remove(m){if(!await ask(_t("Remove"),_t("Remove %s? The file goes to the trash.",m.file),_t("Remove")))return;this.call("/api/mods/remove",{file:m.file})},
+  browse(){const bg=document.createElement("div");bg.className="modal-bg";let off=0,tm,seq=0;
+    bg.innerHTML="<div class='modal pl-m' role='dialog' aria-modal='true' aria-labelledby='pl-t'><h3><span id='pl-t'>"+esc(_t("Browse Modrinth"))+"</span><button class='btn' data-x aria-label='"+esc(_t("Close"))+"'>×</button></h3>"
+      +"<input class='search' type='search' placeholder='"+esc(_t("Search mods"))+"' aria-label='"+esc(_t("Search mods"))+"'><div class='pl-res' aria-live='polite'></div></div>";
+    document.body.append(bg);const m=bg.firstChild,inp=m.querySelector("input"),res=m.querySelector(".pl-res"),prev=document.activeElement;
+    const close=()=>{bg.remove();document.removeEventListener("keydown",kd);prev&&prev.focus&&prev.focus()},
+      kd=e=>{if(e.key=="Escape")close()};
+    document.addEventListener("keydown",kd);m.querySelector("[data-x]").onclick=close;bg.onclick=e=>{if(e.target==bg)close()};
+    const run=async more=>{const my=++seq;if(!more){off=0;res.textContent=""}const old=res.querySelector("[data-more]");if(old)old.remove();
+      const r=await GET("/api/mods/search?q="+encodeURIComponent(inp.value.trim())+"&offset="+off);if(my!=seq)return;const j=r?await r.json():{ok:false,message:_t("Panel unreachable")};
+      if(!j.ok){toast(j.message,"bad");return}if(!j.results.length&&!more)res.innerHTML="<p class='lock'>"+esc(_t("No results."))+"</p>";
+      j.results.forEach(x=>{const have=this.inst.some(p=>p.id==x.slug||p.name.toLowerCase()==x.name.toLowerCase()),c=document.createElement("div");c.className="acr";
+        c.innerHTML=(x.avatar?"<img class='ini' alt='' loading='lazy' referrerpolicy='no-referrer' src='"+esc(x.avatar)+"'>":"<div class='ini'>"+esc(x.name[0].toUpperCase())+"</div>")
+          +"<div class='tx'><b><a href='"+esc(x.url)+"' target='_blank' rel='noopener'>"+esc(x.name)+"</a></b><small>"+esc(_t("by %s",x.owner))+" · "+esc(_t("%s downloads",x.downloads.toLocaleString(LOC)))+"</small><p>"+esc(x.description)+"</p></div>"
+          +"<div class='acts'><button class='btn"+(have?"":" primary")+"'"+(have?" disabled":"")+">"+esc(have?_t("Installed"):_t("Install"))+"</button></div>";
+        const b=c.querySelector("button");b.onclick=async()=>{const k=await this.call("/api/mods/install",{slug:x.slug},b);if(k.ok){b.textContent=_t("Installed, restart to load")}else{b.disabled=false;b.textContent=_t("Install")}};
+        res.append(c)});
+      off+=j.results.length;if(j.more){const b=document.createElement("button");b.className="btn";b.dataset.more=1;b.textContent=_t("Load more");b.onclick=()=>run(true);res.append(b)}};
+    inp.oninput=()=>{clearTimeout(tm);tm=setTimeout(()=>run(false),350)};run(false);setTimeout(()=>inp.focus(),30)}};
+$("#md-browse").onclick=()=>MO.browse();
+$("#md-restart").onclick=async()=>{await act("/api/restart",S.status.online?_t("Players are online: they will be disconnected. Restart?"):_t("Restart the server?"),_t("Restart"),true);$("#md-note").hidden=true};
+GET("/api/mods").then(async r=>{if(r)$("#tab-md").hidden=!(await r.json()).enabled});
 async function saveProps(restart){const j=await api("/api/properties",{changes:S.edits,restart});toast(j.message,j.ok?"good":"bad");if(j.ok){await loadProps();if(restart)go("dash")}}
 const PS={async load(){if(!BOOT.admin)return;const r=await GET("/api/panel-settings");if(r)this.render(await r.json())},
-  render(j){$("#ps-ram").value=j.ram;$("#ps-ram").placeholder=_t("automatic: %s",j.ram_auto);$("#ps-stop").value=j.auto_stop_minutes;
+  render(j){$("#ps-ram").value=j.ram;$("#ps-ram").placeholder=j.ram_script?_t("max from the start script: %s",j.ram_script):_t("automatic: %s",j.ram_auto);$("#ps-stop").value=j.auto_stop_minutes;
     $("#ps-addr").value=j.mc_address;$("#ps-addr").placeholder=BOOT.auto_address||_t("e.g. play.example.com");$("#ps-args").value=j.java_args;$("#ps-bk").checked=j.backup_on_start;$("#ps-ar").checked=j.auto_restart;
     $("#ps-lang").innerHTML=j.langs.map(([c,n])=>"<option value='"+esc(c)+"'>"+esc(n)+"</option>").join("");$("#ps-lang").value=j.lang;
     ["#ps-ram","#ps-args","#ps-bk"].forEach(s=>$(s).disabled=!!j.start_script);
     $("#ps-info").textContent=j.start_script?_t("Started by your script %s: RAM, Java flags and the backup before the start are set there.",j.start_script)
-      :_t("Server %s · %s · this machine has %s GB of RAM",j.jar||_t("not found"),
+      :_t("Server %s · %s · this machine has %s GB of RAM",(j.jar||_t("not found"))+(j.loader[0]?" ("+j.loader[0]+" "+j.loader[1]+")":""),
         !j.java?_t("Java not found"):"Java "+(j.java_need||"")+" ("+(j.java_bundled?_t("downloaded by the panel"):_t("installed on the system"))+")",nf(j.ram_total/1024,1))},
   async save(){const j=await api("/api/panel-settings",{ram:$("#ps-ram").value,java_args:$("#ps-args").value,backup_on_start:$("#ps-bk").checked,auto_restart:$("#ps-ar").checked,
     auto_stop_minutes:+$("#ps-stop").value||0,mc_address:$("#ps-addr").value,lang:$("#ps-lang").value});toast(j.message,j.ok?"good":"bad");

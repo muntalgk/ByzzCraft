@@ -75,6 +75,39 @@ def lookup(name):
     return str(_uuid.UUID(d["id"])), d["name"]
 
 
+LOG_UUID_RE = re.compile(r"\]: UUID of player (\w{1,16}) is ([0-9a-fA-F-]{36})[ \t\r]*$", re.M)   # anchored: a chat line has "<Name>" after "]: "
+
+
+def known_uuid(server_dir, name, known=None):
+    """(uuid, exact name) without network: usercache.json, then known {uuid: name}, then the login lines in
+    logs/latest.log (the latest wins). None if the server never saw the name."""
+    n = name.lower()
+    try:
+        with open(os.path.join(server_dir, "usercache.json"), encoding="utf-8-sig") as f:
+            for e in json.load(f):
+                if isinstance(e, dict) and str(e.get("name", "")).lower() == n and e.get("uuid"):
+                    return str(e["uuid"]), e["name"]
+    except (OSError, ValueError, TypeError):
+        pass
+    for u, kn in (known or {}).items():
+        if kn.lower() == n:
+            return u, kn
+    try:
+        with open(os.path.join(server_dir, "logs", "latest.log"), "rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - 4_000_000))   # shortcut: only the last 4 MB of the log
+            text = f.read().decode("utf-8", "replace")
+    except OSError:
+        return None
+    for m in reversed(list(LOG_UUID_RE.finditer(text))):
+        if m.group(1).lower() == n:
+            try:
+                return str(_uuid.UUID(m.group(2))), m.group(1)
+            except ValueError:
+                pass
+    return None
+
+
 def _profile(server_dir, name, known, offline=False):
     """UUID from the server files or from players already seen, otherwise from Mojang."""
     for key in ("whitelist", "ops", "bans"):
@@ -89,6 +122,9 @@ def _profile(server_dir, name, known, offline=False):
     try:
         p = lookup(name)
     except (OSError, ValueError, KeyError) as ex:
+        k = known_uuid(server_dir, name, known)   # Mojang down or timed out: the server already knows this player
+        if k:
+            return k
         raise ValueError(t("Cannot reach Mojang for the UUID of %s (%s)") % (name, ex))
     if not p:
         raise ValueError(t("Player %s does not exist") % name)
@@ -111,6 +147,17 @@ def command(action, name, reason=""):
 def resolve(server_dir, action, name, known=None, offline=False):
     """UUID and exact name for the actions that add someone (outside any lock: Mojang can take seconds)."""
     return _profile(server_dir, name, known, offline) if action in ("wl_add", "op", "ban") else None
+
+
+def apply_known(server_dir, action, name, known=None, who="panel"):
+    """Server on but its own Mojang lookup failed ("That player does not exist"): write the files with the UUID the
+    server already knows. Returns (message, needs_reload) or None if the UUID is unknown or the action is not wl_add/op.
+    The caller holds the panel LOCK. Duplicates are refused by apply_offline."""
+    prof = known_uuid(server_dir, name, known) if action in ("wl_add", "op") else None
+    if not prof:
+        return None
+    msg = apply_offline(server_dir, action, name, who=who, profile=prof)
+    return msg, action == "wl_add"
 
 
 def apply_offline(server_dir, action, name, reason="", who="panel", profile=None):

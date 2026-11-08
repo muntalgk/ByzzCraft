@@ -66,6 +66,34 @@ print(A.apply_offline(d, "wl_add", "Dinnerbone", profile=("61699b2e-d327-4a01-9f
 check("missing file = new list", [e["name"] for e in A.snapshot(d)["whitelist"]] == ["Dinnerbone"])
 off = A.resolve(d, "wl_add", "Notch", offline=True)
 check("offline uuid v3 of Notch", off == ("b50ad385-829d-3141-a216-7e7d7539ba7f", "Notch") and off[0][14] == "3", off)
+# Mojang down: UUID known from usercache.json / logs/latest.log
+def _down(name):
+    raise OSError("Read timed out")
+A.lookup = _down
+d2 = tempfile.mkdtemp(prefix="acc_test2_")
+os.makedirs(os.path.join(d2, "logs"))
+json.dump([{"name": "Cached", "uuid": "11111111-1111-4111-8111-111111111111"}], open(os.path.join(d2, "usercache.json"), "w"))
+open(os.path.join(d2, "logs", "latest.log"), "w").write(
+    "[12:00:00] [User Authenticator #1/INFO]: UUID of player zLogiiK is 00000000-0000-4000-8000-000000000000\n"
+    "[12:00:00] [User Authenticator #1/INFO]: UUID of player zLogiiK is b07a9ad4-4f95-471f-b882-f642d30398dd\n")
+check("known uuid from usercache", A.known_uuid(d2, "cached") == ("11111111-1111-4111-8111-111111111111", "Cached"))
+check("known uuid from log, latest, case-insensitive", A.known_uuid(d2, "zlogiik") == ("b07a9ad4-4f95-471f-b882-f642d30398dd", "zLogiiK"))
+check("unknown name", A.known_uuid(d2, "Nobody") is None)
+open(os.path.join(d2, "logs", "latest.log"), "a").write(
+    "[12:00:00] [Server thread/INFO]: <Mallory> UUID of player Bob is 99999999-9999-4999-8999-999999999999\n"
+    "[12:00:01] [Server thread/INFO]: [Mallory] UUID of player Bob is 99999999-9999-4999-8999-999999999999\n")
+check("chat-forged UUID line ignored", A.known_uuid(d2, "Bob") is None)
+print(A.apply_offline(d2, "wl_add", "zlogiik"))
+print(A.apply_offline(d2, "op", "Cached"))
+s2 = A.snapshot(d2)
+check("offline wl_add/op with Mojang down", s2["whitelist"] == [{"uuid": "b07a9ad4-4f95-471f-b882-f642d30398dd", "name": "zLogiiK"}]
+      and s2["ops"][0]["name"] == "Cached" and s2["ops"][0]["level"] == 4, s2)
+print(err("no duplicate on second add", A.apply_known, d2, "wl_add", "zLogiiK"))
+check("apply_known unknown name -> None", A.apply_known(d2, "op", "Nobody") is None)
+print(A.apply_known(d2, "op", "zLogiiK"))
+check("apply_known op written once", [e["name"] for e in A.snapshot(d2)["ops"]] == ["Cached", "zLogiiK"])
+print(err("Mojang down and unknown", A.apply_offline, d2, "wl_add", "Nobody"))
+shutil.rmtree(d2)
 shutil.rmtree(d)
 print("PASS %d  FAIL %d" % (ok, fail))
 sys.exit(1 if fail else 0)

@@ -33,6 +33,8 @@ from byzzcraft import access as AC  # noqa: E402
 from byzzcraft import activity as ACT  # noqa: E402
 from byzzcraft import assets as AS  # noqa: E402
 from byzzcraft import plugins as PLG  # noqa: E402
+from byzzcraft import mods as MD  # noqa: E402
+MD.UA = "ByzzCraft/" + VERSION  # Modrinth wants a User-Agent that names the program
 from byzzcraft import runtime as RT  # noqa: E402
 from byzzcraft import updater as UP  # noqa: E402
 from byzzcraft import i18n  # noqa: E402
@@ -313,18 +315,22 @@ def server_kind():
 
 def config_files():
     """{name: path} of the existing editable files of the server type; the client only sends a name from here, never a path.
-    Paper reads bukkit.yml and spigot.yml too; config/ holds mod settings only on a modded server (on Paper just its own)."""
+    Paper reads bukkit.yml and spigot.yml too; config/ holds mod settings only on a modded server (on Paper just its own).
+    Modded: also defaultconfigs/ and <world>/serverconfig/ (one level of subfolders each)."""
     sd, out, kind = CFG["server_dir"], {}, server_kind()
     names = list(CONF_FIXED) if kind == "paper" else ["spigot.yml", "bukkit.yml"] if kind == "spigot" else []
-    cd = os.path.join(sd, "config")
-    try:
-        for e in sorted(os.listdir(cd)) if kind == "mods" else []:
-            sub = os.path.join(cd, e)
-            for x in ([e] if os.path.isfile(sub) else ["%s/%s" % (e, y) for y in sorted(os.listdir(sub))] if os.path.isdir(sub) else []):
-                if x.lower().endswith(CONF_EXT) and "config/" + x not in CONF_FIXED:
-                    names.append("config/" + x)
-    except OSError:
-        pass
+    lvl = server_props().get("level-name", "world") or "world"
+    bases = ["config", "defaultconfigs"] + (["%s/serverconfig" % lvl] if level_name_ok(lvl) else []) if kind == "mods" else []
+    for base in bases:
+        cd = os.path.join(sd, *base.split("/"))
+        try:
+            for e in sorted(os.listdir(cd)):
+                sub = os.path.join(cd, e)
+                for x in ([e] if os.path.isfile(sub) else ["%s/%s" % (e, y) for y in sorted(os.listdir(sub))] if os.path.isdir(sub) else []):
+                    if x.lower().endswith(CONF_EXT) and base + "/" + x not in CONF_FIXED:
+                        names.append(base + "/" + x)
+        except OSError:
+            pass
     for n in names:
         p = os.path.join(sd, *n.split("/"))
         if os.path.isfile(p) and not os.path.islink(p):   # a link would be replaced by a plain file
@@ -735,7 +741,7 @@ class ServerControl:
                 script = os.path.join(CFG["server_dir"], script)
                 if not os.path.exists(script):
                     return False, t("Start script %s not found: see the Dashboard checks.") % script
-            elif not jar:
+            elif not jar and not loader_args():
                 return False, t("No Minecraft server (.jar) in %s.") % CFG["server_dir"]
             self.state, self.started_at, self.start_error, self.proc = "starting", time.time(), None, None
             self.preparing = not script and CFG.get("backup_on_start", True) and os.path.isdir(world_dir())
@@ -876,6 +882,21 @@ def auto_ram():
     return "%dM" % max(512, min(4096, int(total / 2), int(free * 0.8)))
 
 
+def script_ram():
+    """The -Xmx a start script gives Java, or None. NeoForge/Forge packs keep it in variables.txt (ServerPackCreator,
+    rewritten into user_jvm_args.txt at every start) or user_jvm_args.txt; plain scripts write it themselves."""
+    sd = CFG["server_dir"]
+    for name in ("variables.txt", "user_jvm_args.txt", CFG.get("start_script") or ""):
+        try:
+            with open(os.path.join(sd, name), encoding="utf-8", errors="replace") as fh:
+                m = re.search(r"^(?!\s*(?:#|rem\b|::)).*?-Xmx(\d+[MmGg])\b", fh.read(), re.M | re.I)
+        except OSError:
+            continue
+        if m:
+            return m.group(1).upper()
+    return None
+
+
 def has_shebang(script):
     """Executable and starting with #!: run it directly (a bash script breaks under dash); otherwise with sh."""
     try:
@@ -890,10 +911,19 @@ def ram_mb(ram):
     return int(m.group(1)) if m.group(1) else int(m.group(2)) * 1024
 
 
+def loader_args():
+    """Relative path of the NeoForge/Forge args file (libraries already installed) or None."""
+    ml = AS.modloader(CFG["server_dir"])
+    return ml[2] if ml and os.path.isfile(os.path.join(CFG["server_dir"], ml[2])) else None
+
+
 def launch_cmd(jar, java, ram):
-    """Java command line when there is no start script. gc.log feeds the heap chart."""
+    """Java command line when there is no start script. gc.log feeds the heap chart.
+    NeoForge/Forge: @args file instead of -jar (the jar there is only an installer/launcher); user_jvm_args.txt is not passed,
+    the panel gives its own -Xms/-Xmx and the heap flags would clash."""
+    la = loader_args()
     return ([java or "java", "-Xms" + ram, "-Xmx" + ram] + AIKAR + ["-Xlog:gc:file=logs/gc.log:time,uptime:filecount=3,filesize=10M"]
-            + shlex.split(CFG.get("java_args") or "", posix=os.name != "nt") + ["-jar", jar, "nogui"])
+            + shlex.split(CFG.get("java_args") or "", posix=os.name != "nt") + (["@" + la] if la else ["-jar", jar]) + ["nogui"])
 START_HINTS = (   # (text in the start output, explanation for the user)
     (r"java: (command )?not found|'java' is not recognized|java.exe.*(not found|cannot find)|No such file or directory.*java|WinError 2\]",
      "Java is not installed: download it from the Dashboard checks."),
@@ -1091,6 +1121,25 @@ def access_action(who, action, name, reason):
             return False, t("RCON unavailable: %s") % e
         # the server answers in English: "Added X to the whitelist", "Made X a server operator", ...
         if not re.match(r"^(Added|Removed|Made|Banned|Unbanned|Kicked)\b", out):
+            if action == "op" and re.search(r"does not exist|Unknown player|Couldn't find|not found", out, re.I):
+                # ops.json is rewritten by the running server from memory: never write it while it runs
+                return False, t("Mojang lookup failed: retry later, or stop the server and do it again.")
+            if action == "wl_add" and re.search(r"does not exist|Unknown player|Couldn't find|not found", out, re.I):
+                # the server's Mojang lookup failed: use the UUID it already knows
+                try:
+                    with LOCK:
+                        done = AC.apply_known(CFG["server_dir"], action, name, {p["uuid"]: p["name"] for p in roster()}, who)
+                    if done:
+                        try:
+                            RCON.command("whitelist reload")
+                        except Exception:  # noqa: BLE001  (file already written: applies at the next reload anyway)
+                            pass
+                        msg = done[0] + "."
+                        log("%s %s %s" % (who, AC.VERBS[action], name))
+                        HUB.publish("access", {}, admin_only=True)
+                        return True, msg
+                except (ValueError, OSError) as e:
+                    return False, str(e)
             for rx, it in ((r"isn't banned|not banned", "%s is not banned"), (r"not an operator", "%s is not an operator"),
                            (r"already an operator", "%s is already an operator"), (r"already whitelisted", "%s is already whitelisted"),
                            (r"not whitelisted", "%s is not whitelisted"), (r"already banned", "%s is already banned"),
@@ -1799,10 +1848,12 @@ def save_config(changes):
 def panel_settings():
     need = RT.required(CFG["server_dir"], server_jar())
     java = RT.java_for(need)[0]
-    # ram_auto while on: what the server really got (its heap no longer counts as free RAM)
-    return {**{k: CFG.get(k, DEFAULTS.get(k)) for k in PANEL_KEYS}, "ram_auto": SRV.ram if SRV.state != "off" and SRV.ram else auto_ram(),
+    # ram_auto while on: what the server really got (its heap no longer counts as free RAM); with a script, its -Xmx
+    ram_script = CFG.get("start_script") and script_ram()
+    return {**{k: CFG.get(k, DEFAULTS.get(k)) for k in PANEL_KEYS}, "ram_script": ram_script or "",
+            "ram_auto": ram_script or (SRV.ram if SRV.state != "off" and SRV.ram else auto_ram()),
             "ram_total": round(system_memory()[1]),
-            "jar": server_jar(), "java": java, "java_need": need, "start_script": CFG.get("start_script") or "",
+            "jar": server_jar(), "loader": (AS.modloader(CFG["server_dir"]) or ("", "", ""))[:2], "java": java, "java_need": need, "start_script": CFG.get("start_script") or "",
             "java_bundled": bool(java and java.startswith(RT.RUNTIME)), "langs": [[c, LANG_NAMES.get(c, c)] for c in languages()]}
 
 
@@ -1976,6 +2027,18 @@ def plugins_mc():
     return None
 
 
+MODS_BG = threading.Lock()   # one background Modrinth check at a time
+
+
+def mods_info():
+    """{loader, lv, mc} when the server is modded (NeoForge, Forge, Fabric, Quilt), else None. loader None = not recognised."""
+    if server_kind() != "mods":
+        return None
+    sd, jar = CFG["server_dir"], server_jar()
+    ld, lv = MD.loader(sd, jar)
+    return {"loader": ld, "lv": lv, "mc": AS.jar_info(sd, jar)[0] or ""}
+
+
 def download_java():
     need = RT.required(CFG["server_dir"], server_jar())
 
@@ -2054,7 +2117,7 @@ def health():
     eula = os.path.exists(eula_path) and "eula=true" in open(eula_path, encoding="utf-8", errors="replace").read()
     script = CFG.get("start_script") and os.path.join(sd, CFG["start_script"])
     checks = [
-        ("server", bool(jar), t("No Minecraft server (.jar) in %s.") % sd, None),
+        ("server", bool(jar or loader_args()), t("No Minecraft server (.jar) in %s.") % sd, None),
         # a custom script picks its own Java (e.g. the launcher's): checked only for the built-in start and the examples
         ("java", bool(java) or not need or CFG.get("start_script") not in ("", "start.sh", "start.bat"),
          t("Java %s is not installed (found: %s).") % (need, found or t("none")), "java"),
@@ -2190,7 +2253,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "same-origin")
         # scripts only with this response's nonce: HTML slipped into the page (a player's chat line) cannot run
         self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src %s; "
-                         "connect-src 'self'; img-src 'self' data: https://hangarcdn.papermc.io; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'"
+                         "connect-src 'self'; img-src 'self' data: https://hangarcdn.papermc.io https://cdn.modrinth.com; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'"
                          % ("'nonce-%s'" % self.nonce if self.nonce else "'none'"))
 
     def send_file(self, path, name):
@@ -2395,7 +2458,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(200, {"events": evs[:qint(q, "limit", 200, 1, 500)]})
         if path == "/api/sessions":
             return self.json(200, {"sessions": TLINE.sessions(limit=qint(q, "limit", 30, 1, 200), running=SRV.state != "off")})
-        if path in ("/api/backups", "/api/backups/download", "/api/access", "/api/audit", "/api/users", "/api/health", "/api/syslog", "/api/configs", "/api/plugins", "/api/plugins/search") and not s["admin"]:
+        if path in ("/api/backups", "/api/backups/download", "/api/access", "/api/audit", "/api/users", "/api/health", "/api/syslog", "/api/configs", "/api/plugins", "/api/plugins/search", "/api/mods/search") and not s["admin"]:
             return self.json(403, {"error": "admins only"})
         if path == "/api/configs":
             files = config_files()
@@ -2418,6 +2481,34 @@ class Handler(BaseHTTPRequestHandler):
                 threading.Thread(target=lambda: (PLG.fetch_projects(missing) | PLG.check_updates(slugs, mc)) and HUB.publish("plugins", {}, admin_only=True),
                                  daemon=True).start()
             return self.json(200, {"enabled": mc is not None, "mc": mc or "", "installed": inst})
+        if path == "/api/mods":
+            mi, sd = mods_info(), CFG["server_dir"]
+            inst = MD.installed(sd) if mi else []
+            if mi and inst and MODS_BG.acquire(blocking=False):   # hashes, client sides and new versions in the background (one at a time): Modrinth may be slow or down
+                def bg():
+                    try:
+                        if MD.fetch_sides([MD._sha1(os.path.join(sd, "mods", m["file"])) for m in inst if m["enabled"]]) | MD.check_updates(sd, mi["loader"], mi["mc"]):
+                            HUB.publish("mods", {})
+                    except Exception:  # noqa: BLE001
+                        pass
+                    finally:
+                        MODS_BG.release()
+                threading.Thread(target=bg, daemon=True).start()
+            return self.json(200, {"enabled": bool(mi), "info": mi or {}, "installed": inst})
+        if path == "/api/mods/pack":
+            mi = mods_info()
+            if not mi:
+                return self.json(404, {"error": t("Mods need a modded server.")})
+            try:
+                p, _ = MD.pack(CFG["server_dir"], mi["loader"], mi["lv"], mi["mc"])
+                return self.send_file(p, "mods-%s-%s.zip" % (mi["loader"] or "mods", re.sub(r"[^\w.\-]", "_", mi["mc"], flags=re.ASCII)))
+            except (OSError, ValueError) as e:
+                return self.json(404, {"error": str(e)})
+        if path == "/api/mods/search":
+            mi = mods_info()
+            if not mi:
+                return self.json(200, {"ok": False, "message": t("Mods need a modded server.")})
+            return self.json(200, MD.search(q.get("q", [""])[0][:60], qint(q, "offset", 0, 0, 10000), mi["loader"], mi["mc"]))
         if path == "/api/plugins/search":
             if plugins_mc() is None:
                 return self.json(200, {"ok": False, "message": t("Plugins need a Paper server.")})
@@ -2699,6 +2790,19 @@ class Handler(BaseHTTPRequestHandler):
                 r = PLG.remove(sd, str(data.get("file", "")))
                 if r["ok"]:
                     log("%s removed plugin %s" % (s["user"], data["file"]))
+            if r["ok"] and data.get("restart") and SRV.state == "on":
+                SRV.stop(s["user"], "new settings", restart=True)
+                HUB.publish("status", SRV.snapshot())
+            return self.json(200, r)
+        if self.path in ("/api/mods/install", "/api/mods/update", "/api/mods/toggle", "/api/mods/remove"):
+            mi, sd = mods_info(), CFG["server_dir"]
+            if not mi:
+                return self.json(200, {"ok": False, "message": t("Mods need a modded server.")})
+            op, f = self.path.rsplit("/", 1)[1], str(data.get("file", ""))
+            r = (MD.install(sd, str(data.get("slug", "")), mi["loader"], mi["mc"]) if op == "install" else MD.update(sd, f, mi["loader"], mi["mc"]) if op == "update"
+                 else MD.toggle(sd, f) if op == "toggle" else MD.remove(sd, f))
+            if r["ok"]:
+                log("%s %s mod %s" % (s["user"], op, r.get("file") or f or data.get("slug")))
             if r["ok"] and data.get("restart") and SRV.state == "on":
                 SRV.stop(s["user"], "new settings", restart=True)
                 HUB.publish("status", SRV.snapshot())
