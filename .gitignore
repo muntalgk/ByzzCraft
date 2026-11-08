@@ -19,4 +19,10 @@ assets/hud/
 assets/skin/
 assets/lang.json
 assets/texcolors.json
+assets/lang-local.json
+assets/models/
+assets/render/
+assets/mods/
+assets/mods.tmp/
+assets/mods.old/
 assets.download-tmp/
