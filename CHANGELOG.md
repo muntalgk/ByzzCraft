@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Italian: the download messages read right ("Download in corso: la nuova versione...", not "Download di la nuova
+  versione").
+
 ## 1.4.0
 
 - NeoForge and Forge servers: the panel reads the Minecraft version and the Java it needs from `libraries/`, so the
