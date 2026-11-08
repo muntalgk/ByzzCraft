@@ -15,7 +15,7 @@ data, srv = os.path.join(root, "data"), os.path.join(root, "srv")
 os.makedirs(srv)
 with zipfile.ZipFile(os.path.join(srv, "server.jar"), "w") as z:
     z.writestr("version.json", json.dumps({"id": "26.3", "java_version": 25}))
-for d in ("block", "item", "hud", "skin"):            # assets "already downloaded": no download from Mojang
+for d in ("block", "item", "render", "hud", "skin"):            # assets "already downloaded": no download from Mojang
     os.makedirs(os.path.join(data, "assets", d))
 for f in ("lang.json", "texcolors.json"):
     open(os.path.join(data, "assets", f), "w").write("{}")
@@ -78,6 +78,14 @@ try:
     check("POST without CSRF", req("POST", "/api/command", "{}", js)[0] == 403)
     st, body, _ = req("POST", "/api/command", '{"command": "list"}', dict(js, **{"X-CSRF": csrf}))
     check("POST with CSRF", st == 200 and json.loads(body)["ok"] is False, body)   # server off: an answer, not an error
+    mi = os.path.join(data, "assets", "mods", "foo"); os.makedirs(mi)
+    open(os.path.join(mi, "bar.png"), "wb").write(b"PNGDATA")
+    open(os.path.join(data, "assets", "secret.png"), "wb").write(b"SECRET")
+    check("icon of a mod served", req("GET", "/icon/foo:bar.png", headers=cookie)[:2] == (200, "PNGDATA"))
+    check("icon of a mod: unknown 404", req("GET", "/icon/foo:nope.png", headers=cookie)[0] == 404)
+    for bad in ("/icon/foo:../../secret.png", "/icon/foo:..%2f..%2fsecret.png", "/icon//etc/passwd.png", "/icon/foo:/secret.png", "/icon/..:secret.png", "/icon/foo:a/../../secret.png"):
+        r = req("GET", bad, headers=cookie)
+        check("icon traversal refused: " + bad, r[0] == 404 and "SECRET" not in r[1], r[:2])
     st, body, _ = req("GET", "/api/health", headers=cookie)
     check("health (admin)", st == 200 and isinstance(json.loads(body)["checks"], list), body[:200])
     check("API without login", req("GET", "/api/health")[0] == 401)

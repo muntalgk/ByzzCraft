@@ -194,6 +194,26 @@ try:
         check("pack with a 1970 jar", "mods/beta.jar" in zipfile.ZipFile(p4).namelist())
     except Exception as e:  # noqa: BLE001
         check("pack with a 1970 jar", False, e)
+
+    # icons in the list: Modrinth's (cdn only), else the logo inside the jar
+    M._sha.clear()
+    os.remove(M.ICONS)   # filled by the pack above, when Modrinth sent no icon
+    ROUTES["/v2/projects?ids"] = [{"id": "PA", "client_side": "unsupported", "icon_url": "https://cdn.modrinth.com/data/PA/icon.png"},
+                                  {"id": "PB", "client_side": "required", "icon_url": "https://evil.example/x.png"}]
+    M.fetch_sides([M._sha1(os.path.join(md, n)) for n in ("alpha.jar", "beta.jar")])
+    by = {m["file"]: m for m in M.installed(sd)}
+    check("Modrinth icon in the listing", by["alpha.jar"]["icon"] == "https://cdn.modrinth.com/data/PA/icon.png", by["alpha.jar"])
+    check("icon from another host dropped", by["beta.jar"]["icon"] == "", by["beta.jar"])
+    png = bytes([0x89]) + b"PNG" + bytes([13, 10, 26, 10]) + b"rest"
+    put("gamma.jar", jar({"META-INF/neoforge.mods.toml": '[[mods]]\nmodId="gamma"\nversion="1"\nlogoFile="gamma_logo.png"\n', "gamma_logo.png": png}))
+    put("delta.jar", jar({"fabric.mod.json": '{"id": "delta", "version": "1", "icon": "assets/delta/icon.png"}', "assets/delta/icon.png": b"not a png"}))
+    put("huge.jar", jar({"META-INF/mods.toml": '[[mods]]\nmodId="huge"\nlogoFile="h.png"\n', "h.png": png + b"x" * (M.LOGO_MAX + 1)}))
+    by = {m["file"]: m for m in M.installed(sd)}
+    check("jar logo flagged", by["gamma.jar"]["logo"] and by["delta.jar"]["logo"] and not by["beta.jar"]["logo"])
+    check("jar logo served", M.logo(sd, "gamma.jar") == png)
+    check("not a PNG: no logo", M.logo(sd, "delta.jar") is None)
+    check("logo too big: none", M.logo(sd, "huge.jar") is None)
+    check("logo: name not in the listing", M.logo(sd, "../gamma.jar") is None and M.logo(sd, "nope.jar") is None)
 finally:
     shutil.rmtree(root, ignore_errors=True)
 

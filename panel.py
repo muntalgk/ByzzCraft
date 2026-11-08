@@ -2007,8 +2007,9 @@ def restart_soon():
 
 def download_assets():
     def run():
-        AS.install(CFG["server_dir"], log=L.info, jar=server_jar())
+        AS.install(CFG["server_dir"], log=L.info, jar=server_jar(), lang=i18n.LANG)
         log("panel downloaded the Minecraft assets")
+        build_mods_assets()   # the mod icons are drawn with the vanilla models and textures just installed
         while SRV.state in ("starting", "stopping") or backup_busy() or OP_PENDING.is_set() or JOBS.get("java") == "running":
             time.sleep(5)   # a restart now would lose a start, a backup or a restore in progress
         shutil.rmtree(os.path.join(CACHE, "map"), ignore_errors=True)   # after the wait: tiles drawn meanwhile have the old colours
@@ -2037,6 +2038,42 @@ def mods_info():
     sd, jar = CFG["server_dir"], server_jar()
     ld, lv = MD.loader(sd, jar)
     return {"loader": ld, "lv": lv, "mc": AS.jar_info(sd, jar)[0] or ""}
+
+
+MODS_BUILD = threading.Lock()   # one icon/name/color build at a time
+
+
+def build_mods_assets():
+    """Icons, names and map colors of the enabled mods, in the background; the caches are dropped when a new build is swapped in."""
+    if server_kind() != "mods":
+        return
+
+    def run():
+        with MODS_BUILD:
+            JOBS["mods_assets"] = "running"   # shown in the Dashboard checks: a full build takes about a minute
+            HUB.publish("health", {})
+            try:
+                r = AS.extract_mods(CFG["server_dir"], os.path.join(MOJANG, "mods"), i18n.LANG)
+                if r:
+                    PL.mods_reset()
+                    if mapgen.reload_mod_colors() or r == 2:   # r == 2: colors differ from the last build, also across a restart
+                        shutil.rmtree(os.path.join(CACHE, "map"), ignore_errors=True)   # tiles drawn with the neutral color
+                    L.info("mods: icons, names and colors rebuilt")
+                JOBS.pop("mods_assets", None)
+            except Exception as e:  # noqa: BLE001
+                JOBS["mods_assets"] = str(e)
+                L.exception("mods assets build failed")
+            HUB.publish("health", {})
+    threading.Thread(target=run, name="mods_assets", daemon=True).start()
+
+
+def download_lang():
+    """Assets installed before the translations existed, or the panel language changed: only the vanilla names."""
+    def run():
+        AS.install_lang(AS.server_version(CFG["server_dir"], server_jar()), i18n.LANG)
+        PL.mods_reset()
+        log("panel downloaded the Minecraft names in %s" % i18n.LANG)
+    job("lang", run)
 
 
 def download_java():
@@ -2127,6 +2164,7 @@ def health():
         ("script", not script or os.path.exists(script), t("Start script %s not found.") % script,
          "script" if script and os.path.exists(os.path.join(HERE, "examples", CFG["start_script"])) else None),
         ("assets", AS.present(), t("Map textures and item icons are not downloaded yet."), "assets"),
+        ("mods_assets", True, "", None),   # only while the mods' icons are being built, or if that failed
         # systemd sets INVOCATION_ID; on Windows pythonw (no console) means started at login, not from a terminal
         ("service", bool(os.environ.get("INVOCATION_ID")) or os.path.exists("/.dockerenv") or os.name == "nt" and (os.path.exists(STARTUP_CMD) or not sys.stdout),
          t("The panel does not start by itself after a reboot."), "service" if os.name == "nt" else None),   # Linux needs sudo: a command
@@ -2141,7 +2179,10 @@ def health():
                        None if UP.kind(HERE) == "docker" else "update"))
     out = []
     for cid, ok, text, fix in checks:
-        if cid in JOBS:
+        if cid == "mods_assets" and cid in JOBS:
+            ok, text = False, (t("Preparing the icons and names of the mods...") if JOBS[cid] == "running"
+                               else t("Icons of the mods not prepared: %s") % JOBS[cid])
+        elif cid in JOBS:
             what = {"java": "Java", "assets": t("textures and names from Mojang"), "update": t("the new version")}.get(cid, cid)
             ok, text = False, (t("Downloading %s...") % what if JOBS[cid] == "running" else t("Download of %s failed: %s") % (what, JOBS[cid]))
         if not ok:
@@ -2399,8 +2440,8 @@ class Handler(BaseHTTPRequestHandler):
             if not png:   # no skin from Mojang and no default one in the assets
                 return self.send(404, b"", "image/png")
             return self.send(200, png, "image/png", {"Cache-Control": "private, max-age=3600", "X-Skin-Slim": "1" if slim else "0"})
-        m = re.match(r"^/icon/([a-z0-9_]{1,64})\.png$", path)
-        if m:
+        m = re.match(r"^/icon/((?:[a-z0-9_.-]{1,64}:)?[a-z0-9_./-]{1,128})\.png$", path)   # vanilla: name; mods: namespace:name
+        if m and ".." not in m.group(1) and not m.group(1).startswith("/"):
             p = PL.icon_path(m.group(1))
             return self.send(200, AS.icon_png(m.group(1), p), "image/png", img_cache) if p else self.send(404, b"", "image/png")
         m = re.match(r"^/hud/([a-z0-9_]{1,64})\.png$", path)
@@ -2487,7 +2528,7 @@ class Handler(BaseHTTPRequestHandler):
             if mi and inst and MODS_BG.acquire(blocking=False):   # hashes, client sides and new versions in the background (one at a time): Modrinth may be slow or down
                 def bg():
                     try:
-                        if MD.fetch_sides([MD._sha1(os.path.join(sd, "mods", m["file"])) for m in inst if m["enabled"]]) | MD.check_updates(sd, mi["loader"], mi["mc"]):
+                        if MD.fetch_sides([MD._sha1(os.path.join(sd, "mods", m["file"])) for m in inst]) | MD.check_updates(sd, mi["loader"], mi["mc"]):
                             HUB.publish("mods", {})
                     except Exception:  # noqa: BLE001
                         pass
@@ -2504,6 +2545,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_file(p, "mods-%s-%s.zip" % (mi["loader"] or "mods", re.sub(r"[^\w.\-]", "_", mi["mc"], flags=re.ASCII)))
             except (OSError, ValueError) as e:
                 return self.json(404, {"error": str(e)})
+        if path == "/api/mods/logo":   # the logo inside a jar; the name must be one of the listing
+            png = MD.logo(CFG["server_dir"], q.get("file", [""])[0]) if mods_info() else None
+            return self.send(200, png, "image/png", {"Cache-Control": "private, max-age=86400"}) if png else self.send(404, b"", "image/png")
         if path == "/api/mods/search":
             mi = mods_info()
             if not mi:
@@ -2803,6 +2847,7 @@ class Handler(BaseHTTPRequestHandler):
                  else MD.toggle(sd, f) if op == "toggle" else MD.remove(sd, f))
             if r["ok"]:
                 log("%s %s mod %s" % (s["user"], op, r.get("file") or f or data.get("slug")))
+                build_mods_assets()
             if r["ok"] and data.get("restart") and SRV.state == "on":
                 SRV.stop(s["user"], "new settings", restart=True)
                 HUB.publish("status", SRV.snapshot())
@@ -2966,7 +3011,7 @@ def cli(args):
     users = load_users()
     cmd = args[0]
     if cmd == "assets":
-        return AS.install(CFG["server_dir"], args[1] if len(args) > 1 else None, jar=server_jar())
+        return AS.install(CFG["server_dir"], args[1] if len(args) > 1 else None, jar=server_jar(), lang=i18n.LANG)
     if cmd == "java":
         need = int(args[1]) if len(args) > 1 else RT.required(CFG["server_dir"], server_jar())
         if not need:
@@ -3013,7 +3058,7 @@ def cli(args):
         if not a.no_java and need and not RT.java_for(need)[0]:
             RT.install(need, log=L.info)
         if not AS.present():
-            AS.install(CFG["server_dir"], log=L.info, jar=server_jar())
+            AS.install(CFG["server_dir"], log=L.info, jar=server_jar(), lang=a.lang)
         L.info("done. Start the panel with:  %s panel.py   or keep it running with:  %s", sys.executable, SERVICE_HINT)
         return
     if cmd == "users":
@@ -3071,6 +3116,9 @@ def main():
             threading.Thread(target=worker(target), name=target.__name__, daemon=True).start()
         if not AS.present():
             download_assets()
+        elif not AS.local_lang_ok(i18n.LANG):
+            download_lang()
+        build_mods_assets()
         if need and not java and CFG.get("java_auto"):
             download_java()
     else:

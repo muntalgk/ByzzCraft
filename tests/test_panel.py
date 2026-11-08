@@ -527,6 +527,17 @@ try:
         check("start at login: Startup script", done and "panel.py" in open(panel.STARTUP_CMD, encoding="utf-8").read())
     else:
         check("start at login: no button on Linux (needs sudo)", not panel.fix_health("service", "admin") and not os.path.exists(panel.STARTUP_CMD))
+
+    # mods icon build: a Dashboard line only while it runs or if it failed, never a button
+    ids = lambda: {c["id"]: c for c in panel.health()}   # noqa: E731
+    check("mods icons: no line when idle", "mods_assets" not in ids())
+    panel.JOBS["mods_assets"] = "running"
+    c = ids().get("mods_assets")
+    check("mods icons: line while building", c and "mod" in c["text"] and c["fix"] is None, c)
+    panel.JOBS["mods_assets"] = "boom"
+    c = ids().get("mods_assets")
+    check("mods icons: failure shown", c and "boom" in c["text"], c)
+    panel.JOBS.pop("mods_assets", None)
 finally:
     shutil.rmtree(root, ignore_errors=True)
 

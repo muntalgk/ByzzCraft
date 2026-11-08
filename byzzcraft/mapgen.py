@@ -49,7 +49,39 @@ def _tex():
     return _TEX
 
 
+_MODS_TEX = None
+
+
+def _mods_tex():
+    global _MODS_TEX
+    if _MODS_TEX is None:
+        try:
+            with open(os.path.join(ASSETS, "mods", "texcolors.json"), encoding="utf-8") as f:
+                _MODS_TEX = json.load(f)
+        except Exception:
+            return {}   # not remembered: the build may be swapping in right now
+    return _MODS_TEX
+
+
+def reload_mod_colors():
+    """A new mods build was swapped in: modded blocks classified before it are classified again, in place (their gid stays). Returns how many changed."""
+    global _MODS_TEX
+    _MODS_TEX = None
+    n = 0
+    with _GID_LOCK:
+        for name, g in _GID.items():
+            if ":" in name:
+                k, c, t = _classify(name)
+                if (KIND[g], COL[g], TINT[g]) != (k, c, t):
+                    KIND[g], COL[g], TINT[g] = k, c, t
+                    n += 1
+    return n
+
+
 def _texcol(name):
+    if ":" in name:   # a mod's block: its own color or none
+        c = _mods_tex().get(name)
+        return tuple(c[:3]) if c else None
     tex = _tex()
     base = _SUFFIX.sub("", name)
     cands = [_ALIAS.get(name, name), name + "_top", name, name + "_side", name + "_front", base + "_planks", base + "s", base,
@@ -63,7 +95,8 @@ def _texcol(name):
 
 def _classify(name):
     """name without the minecraft: prefix -> (kind, rgb, tint)"""
-    if name in _SKIP_EXACT or _SKIP_RE.search(name):
+    bare = name.rpartition(":")[2]
+    if bare in _SKIP_EXACT or _SKIP_RE.search(bare):
         return 0, NEUTRAL, 0
     if name in ("water", "bubble_column"):
         return 2, _FIXED["water"], 0

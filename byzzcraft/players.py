@@ -161,6 +161,10 @@ def lang():
             _LANG = json.load(open(os.path.join(ASSETS, "lang.json"), encoding="utf-8"))
         except (OSError, ValueError):
             _LANG = {}
+        try:   # the panel's language over English, key by key: a key it lacks stays English
+            _LANG.update(json.load(open(os.path.join(ASSETS, "lang-local.json"), encoding="utf-8")))
+        except (OSError, ValueError):
+            pass
     return _LANG
 
 
@@ -192,7 +196,45 @@ def strip_ns(s):
     return str(s).split(":", 1)[1] if ":" in str(s) else str(s)
 
 
+_MODS_LANG = None
+
+
+def mods_lang():
+    global _MODS_LANG
+    if _MODS_LANG is None:
+        try:
+            _MODS_LANG = json.load(open(os.path.join(ASSETS, "mods", "lang.json"), encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}   # not remembered: the build may be swapping in right now
+    return _MODS_LANG
+
+
+def mods_reset():
+    """A new mods build or vanilla translation was swapped in: names and icons are read again."""
+    global _MODS_LANG, _LANG
+    _MODS_LANG = _LANG = None
+    _ICON_CACHE.clear()
+
+
+def entity_name(k):
+    k = str(k)
+    if ":" not in k or k.startswith("minecraft:"):
+        return lang().get("entity.minecraft." + strip_ns(k), strip_ns(k))
+    ns, n = k.split(":", 1)
+    return mods_lang().get("entity.%s.%s" % (ns, n), n.replace("_", " ").title())
+
+
+def full_id(s):
+    """Vanilla ids stay bare, the others keep their namespace: 'securitycraft:admin_tool'."""
+    s = str(s)
+    return s.split(":", 1)[1] if s.startswith("minecraft:") else s
+
+
 def item_name(iid):
+    if ":" in iid:
+        ns, n = iid.split(":", 1)
+        L = mods_lang()
+        return L.get("item.%s.%s" % (ns, n)) or L.get("block.%s.%s" % (ns, n)) or n.replace("_", " ").title()
     L = lang()
     return L.get("item.minecraft." + iid) or L.get("block.minecraft." + iid) or iid.replace("_", " ").title()
 
@@ -246,7 +288,7 @@ POTION_COLOR = {"swiftness": 0x33EBFF, "slowness": 0x8BAFE0, "strength": 0xFFC70
 def item(it):
     if not isinstance(it, dict) or not it.get("id"):
         return None
-    iid = strip_ns(it["id"])
+    iid = full_id(it["id"])
     comp = it.get("components") or it.get("tag") or {}
     name = text_of(comp.get("minecraft:custom_name")) or item_name(iid)
     ench = enchants(comp, "minecraft:enchantments")
@@ -317,8 +359,8 @@ def stats(world, uuid):
 
     def top(cat, n=6):
         d = s.get(cat, {})
-        return [[item_name(strip_ns(k)) if cat != "minecraft:killed" and cat != "minecraft:killed_by" else
-                 lang().get("entity.minecraft." + strip_ns(k), strip_ns(k)), v, strip_ns(k)] for k, v in sorted(d.items(), key=lambda kv: -kv[1])[:n]]
+        return [[item_name(full_id(k)) if cat != "minecraft:killed" and cat != "minecraft:killed_by" else
+                 entity_name(k), v, full_id(k)] for k, v in sorted(d.items(), key=lambda kv: -kv[1])[:n]]
     out["mined"], out["killed"], out["killed_by"], out["crafted"] = top("minecraft:mined"), top("minecraft:killed"), top("minecraft:killed_by"), top("minecraft:crafted")
     try:
         adv = json.load(open(os.path.join(player_dir(world, "advancements"), uuid + ".json"), encoding="utf-8"))
@@ -383,6 +425,15 @@ def _alias(iid):
 def icon_path(iid):
     if iid in _ICON_CACHE:
         return _ICON_CACHE[iid]
+    if ":" in iid:   # a mod's item: only its own icon, a vanilla one with the same name would be wrong
+        ns, n = iid.split(":", 1)
+        if ns != "minecraft":
+            p = os.path.join(ASSETS, "mods", ns, n.replace("/", "__") + ".png")
+            if re.match(r"^[a-z0-9_-][a-z0-9_.-]*$", ns) and re.match(r"^[a-z0-9_-][a-z0-9_.-]*(/[a-z0-9_-][a-z0-9_.-]*)*$", n) and os.path.isfile(p):
+                _ICON_CACHE[iid] = p
+                return p
+            return None
+        iid = n
     orig = iid = re.sub(r"[^a-z0-9_]", "", iid)
     p = _icon_lookup(iid)
     seen = {iid}
@@ -399,7 +450,7 @@ def icon_path(iid):
 
 def _icon_lookup(iid):
     base = _SUFFIX.sub("", iid)
-    cands = [("item", iid), ("block", iid), ("block", iid + "_front"), ("block", iid + "_top"), ("block", iid + "_side"),
+    cands = [("item", iid), ("render", iid), ("block", iid), ("block", iid + "_front"), ("block", iid + "_top"), ("block", iid + "_side"),
              ("item", iid + "_00"), ("block", base + "_planks"), ("block", base + "s"), ("block", base), ("block", base.replace("_wool", "") + "_wool"),
              ("block", base + "_block"), ("block", iid.replace("waxed_", "")), ("block", base + "_log")]
     for kind, name in cands:

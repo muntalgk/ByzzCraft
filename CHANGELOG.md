@@ -12,6 +12,12 @@
 - Whitelist when Mojang does not answer: the panel uses the UUID the server already knows (usercache.json or the
   login lines in the log). Op with the server off works the same way.
 - Config editor: also `defaultconfigs/` and the world's `serverconfig/` on modded servers.
+- Modded items: icons and names come from the mods' own jars (in the panel's language when the mod has it), in the
+  inventories and in the stats; the map colors modded blocks. Rebuilt in the background when the mods change.
+- Block items look like in the game's inventory: the panel draws them in 3D from their model (vanilla and mods), so
+  stairs, slabs, fences and gates show their shape instead of a flat face. Items drawn by code (chests, beds, signs)
+  keep the flat icon. Existing installs download the Minecraft assets once more.
+- Vanilla item, enchantment and effect names in the panel's language (Mojang's translation, downloaded once).
 
 ## 1.3.2
 

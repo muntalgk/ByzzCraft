@@ -161,6 +161,8 @@
  "Download of %s failed: %s": "Download di %s non riuscito: %s",
  "Download the zip": "Scarica lo zip",
  "Downloading %s...": "Download di %s in corso...",
+ "Preparing the icons and names of the mods...": "Preparazione di icone e nomi delle mod in corso...",
+ "Icons of the mods not prepared: %s": "Icone delle mod non preparate: %s",
  "Downloads can take a minute.": "I download possono richiedere un minuto.",
  "Drag and pinch": "Trascina e pizzica",
  "Drag to move, pinch to zoom": "Trascina per spostare, pizzica per zoomare",
