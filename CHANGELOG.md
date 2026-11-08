@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- NeoForge and Forge servers: the panel reads the Minecraft version and the Java it needs from `libraries/`, so the
+  Java check, the assets and the maps work, and the Dashboard shows the loader (`neoforge 26.3.0.101`).
+- NeoForge and Forge start without a start script: the panel runs `java … @libraries/…/win_args.txt nogui` itself,
+  with its RAM, Aikar flags, heap chart and backup before the start. With a start script, its `-Xmx` is shown as the RAM.
+- Mods page (NeoForge, Forge, Fabric, Quilt): installed mods with name and version, turn on/off, remove to the trash,
+  search Modrinth and install or update (releases only, file hash checked). Every player can download a zip of the
+  mods their client needs: Modrinth's server-only mods are left out, and with Modrinth unreachable all of them go in.
+- Whitelist when Mojang does not answer: the panel uses the UUID the server already knows (usercache.json or the
+  login lines in the log). Op with the server off works the same way.
+- Config editor: also `defaultconfigs/` and the world's `serverconfig/` on modded servers.
+
 ## 1.3.2
 
 - Dashboard: "world paused until someone plays" shows only when the world's clock has really stopped. Before it came

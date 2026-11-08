@@ -3,6 +3,7 @@
 Usage:  python panel.py assets [VERSION]     (without a version it is read from the server jar)
 """
 import hashlib
+import glob
 import io
 import json
 import os
@@ -50,6 +51,21 @@ def find_jar(server_dir, configured=None):
     return jars[0] if len(jars) == 1 else None
 
 
+def modloader(server_dir):
+    """(loader, version, args file relative to server_dir for this OS) of a NeoForge/Forge server, else None."""
+    args = "win_args.txt" if os.name == "nt" else "unix_args.txt"
+    for loader, sub in (("neoforge", "net/neoforged/neoforge"), ("forge", "net/minecraftforge/forge")):
+        base = os.path.join(server_dir, "libraries", *sub.split("/"))
+        try:
+            vers = [d for d in os.listdir(base) if os.path.isfile(os.path.join(base, d, args))]
+        except OSError:
+            continue
+        if vers:
+            v = max(vers, key=lambda s: [int(x) if x.isdigit() else 0 for x in re.split(r"[.-]", s)])
+            return loader, v, "/".join(("libraries", *sub.split("/"), v, args))
+    return None
+
+
 _JAVA = {}   # Minecraft version -> required Java (from Mojang's manifest, once per process)
 
 
@@ -71,6 +87,22 @@ def jar_info(server_dir, jar=None):
                     ver = ver or props.get("game-version")
         except (OSError, ValueError, KeyError, zipfile.BadZipFile):
             pass
+    if not ver:   # NeoForge/Forge: server.jar is only a starter, the vanilla jar sits in libraries/
+        ml0 = modloader(server_dir)
+        want = ml0[1].split("-")[0] if ml0 and ml0[0] == "forge" else ""   # NeoForge folder names carry no MC version: highest wins
+        vk = lambda p: ([int(x) if x.isdigit() else 0 for x in re.split(r"[.-]", os.path.basename(os.path.dirname(p)))])   # noqa: E731
+        for p in sorted(glob.glob(os.path.join(server_dir, "libraries", "net", "minecraft", "server", "*", "server-*.jar")),
+                        key=lambda p: (bool(want) and os.path.basename(os.path.dirname(p)).split("-")[0] == want, vk(p)), reverse=True):
+            try:
+                with zipfile.ZipFile(p) as z:
+                    v = json.loads(z.read("version.json"))
+                ver, java = v.get("id"), v.get("java_version")
+                break
+            except (OSError, ValueError, KeyError, zipfile.BadZipFile):
+                pass
+        ml = None if ver else modloader(server_dir)
+        if ml and ml[0] == "forge":   # folder is "<mc>-<forge>"
+            ver = ml[1].split("-")[0]
     m = not ver and jar and re.search(r"-(\d+\.\d+(?:\.\d+)?)\.jar$", jar)   # BuildTools names it spigot-1.21.4.jar
     ver = m.group(1) if m else ver
     if ver and not java:

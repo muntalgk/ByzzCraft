@@ -122,5 +122,48 @@ try:
     check("other ids untouched", A.icon_png("stone", grey) == open(grey, "rb").read())
 finally:
     shutil.rmtree(t, ignore_errors=True)
+# NeoForge / Forge / vanilla layouts
+def fake(root, files):
+    for rel, data in files.items():
+        p = os.path.join(root, *rel.split("/"))
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        if isinstance(data, dict):
+            b = io.BytesIO()
+            with zipfile.ZipFile(b, "w") as z:
+                for n, c in data.items():
+                    z.writestr(n, c)
+            data = b.getvalue()
+        open(p, "wb").write(data)
+
+
+vj = '{"id": "26.3", "java_version": 25}'
+a = "win_args.txt" if os.name == "nt" else "unix_args.txt"
+t = tempfile.mkdtemp()
+try:
+    fake(t, {"server.jar": {"x": "1"}, "libraries/net/minecraft/server/26.3/server-26.3.jar": {"version.json": vj},
+             "libraries/net/neoforged/neoforge/26.3.0.9/" + a: b"", "libraries/net/neoforged/neoforge/26.3.0.101/" + a: b""})
+    check("neoforge: version + java from libraries", A.jar_info(t, A.find_jar(t)) == ("26.3", 25), A.jar_info(t, A.find_jar(t)))
+    check("neoforge: loader, highest version", A.modloader(t) == ("neoforge", "26.3.0.101", "libraries/net/neoforged/neoforge/26.3.0.101/" + a), A.modloader(t))
+    fake(t, {"libraries/net/minecraft/server/26.10/server-26.10.jar": {"version.json": '{"id": "26.10", "java_version": 25}'},
+             "libraries/net/minecraft/server/26.9/server-26.9.jar": {"version.json": '{"id": "26.9", "java_version": 21}'}})
+    check("two server folders: highest version (numeric)", A.jar_info(t, A.find_jar(t)) == ("26.10", 25), A.jar_info(t, A.find_jar(t)))
+finally:
+    shutil.rmtree(t, ignore_errors=True)
+t = tempfile.mkdtemp()
+try:
+    fake(t, {"libraries/net/minecraftforge/forge/1.20.1-47.2.0/" + a: b"", "forge-1.20.1-47.2.0-shim.jar": {"x": "1"}})
+    check("forge: mc version from folder", A.jar_info(t, A.find_jar(t))[0] == "1.20.1", A.jar_info(t, A.find_jar(t)))
+    check("forge: loader", A.modloader(t)[:2] == ("forge", "1.20.1-47.2.0"), A.modloader(t))
+    fake(t, {"libraries/net/minecraft/server/1.21/server-1.21.jar": {"version.json": '{"id": "1.21", "java_version": 21}'},
+             "libraries/net/minecraft/server/1.20.1-20230612.114412/server-1.20.1-20230612.114412.jar": {"version.json": '{"id": "1.20.1", "java_version": 17}'}})
+    check("forge: folder of the installed loader wins over a higher leftover", A.jar_info(t, A.find_jar(t)) == ("1.20.1", 17), A.jar_info(t, A.find_jar(t)))
+finally:
+    shutil.rmtree(t, ignore_errors=True)
+t = tempfile.mkdtemp()
+try:
+    fake(t, {"server.jar": {"version.json": '{"id": "1.21.4", "java_version": 21}'}})
+    check("vanilla unchanged", A.jar_info(t, "server.jar") == ("1.21.4", 21) and A.modloader(t) is None)
+finally:
+    shutil.rmtree(t, ignore_errors=True)
 print("PASS %d  FAIL %d" % (OK, FAIL))
 sys.exit(1 if FAIL else 0)

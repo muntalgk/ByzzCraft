@@ -180,7 +180,34 @@ try:
     check("ram_auto while off", panel.panel_settings()["ram_auto"] == panel.auto_ram())
     check("panel settings keep ram_total", panel.panel_settings().get("ram_total", 0) > 0)
     panel.SRV.ram = None
+    # start script: the panel shows the script's -Xmx (NeoForge packs keep it in variables.txt / user_jvm_args.txt)
+    panel.CFG["start_script"] = "start.bat"
+    sd = panel.CFG["server_dir"]
+    with open(os.path.join(sd, "start.bat"), "w") as f:
+        f.write("rem java -Xmx1G old\r\njava -Xms2G -Xmx6G -jar server.jar\r\n")
+    check("script_ram from the script, comments skipped", panel.script_ram() == "6G", panel.script_ram())
+    with open(os.path.join(sd, "variables.txt"), "w") as f:
+        f.write('# JAVA_ARGS like -Xmx4G\nJAVA_ARGS="-Xms4G -Xmx8g -XX:+UseG1GC"\n')
+    check("script_ram from variables.txt first", panel.script_ram() == "8G", panel.script_ram())
+    check("ram_auto with a script", panel.panel_settings()["ram_auto"] == "8G" and panel.panel_settings()["ram_script"] == "8G")
+    for n in ("start.bat", "variables.txt"):
+        os.remove(os.path.join(sd, n))
+    check("script_ram without -Xmx", panel.script_ram() is None)
+    panel.CFG["start_script"] = ""
     panel.CFG["java_args"] = ""
+    cmd = panel.launch_cmd("server.jar", "java", "4G")
+    check("launch_cmd vanilla uses -jar", "-jar" in cmd and "server.jar" in cmd and not any(c.startswith("@") for c in cmd))
+    nf = "libraries/net/neoforged/neoforge/1.0.0/"
+    os.makedirs(os.path.join(sd, nf))
+    for n in ("win_args.txt", "unix_args.txt"):
+        with open(os.path.join(sd, nf, n), "w") as f:
+            f.write("-p x\n")
+    os.makedirs(os.path.join(sd, "mods"), exist_ok=True)
+    cmd = panel.launch_cmd(None, "java", "4G")
+    want = "@" + nf + ("win_args.txt" if os.name == "nt" else "unix_args.txt")
+    check("launch_cmd NeoForge uses @args", want in cmd and cmd[-1] == "nogui" and "-Xmx4G" in cmd and "-jar" not in cmd, cmd)
+    check("NeoForge launch_cmd ignores a launcher jar", "-jar" not in panel.launch_cmd("server.jar", "java", "4G"))
+    shutil.rmtree(os.path.join(sd, "libraries"))
     check("STOPPING_RE vanilla/Paper/Fabric, not chat", all(panel.STOPPING_RE.match(l) for l in (
         "[12:00:00] [Server thread/INFO]: Stopping server", "[12:00:00 INFO]: Stopping the server",
         "[12:00:00] [Server thread/INFO] (Minecraft) Stopping server")) and not any(panel.STOPPING_RE.match(l) for l in (
@@ -230,6 +257,22 @@ try:
     panel.server_jar = lambda: "fabric-server-launch.jar"
     cf = panel.config_files()
     check("config_files on Fabric: mod files only", set(cf) == {"config/x.json", "config/sub/y.toml"}, sorted(cf))
+    os.makedirs(j(srv_dir, "mods"), exist_ok=True)
+    os.makedirs(j(srv_dir, "defaultconfigs"), exist_ok=True)
+    os.makedirs(j(srv_dir, "world", "serverconfig"), exist_ok=True)
+    open(j(srv_dir, "defaultconfigs", "b.toml"), "w").write("a = 1\n")
+    open(j(srv_dir, "world", "serverconfig", "c.toml"), "w").write("a = 1\n")
+    panel.write_props({"level-name": "world"}, "t")
+    cf = panel.config_files()
+    check("config_files on Fabric: config, defaultconfigs and world serverconfig", set(cf) == {"config/x.json", "config/sub/y.toml", "defaultconfigs/b.toml", "world/serverconfig/c.toml"}, sorted(cf))
+    panel.write_props({"level-name": "w2"}, "t")   # back: the damaged .dat checks below use w2
+    real_sp = panel.server_props
+    for lv in (os.path.abspath(j(srv_dir, "..", "lvl")), "../lvl", "a/b", "C:lvl"):
+        os.makedirs(j(srv_dir, "..", "lvl", "serverconfig"), exist_ok=True)
+        open(j(srv_dir, "..", "lvl", "serverconfig", "z.toml"), "w").write("a = 1\n")
+        panel.server_props = lambda lv=lv: {"level-name": lv}
+        check("config_files skips an unsafe level-name %r" % lv, not any("z.toml" in n for n in panel.config_files()), sorted(panel.config_files()))
+    panel.server_props = real_sp
     check("plugins only on Paper", panel.plugins_mc() is None)
     for bad in ("../server.properties", os.path.abspath(props), "server.properties", "config/../server.properties", "config/n.bin"):
         check("config_save refuses %s" % bad, not panel.config_save(bad, "x", "t")[0] and open(props, "rb").read().startswith(b"motd="))
