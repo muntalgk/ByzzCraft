@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.0
 
 - NeoForge and Forge servers: the panel reads the Minecraft version and the Java it needs from `libraries/`, so the
   Java check, the assets and the maps work, and the Dashboard shows the loader (`neoforge 26.3.0.101`).
@@ -13,7 +13,10 @@
   login lines in the log). Op with the server off works the same way.
 - Config editor: also `defaultconfigs/` and the world's `serverconfig/` on modded servers.
 - Modded items: icons and names come from the mods' own jars (in the panel's language when the mod has it), in the
-  inventories and in the stats; the map colors modded blocks. Rebuilt in the background when the mods change.
+  inventories and in the stats; the map colors modded blocks. Rebuilt in the background when the mods change. The
+  Dashboard says so while it runs (about a minute for a large modpack, nothing when the mods are the same); a change
+  to a mod meanwhile does not wait for it.
+- Mods page: each mod shows its Modrinth icon, or the logo inside its jar.
 - Block items look like in the game's inventory: the panel draws them in 3D from their model (vanilla and mods), so
   stairs, slabs, fences and gates show their shape instead of a flat face. Items drawn by code (chests, beds, signs)
   keep the flat icon. Existing installs download the Minecraft assets once more.
