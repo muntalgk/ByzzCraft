@@ -129,6 +129,14 @@ try:
     ROUTES["/project/bar/version"] = [ver(name="foo-1.0.jar")]
     check("install refused: same file name already installed", "already" in M.install(sd, "bar", "neoforge", "26.3")["message"])
     check("install refused: empty Minecraft version", not M.install(sd, "bar", "neoforge", "")["ok"])
+    put("cc.jar", jar({"META-INF/mods.toml": '[[mods]]\nmodId="cloth_config"\nversion="1"\n'}))
+    ROUTES["/project/cloth-config/version"] = [ver(name="cloth-config-9.jar")]
+    check("install refused: mod id cloth_config = slug cloth-config", "already" in M.install(sd, "cloth-config", "neoforge", "26.3")["message"])
+    os.remove(os.path.join(md, "cc.jar"))
+    ROUTES["/project/betamod/version"] = [dict(ver(name="betamod-0.1.jar"), version_type="beta")]
+    r = M.install(sd, "betamod", "neoforge", "26.3")
+    check("beta install says it gets no automatic updates", r["ok"] and "beta" in r["message"] and "automatic" in r["message"], r)
+    os.remove(os.path.join(md, "betamod-0.1.jar"))
 
     # updates: the old jar goes to the trash only after the new one is verified
     d2 = jar({"META-INF/mods.toml": '[[mods]]\nmodId="foo"\nversion="2"\n'})
@@ -141,6 +149,16 @@ try:
     ROUTES["version_files/update"] = {hashlib.sha1(d2).hexdigest(): ver("3.0", "foo-3.0.jar", data)}   # file is not what the API promised
     r = M.update(sd, "foo-2.0.jar", "neoforge", "26.3")
     check("hash mismatch on update keeps the old jar", not r["ok"] and "foo-2.0.jar" in os.listdir(md) and "foo-3.0.jar" not in os.listdir(md), (r, os.listdir(md)))
+    # a disabled mod stays disabled when updated
+    os.rename(os.path.join(md, "foo-2.0.jar"), os.path.join(md, "foo-2.0.jar.disabled"))
+    ROUTES["version_files/update"] = {hashlib.sha1(d2).hexdigest(): ver("3.0", "foo-3.0.jar", data)}
+    ROUTES["cdn.modrinth.com/data"] = data
+    r = M.update(sd, "foo-2.0.jar.disabled", "neoforge", "26.3")
+    check("update of a disabled mod keeps it disabled", r["ok"] and "foo-3.0.jar.disabled" in os.listdir(md) and "foo-3.0.jar" not in os.listdir(md)
+          and "foo-2.0.jar.disabled" not in os.listdir(md), (r, os.listdir(md)))
+    os.remove(os.path.join(md, "foo-3.0.jar.disabled"))
+    open(os.path.join(md, "foo-2.0.jar"), "wb").write(d2)
+    ROUTES["cdn.modrinth.com/data"] = d2
 
     # update: beta is not an update; a failing file operation keeps the old jar and says so
     ROUTES["version_files/update"] = {hashlib.sha1(d2).hexdigest(): dict(ver("3.0", "foo-3.0.jar", data), version_type="beta")}
@@ -194,6 +212,26 @@ try:
         check("pack with a 1970 jar", "mods/beta.jar" in zipfile.ZipFile(p4).namelist())
     except Exception as e:  # noqa: BLE001
         check("pack with a 1970 jar", False, e)
+
+    # icons in the list: Modrinth's (cdn only), else the logo inside the jar
+    M._sha.clear()
+    os.remove(M.ICONS)   # filled by the pack above, when Modrinth sent no icon
+    ROUTES["/v2/projects?ids"] = [{"id": "PA", "client_side": "unsupported", "icon_url": "https://cdn.modrinth.com/data/PA/icon.png"},
+                                  {"id": "PB", "client_side": "required", "icon_url": "https://evil.example/x.png"}]
+    M.fetch_sides([M._sha1(os.path.join(md, n)) for n in ("alpha.jar", "beta.jar")])
+    by = {m["file"]: m for m in M.installed(sd)}
+    check("Modrinth icon in the listing", by["alpha.jar"]["icon"] == "https://cdn.modrinth.com/data/PA/icon.png", by["alpha.jar"])
+    check("icon from another host dropped", by["beta.jar"]["icon"] == "", by["beta.jar"])
+    png = bytes([0x89]) + b"PNG" + bytes([13, 10, 26, 10]) + b"rest"
+    put("gamma.jar", jar({"META-INF/neoforge.mods.toml": '[[mods]]\nmodId="gamma"\nversion="1"\nlogoFile="gamma_logo.png"\n', "gamma_logo.png": png}))
+    put("delta.jar", jar({"fabric.mod.json": '{"id": "delta", "version": "1", "icon": "assets/delta/icon.png"}', "assets/delta/icon.png": b"not a png"}))
+    put("huge.jar", jar({"META-INF/mods.toml": '[[mods]]\nmodId="huge"\nlogoFile="h.png"\n', "h.png": png + b"x" * (M.LOGO_MAX + 1)}))
+    by = {m["file"]: m for m in M.installed(sd)}
+    check("jar logo flagged", by["gamma.jar"]["logo"] and by["delta.jar"]["logo"] and not by["beta.jar"]["logo"])
+    check("jar logo served", M.logo(sd, "gamma.jar") == png)
+    check("not a PNG: no logo", M.logo(sd, "delta.jar") is None)
+    check("logo too big: none", M.logo(sd, "huge.jar") is None)
+    check("logo: name not in the listing", M.logo(sd, "../gamma.jar") is None and M.logo(sd, "nope.jar") is None)
 finally:
     shutil.rmtree(root, ignore_errors=True)
 

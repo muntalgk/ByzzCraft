@@ -1,17 +1,28 @@
 # Changelog
 
-## Unreleased
+## 1.4.0
 
 - NeoForge and Forge servers: the panel reads the Minecraft version and the Java it needs from `libraries/`, so the
   Java check, the assets and the maps work, and the Dashboard shows the loader (`neoforge 26.3.0.101`).
 - NeoForge and Forge start without a start script: the panel runs `java … @libraries/…/win_args.txt nogui` itself,
   with its RAM, Aikar flags, heap chart and backup before the start. With a start script, its `-Xmx` is shown as the RAM.
 - Mods page (NeoForge, Forge, Fabric, Quilt): installed mods with name and version, turn on/off, remove to the trash,
-  search Modrinth and install or update (releases only, file hash checked). Every player can download a zip of the
-  mods their client needs: Modrinth's server-only mods are left out, and with Modrinth unreachable all of them go in.
+  search Modrinth and install (a release when there is one, else a beta, said so) or update (releases only); every
+  file's hash is checked. Every player can download a zip of the mods their client needs: Modrinth's server-only mods
+  are left out, and with Modrinth unreachable all of them go in.
 - Whitelist when Mojang does not answer: the panel uses the UUID the server already knows (usercache.json or the
   login lines in the log). Op with the server off works the same way.
 - Config editor: also `defaultconfigs/` and the world's `serverconfig/` on modded servers.
+- Modded items: icons and names come from the mods' own jars (in the panel's language when the mod has it), in the
+  inventories and in the stats; the map colors modded blocks. Rebuilt in the background when the mods change. The
+  Dashboard says so while it runs (about a minute for a large modpack, nothing when the mods are the same); a change
+  to a mod meanwhile does not wait for it.
+- Mods page: each mod shows its Modrinth icon, or the logo inside its jar.
+- Block items look like in the game's inventory: the panel draws them in 3D from their model (vanilla and mods), so
+  stairs, slabs, fences and gates show their shape instead of a flat face. Items drawn by code (chests, beds, signs)
+  keep the flat icon. Existing installs download the Minecraft assets once more (about a minute, shown on the
+  Dashboard) and then the panel restarts by itself once; Minecraft keeps running.
+- Vanilla item, enchantment and effect names in the panel's language (Mojang's translation, downloaded once).
 
 ## 1.3.2
 

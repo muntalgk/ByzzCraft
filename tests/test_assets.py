@@ -165,5 +165,39 @@ try:
     check("vanilla unchanged", A.jar_info(t, "server.jar") == ("1.21.4", 21) and A.modloader(t) is None)
 finally:
     shutil.rmtree(t, ignore_errors=True)
+
+# vanilla names in the panel's language: from Mojang's asset index, hash checked, never over lang.json
+import hashlib
+t = tempfile.mkdtemp()
+real_get, real_local = A._get, A.LOCAL_LANG
+try:
+    A.LOCAL_LANG = os.path.join(t, "lang-local.json")
+    it = json.dumps({"item.minecraft.stick": "Bastone"}).encode()
+    h = hashlib.sha1(it).hexdigest()
+    net = {A.MANIFEST: json.dumps({"versions": [{"id": "26.3", "url": "v"}]}).encode(),
+           "v": json.dumps({"assetIndex": {"url": "i"}}).encode(),
+           "i": json.dumps({"objects": {"minecraft/lang/it_it.json": {"hash": h}}}).encode(),
+           "https://resources.download.minecraft.net/%s/%s" % (h[:2], h): it}
+    A._get = lambda url, sha1=None, sha256=None: (net[url] if not sha1 or hashlib.sha1(net[url]).hexdigest() == sha1
+                                                  else (_ for _ in ()).throw(OSError("Corrupted download")))
+    check("mc_lang", A.mc_lang("it") == "it_it" and A.mc_lang("en") == "en_us")
+    check("no translation yet: not ok", not A.local_lang_ok("it"))
+    A.install_lang("26.3", "it")
+    d = json.load(open(A.LOCAL_LANG, encoding="utf-8"))
+    check("it_it downloaded", d.get("item.minecraft.stick") == "Bastone" and A.local_lang_ok("it"), d)
+    check("other language: download again", not A.local_lang_ok("de"))
+    net["https://resources.download.minecraft.net/%s/%s" % (h[:2], h)] = b"{}"
+    os.remove(A.LOCAL_LANG)
+    try:
+        A.install_lang("26.3", "it")
+        check("hash mismatch rejected", False)
+    except OSError:
+        check("hash mismatch rejected", not os.path.exists(A.LOCAL_LANG))
+    open(A.LOCAL_LANG, "w").write("{}")
+    A.install_lang("26.3", "en")
+    check("English: translation removed", not os.path.exists(A.LOCAL_LANG) and A.local_lang_ok("en"))
+finally:
+    A._get, A.LOCAL_LANG = real_get, real_local
+    shutil.rmtree(t, ignore_errors=True)
 print("PASS %d  FAIL %d" % (OK, FAIL))
 sys.exit(1 if FAIL else 0)

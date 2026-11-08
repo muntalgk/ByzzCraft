@@ -527,6 +527,56 @@ try:
         check("start at login: Startup script", done and "panel.py" in open(panel.STARTUP_CMD, encoding="utf-8").read())
     else:
         check("start at login: no button on Linux (needs sudo)", not panel.fix_health("service", "admin") and not os.path.exists(panel.STARTUP_CMD))
+
+    # mods icon build: a Dashboard line only while it runs or if it failed, never a button
+    ids = lambda: {c["id"]: c for c in panel.health()}   # noqa: E731
+    check("mods icons: no line when idle", "mods_assets" not in ids())
+    panel.JOBS["mods_assets"] = "running"
+    c = ids().get("mods_assets")
+    check("mods icons: line while building", c and "mod" in c["text"] and c["fix"] is None, c)
+    panel.JOBS["mods_assets"] = "boom"
+    c = ids().get("mods_assets")
+    check("mods icons: failure shown", c and "boom" in c["text"], c)
+    panel.JOBS.pop("mods_assets", None)
+
+    # mods icon build vs changes to mods/: a change stops the build, changes in a row cost one build, a failed change loses none
+    import threading as th
+    state = {"ver": 0, "done": []}
+    def slow_build(sd, dest, lang, stop):
+        seen = state["ver"]
+        for _ in range(30):   # ~0.3 s, like a big build cut in slices
+            if stop.is_set():
+                raise panel.AS.Cancelled()
+            time.sleep(0.01)
+        state["done"].append(seen)
+        return 0
+    real_kind, real_extract = panel.server_kind, panel.AS.extract_mods
+    panel.server_kind, panel.AS.extract_mods = (lambda: "mods"), slow_build
+    def idle():
+        for _ in range(500):
+            if not any(t.name == "mods_assets" for t in th.enumerate()):
+                return True
+            time.sleep(0.01)
+        return False
+    try:
+        panel.build_mods_assets(); time.sleep(0.05)
+        t0 = time.time()
+        for _ in range(5):   # five changes in a row while building
+            with panel.mods_files():
+                state["ver"] += 1
+            panel.build_mods_assets()
+        waited = time.time() - t0
+        check("mods build: no thread left", idle())
+        check("mods build: changes do not wait for the build", waited < 1.5, waited)
+        check("mods build: coalesced, last one sees the last change", state["done"] and state["done"][-1] == 5 and len(state["done"]) <= 2, state["done"])
+        state["done"].clear()
+        panel.build_mods_assets(); time.sleep(0.05)
+        with panel.mods_files():
+            pass   # a change that failed: it asks for no build itself
+        check("mods build: a stopped build is redone after a failed change", idle() and state["done"] == [5], state["done"])
+        check("mods build: Dashboard line gone", "mods_assets" not in panel.JOBS)
+    finally:
+        panel.server_kind, panel.AS.extract_mods = real_kind, real_extract
 finally:
     shutil.rmtree(root, ignore_errors=True)
 

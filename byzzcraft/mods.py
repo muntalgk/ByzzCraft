@@ -1,4 +1,5 @@
 """Mods of a NeoForge/Forge/Fabric/Quilt server: installed list, on/off, Modrinth install/update, and the zip of mods players need."""
+import contextlib
 import hashlib
 import http.client
 import json
@@ -21,6 +22,9 @@ MAX_BYTES = 200 * 1048576
 JAR = re.compile(r'(?!\.)[^/\\:*?"<>|\x00-\x1f]+\.jar')
 SLUG = re.compile(r"[\w.-]{1,64}")
 SIDES = os.path.join(paths.CACHE, "modrinth-sides.json")   # sha1 of a jar -> Modrinth client_side ("" = unknown to Modrinth)
+ICONS = os.path.join(paths.CACHE, "modrinth-icons.json")   # sha1 of a jar -> Modrinth icon url ("" = none)
+LOGO_MAX = 262144
+PNG_SIG = bytes([0x89]) + b"PNG" + bytes([13, 10, 26, 10])
 CHECK_EVERY = 6 * 3600
 LOADERS = {"neoforge": "NeoForge", "forge": "Forge", "fabric": "Fabric", "quilt": "Quilt"}
 ERR = (OSError, ValueError, KeyError, TypeError, AttributeError, IndexError, http.client.HTTPException)
@@ -74,7 +78,7 @@ def _meta(path, st):
     k = (path, st.st_size, st.st_mtime_ns)
     if k in _meta_cache:
         return _meta_cache[k]
-    r = ("", "", "", "")
+    r = ("", "", "", "", "")
     try:
         with zipfile.ZipFile(path) as z:
             names = set(z.namelist())
@@ -85,17 +89,37 @@ def _meta(path, st):
                 if "${" in v:   # "${file.jarVersion}": the build fills it into the manifest
                     mf = re.search(r"^Implementation-Version:\s*(\S+)", rd("META-INF/MANIFEST.MF") if "META-INF/MANIFEST.MF" in names else "", re.M)
                     v = mf.group(1) if mf else ""
-                r = (i, nm, v, "forge")
+                lg = re.search(r"""^\s*logoFile\s*=\s*["']([^"'\n]+)["']""", rd(n), re.M)
+                r = (i, nm, v, "forge", lg.group(1) if lg else "")
             elif "fabric.mod.json" in names:
                 j = json.loads(rd("fabric.mod.json"), strict=False)
-                r = (j.get("id", ""), j.get("name", ""), str(j.get("version", "")), "fabric")
+                r = (j.get("id", ""), j.get("name", ""), str(j.get("version", "")), "fabric", j.get("icon") if isinstance(j.get("icon"), str) else "")
             elif "quilt.mod.json" in names:
                 j = json.loads(rd("quilt.mod.json"), strict=False)["quilt_loader"]
-                r = (j.get("id", ""), (j.get("metadata") or {}).get("name", ""), str(j.get("version", "")), "quilt")
+                md = j.get("metadata") or {}
+                r = (j.get("id", ""), md.get("name", ""), str(j.get("version", "")), "quilt", md.get("icon") if isinstance(md.get("icon"), str) else "")
     except (OSError, ValueError, KeyError, TypeError, AttributeError, zipfile.BadZipFile, zlib.error, EOFError):   # a truncated jar must not break the list
         pass
     _meta_cache[k] = r
     return r
+
+
+def logo(server_dir, name):
+    """(png bytes) of the logo inside an installed jar, None if it has none; name must be in the listing, never a path."""
+    m = _find(server_dir, name)
+    if not m:
+        return None
+    p = os.path.join(server_dir, "mods", m["file"])
+    lg = _meta(p, os.stat(p))[4]
+    try:
+        with zipfile.ZipFile(p) as z:
+            zi = z.getinfo(lg.lstrip("/"))
+            if zi.file_size > LOGO_MAX:
+                return None
+            data = z.read(zi)
+    except (OSError, KeyError, ValueError, zipfile.BadZipFile, zlib.error, EOFError):
+        return None
+    return data if data.startswith(PNG_SIG) else None
 
 
 def _sha1(path):
@@ -110,9 +134,9 @@ def _sha1(path):
     return _sha[k]
 
 
-def sides():
+def sides(path=SIDES):
     try:
-        with open(SIDES, encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             d = json.load(f)
         return d if isinstance(d, dict) else {}
     except (OSError, ValueError):
@@ -121,7 +145,7 @@ def sides():
 
 def installed(server_dir):
     """The jars in mods/ (enabled or .jar.disabled), no network. update: newest version known (checked in the background); server_only: Modrinth says no client needs it."""
-    md, sd, out = os.path.join(server_dir, "mods"), sides(), []
+    md, sd, ic, out = os.path.join(server_dir, "mods"), sides(), sides(ICONS), []
     try:
         names = sorted(os.listdir(md), key=str.lower)
     except OSError:
@@ -132,11 +156,13 @@ def installed(server_dir):
         if not JAR.fullmatch(base) or not os.path.isfile(p):
             continue
         st = os.stat(p)
-        i, name, ver, kind = _meta(p, st)
+        i, name, ver, kind, logo = _meta(p, st)
         sha = _sha.get((p, st.st_size, st.st_mtime_ns))
         u = _upd.get(sha, (0, 0, 0, None))[3] if sha else None
         out.append({"file": n, "enabled": base == n, "id": i, "name": name or base[:-4], "version": ver, "kind": kind, "size": st.st_size, "mtime": st.st_mtime,
-                    "server_only": bool(sha) and sd.get(sha) == "unsupported", "update": u["number"] if u and u["sha1"] != sha else ""})
+                    "server_only": bool(sha) and sd.get(sha) == "unsupported", "update": u["number"] if u and u["sha1"] != sha else "",
+                    # Modrinth's icon, else the logo inside the jar (served by /api/mods/logo), else the UI shows the initial
+                    "icon": ic.get(sha, "") if sha and urlsplit(ic.get(sha, "")).hostname == CDN else "", "logo": bool(logo)})
     return out
 
 
@@ -206,12 +232,20 @@ def _pick(v):
     return f["filename"], f["url"], h.get("sha512"), h.get("sha1")
 
 
-def _install(server_dir, v, old=None):
-    """Downloads and checks the version's file, then (and only then) trashes the jar it replaces and writes it. Returns the file name."""
+def _install(server_dir, v, old=None, guard=None):
+    """Downloads and checks the version's file, then (and only then) trashes the jar it replaces and writes it. Returns the file name.
+    A disabled old jar stays disabled: the new one is written as .jar.disabled."""
     name, url, s512, s1 = _pick(v)
+    if old and old.endswith(".disabled"):
+        name += ".disabled"
     data = _download(url, s512, s1)
     md = os.path.join(server_dir, "mods")
     tmp = os.path.join(md, name + ".panel-tmp")
+    with guard or contextlib.nullcontext():   # only the file changes wait for the icon build, not the download
+        return _write(md, server_dir, name, tmp, data, old)
+
+
+def _write(md, server_dir, name, tmp, data, old):
     try:
         os.makedirs(md, exist_ok=True)
         with open(tmp, "wb") as f:
@@ -229,7 +263,7 @@ def _install(server_dir, v, old=None):
     return name
 
 
-def install(server_dir, slug, ld, mc):
+def install(server_dir, slug, ld, mc, guard=None):
     """{ok, message, file, version, deps}: deps = required mods (by name) that look not installed; reported, never installed."""
     if not SLUG.fullmatch(slug):
         return {"ok": False, "message": t("Bad mod name.")}
@@ -238,7 +272,8 @@ def install(server_dir, slug, ld, mc):
     if not mc:
         return {"ok": False, "message": t("Cannot tell the Minecraft version of this server.")}
     inst = installed(server_dir)   # enabled or .disabled: a second copy of the same mod would crash the server at start
-    if any(m["id"].lower() == slug.lower() for m in inst):
+    norm = lambda x: re.sub(r"[-_ ]", "", x.lower())   # noqa: E731  (mod id cloth_config = Modrinth slug cloth-config)
+    if any(norm(m["id"]) == norm(slug) for m in inst if m["id"]):
         return {"ok": False, "message": t("%s is already installed.") % slug}
     try:
         vs = _api("project/%s/version" % quote(slug), loaders=json.dumps([ld]), game_versions=json.dumps([mc]))
@@ -255,9 +290,11 @@ def install(server_dir, slug, ld, mc):
             for p in _api("projects", ids=json.dumps(ids)):
                 if p["slug"].lower() not in have and p["title"].lower() not in have:
                     deps.append(p["title"])
-        name = _install(server_dir, v)
-        return {"ok": True, "file": name, "version": v["version_number"], "deps": deps,
-                "message": t("%s installed. Restart the server to load it.") % ("%s %s" % (slug, v["version_number"]))}
+        name = _install(server_dir, v, guard=guard)
+        msg = t("%s installed. Restart the server to load it.") % ("%s %s" % (slug, v["version_number"]))
+        if v.get("version_type", "release") != "release":   # updates offer releases only: say so now
+            msg += " " + t("It is a test version (%s): no automatic updates until the mod has a release.") % v.get("version_type")
+        return {"ok": True, "file": name, "version": v["version_number"], "deps": deps, "message": msg}
     except FsError:
         return _busy()
     except ERR as e:
@@ -290,7 +327,7 @@ def check_updates(server_dir, ld, mc):
         return True
 
 
-def update(server_dir, name, ld, mc):
+def update(server_dir, name, ld, mc, guard=None):
     m = _find(server_dir, name)
     if not m or not ld:
         return {"ok": False, "message": t("Mod not found.")}
@@ -299,9 +336,11 @@ def update(server_dir, name, ld, mc):
         v = _api("version_files/update", {"hashes": [h], "algorithm": "sha1", "loaders": [ld], "game_versions": [mc]}).get(h)
         if not v or v.get("version_type", "release") != "release":   # simplest correct: only releases are updates
             return {"ok": False, "message": t("No newer version found.")}
-        new = _install(server_dir, v, old=name)
+        new = _install(server_dir, v, old=name, guard=guard)
         _upd.pop(h, None)
-        return {"ok": True, "file": new, "version": v["version_number"], "message": t("%s installed. Restart the server to load it.") % ("%s %s" % (m["name"], v["version_number"]))}
+        done = "%s %s" % (m["name"], v["version_number"])
+        return {"ok": True, "file": new, "version": v["version_number"],
+                "message": t("%s updated: it stays disabled.") % done if new.endswith(".disabled") else t("%s installed. Restart the server to load it.") % done}
     except FsError:
         return _busy()
     except ERR as e:
@@ -312,8 +351,8 @@ def update(server_dir, name, ld, mc):
 def fetch_sides(shas):
     """Asks Modrinth, for the jars not asked yet, whether clients need the mod; True if anything was added. Offline: nothing is kept (the pack then holds everything)."""
     with _lock:
-        d = sides()
-        todo = [h for h in shas if h not in d]
+        d, ic = sides(), sides(ICONS)
+        todo = [h for h in shas if h not in d or h not in ic]
         if not todo:
             return False
         try:
@@ -322,12 +361,14 @@ def fetch_sides(shas):
                 vs.update(_api("version_files", {"hashes": todo[i:i + 500], "algorithm": "sha1"}))
             ids = sorted({v["project_id"] for v in vs.values()})
             for i in range(0, len(ids), 100):
-                cs.update({p["id"]: p["client_side"] for p in _api("projects", ids=json.dumps(ids[i:i + 100]))})
+                for p in _api("projects", ids=json.dumps(ids[i:i + 100])):
+                    cs[p["id"]] = (p["client_side"], p.get("icon_url") or "")
         except ERR:
             return False
         for h in todo:
-            d[h] = cs.get((vs.get(h) or {}).get("project_id"), "")
+            d[h], ic[h] = cs.get((vs.get(h) or {}).get("project_id"), ("", ""))
         paths.write_json(SIDES, d)
+        paths.write_json(ICONS, ic)
         return True
 
 
