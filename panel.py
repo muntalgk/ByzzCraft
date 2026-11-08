@@ -14,7 +14,7 @@ Update:           python panel.py update   (to the latest release; in Docker: do
 import sys
 if sys.version_info < (3, 10):   # before the other modules: they need 3.10 and would fail with a traceback
     sys.exit("ByzzCraft needs Python 3.10 or newer (this is %s)." % sys.version.split()[0])
-import getpass, hashlib, hmac, html, ipaddress, json, logging, logging.handlers, os, queue, re, secrets, shlex, shutil, signal, socket, struct, subprocess, threading, time, webbrowser
+import contextlib, getpass, hashlib, hmac, html, ipaddress, json, logging, logging.handlers, os, queue, re, secrets, shlex, shutil, signal, socket, struct, subprocess, threading, time, webbrowser
 from collections import deque
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -2009,7 +2009,6 @@ def download_assets():
     def run():
         AS.install(CFG["server_dir"], log=L.info, jar=server_jar(), lang=i18n.LANG)
         log("panel downloaded the Minecraft assets")
-        build_mods_assets()   # the mod icons are drawn with the vanilla models and textures just installed
         while SRV.state in ("starting", "stopping") or backup_busy() or OP_PENDING.is_set() or JOBS.get("java") == "running":
             time.sleep(5)   # a restart now would lose a start, a backup or a restore in progress
         shutil.rmtree(os.path.join(CACHE, "map"), ignore_errors=True)   # after the wait: tiles drawn meanwhile have the old colours
@@ -2046,6 +2045,17 @@ MODS_FILES = threading.Lock()   # held while the build keeps the jars open (Wind
 MODS_STOP = threading.Event()   # a change to mods/ asks the running build to close the jars now
 
 
+@contextlib.contextmanager
+def mods_files():
+    """Holds the mods' jars for a change to mods/: the running icon build closes them within a moment."""
+    while not MODS_FILES.acquire(timeout=0.2):
+        MODS_STOP.set()   # again each time: a build may have just started and cleared it
+    try:
+        yield
+    finally:
+        MODS_FILES.release()
+
+
 def build_mods_assets():
     """Icons, names and map colors of the enabled mods, in the background; the caches are dropped when a new build is swapped in."""
     if server_kind() != "mods":
@@ -2072,7 +2082,7 @@ def build_mods_assets():
                         L.info("mods: icons, names and colors rebuilt")
                     JOBS.pop("mods_assets", None)
                 except AS.Cancelled:
-                    JOBS.pop("mods_assets", None)   # a mod is being changed: that change asks for a new build
+                    MODS_AGAIN.set()   # a mod is being changed: build again once it is done, even if that change fails
                 except Exception as e:  # noqa: BLE001
                     JOBS["mods_assets"] = str(e)
                     L.exception("mods assets build failed")
@@ -2182,6 +2192,7 @@ def health():
          "script" if script and os.path.exists(os.path.join(HERE, "examples", CFG["start_script"])) else None),
         ("assets", AS.present(), t("Map textures and item icons are not downloaded yet."), "assets"),
         ("mods_assets", True, "", None),   # only while the mods' icons are being built, or if that failed
+        ("lang", True, "", None),   # only while the vanilla names in the panel's language are downloaded, or if that failed
         # systemd sets INVOCATION_ID; on Windows pythonw (no console) means started at login, not from a terminal
         ("service", bool(os.environ.get("INVOCATION_ID")) or os.path.exists("/.dockerenv") or os.name == "nt" and (os.path.exists(STARTUP_CMD) or not sys.stdout),
          t("The panel does not start by itself after a reboot."), "service" if os.name == "nt" else None),   # Linux needs sudo: a command
@@ -2200,7 +2211,8 @@ def health():
             ok, text = False, (t("Preparing the icons and names of the mods...") if JOBS[cid] == "running"
                                else t("Icons of the mods not prepared: %s") % JOBS[cid])
         elif cid in JOBS:
-            what = {"java": "Java", "assets": t("textures and names from Mojang"), "update": t("the new version")}.get(cid, cid)
+            what = {"java": "Java", "assets": t("textures and names from Mojang"), "lang": t("Minecraft names in the panel's language"),
+                    "update": t("the new version")}.get(cid, cid)
             ok, text = False, (t("Downloading %s...") % what if JOBS[cid] == "running" else t("Download of %s failed: %s") % (what, JOBS[cid]))
         if not ok:
             out.append({"id": cid, "text": text, "fix": None if JOBS.get(cid) == "running" else fix,
@@ -2862,13 +2874,12 @@ class Handler(BaseHTTPRequestHandler):
             if not mi:
                 return self.json(200, {"ok": False, "message": t("Mods need a modded server.")})
             op, f = self.path.rsplit("/", 1)[1], str(data.get("file", ""))
-            while not MODS_FILES.acquire(timeout=0.2):
-                MODS_STOP.set()   # again each time: a build may have just started and cleared it
-            try:
-                r = (MD.install(sd, str(data.get("slug", "")), mi["loader"], mi["mc"]) if op == "install" else MD.update(sd, f, mi["loader"], mi["mc"]) if op == "update"
-                     else MD.toggle(sd, f) if op == "toggle" else MD.remove(sd, f))
-            finally:
-                MODS_FILES.release()
+            if op in ("install", "update"):   # the download runs freely: only the file changes take the jars from the icon build
+                r = (MD.install(sd, str(data.get("slug", "")), mi["loader"], mi["mc"], mods_files()) if op == "install"
+                     else MD.update(sd, f, mi["loader"], mi["mc"], mods_files()))
+            else:
+                with mods_files():
+                    r = MD.toggle(sd, f) if op == "toggle" else MD.remove(sd, f)
             if r["ok"]:
                 log("%s %s mod %s" % (s["user"], op, r.get("file") or f or data.get("slug")))
                 build_mods_assets()
@@ -3139,10 +3150,11 @@ def main():
         for target in (sampler, tailers, player_watcher, map_warmer, backup_scheduler, world_watcher, update_checker):
             threading.Thread(target=worker(target), name=target.__name__, daemon=True).start()
         if not AS.present():
-            download_assets()
-        elif not AS.local_lang_ok(i18n.LANG):
-            download_lang()
-        build_mods_assets()
+            download_assets()   # the panel restarts when done: the mods are built then, with the new vanilla models
+        else:
+            if not AS.local_lang_ok(i18n.LANG):
+                download_lang()
+            build_mods_assets()
         if need and not java and CFG.get("java_auto"):
             download_java()
     else:

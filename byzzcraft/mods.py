@@ -1,4 +1,5 @@
 """Mods of a NeoForge/Forge/Fabric/Quilt server: installed list, on/off, Modrinth install/update, and the zip of mods players need."""
+import contextlib
 import hashlib
 import http.client
 import json
@@ -231,7 +232,7 @@ def _pick(v):
     return f["filename"], f["url"], h.get("sha512"), h.get("sha1")
 
 
-def _install(server_dir, v, old=None):
+def _install(server_dir, v, old=None, guard=None):
     """Downloads and checks the version's file, then (and only then) trashes the jar it replaces and writes it. Returns the file name.
     A disabled old jar stays disabled: the new one is written as .jar.disabled."""
     name, url, s512, s1 = _pick(v)
@@ -240,6 +241,11 @@ def _install(server_dir, v, old=None):
     data = _download(url, s512, s1)
     md = os.path.join(server_dir, "mods")
     tmp = os.path.join(md, name + ".panel-tmp")
+    with guard or contextlib.nullcontext():   # only the file changes wait for the icon build, not the download
+        return _write(md, server_dir, name, tmp, data, old)
+
+
+def _write(md, server_dir, name, tmp, data, old):
     try:
         os.makedirs(md, exist_ok=True)
         with open(tmp, "wb") as f:
@@ -257,7 +263,7 @@ def _install(server_dir, v, old=None):
     return name
 
 
-def install(server_dir, slug, ld, mc):
+def install(server_dir, slug, ld, mc, guard=None):
     """{ok, message, file, version, deps}: deps = required mods (by name) that look not installed; reported, never installed."""
     if not SLUG.fullmatch(slug):
         return {"ok": False, "message": t("Bad mod name.")}
@@ -284,7 +290,7 @@ def install(server_dir, slug, ld, mc):
             for p in _api("projects", ids=json.dumps(ids)):
                 if p["slug"].lower() not in have and p["title"].lower() not in have:
                     deps.append(p["title"])
-        name = _install(server_dir, v)
+        name = _install(server_dir, v, guard=guard)
         msg = t("%s installed. Restart the server to load it.") % ("%s %s" % (slug, v["version_number"]))
         if v.get("version_type", "release") != "release":   # updates offer releases only: say so now
             msg += " " + t("It is a test version (%s): no automatic updates until the mod has a release.") % v.get("version_type")
@@ -321,7 +327,7 @@ def check_updates(server_dir, ld, mc):
         return True
 
 
-def update(server_dir, name, ld, mc):
+def update(server_dir, name, ld, mc, guard=None):
     m = _find(server_dir, name)
     if not m or not ld:
         return {"ok": False, "message": t("Mod not found.")}
@@ -330,9 +336,11 @@ def update(server_dir, name, ld, mc):
         v = _api("version_files/update", {"hashes": [h], "algorithm": "sha1", "loaders": [ld], "game_versions": [mc]}).get(h)
         if not v or v.get("version_type", "release") != "release":   # simplest correct: only releases are updates
             return {"ok": False, "message": t("No newer version found.")}
-        new = _install(server_dir, v, old=name)
+        new = _install(server_dir, v, old=name, guard=guard)
         _upd.pop(h, None)
-        return {"ok": True, "file": new, "version": v["version_number"], "message": t("%s installed. Restart the server to load it.") % ("%s %s" % (m["name"], v["version_number"]))}
+        done = "%s %s" % (m["name"], v["version_number"])
+        return {"ok": True, "file": new, "version": v["version_number"],
+                "message": t("%s updated: it stays disabled.") % done if new.endswith(".disabled") else t("%s installed. Restart the server to load it.") % done}
     except FsError:
         return _busy()
     except ERR as e:
