@@ -600,7 +600,7 @@ FACES = ("layer0", "top", "all", "end", "side", "front", "particle", "texture")
 LANG_PREFIX = ("item.", "block.", "entity.")
 
 
-RENDER_V = 1   # bump when the 3D renderer changes: the mods build is redone
+RENDER_V = 2   # bump when the 3D renderer changes: the mods build is redone
 
 
 def _assets_marker():
